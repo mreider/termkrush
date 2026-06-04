@@ -2,13 +2,17 @@
 title: TUI shell with ratatui
 type: feature
 created: "2026-06-04T09:11:00Z"
-modified: "2026-06-04T09:11:00Z"
+modified: "2026-06-04T12:27:40Z"
 author: Matt Reider
-status: unstarted
+status: accepted
 estimate: "2"
 epic: foundation
 tags: [foundation, tui]
 project: termkrush
+started: "2026-06-04T12:25:34Z"
+finished: "2026-06-04T12:27:40Z"
+delivered: "2026-06-04T12:27:40Z"
+accepted: "2026-06-04T12:27:40Z"
 ---
 
 ## Problem statement

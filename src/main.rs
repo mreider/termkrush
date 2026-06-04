@@ -51,8 +51,21 @@ fn main() {
         panic!("synthetic panic for crash-hook test");
     }
 
-    // The version banner is program output (stdout), not a diagnostic.
-    println!("{}", version_banner());
+    // Launch the fullscreen TUI when attached to a real terminal. When
+    // stdout is piped (tests, CI, `termkrush | cat`), there is no usable
+    // terminal to take over, so just print the version banner and exit —
+    // which keeps the binary scriptable.
+    use std::io::IsTerminal;
+    if std::io::stdout().is_terminal() && !args.iter().any(|a| a == "--no-tui") {
+        if let Err(e) = tui::run() {
+            tracing::error!(error = %e, "tui exited with error");
+            eprintln!("termkrush: {e}");
+            std::process::exit(1);
+        }
+    } else {
+        // The version banner is program output (stdout), not a diagnostic.
+        println!("{}", version_banner());
+    }
 }
 
 #[cfg(test)]

@@ -25,6 +25,7 @@ mod audio;
 mod config;
 mod deck;
 mod library;
+mod logging;
 mod mix;
 mod tui;
 
@@ -34,6 +35,23 @@ fn version_banner() -> String {
 }
 
 fn main() {
+    let args: Vec<String> = std::env::args().collect();
+    let log_to_file = args.iter().any(|a| a == "--log");
+
+    // Keep the guard alive for the whole run: dropping it flushes the
+    // non-blocking JSON writer.
+    let _log_guard = logging::init(log_to_file);
+    logging::install_panic_hook();
+
+    tracing::info!(version = env!("CARGO_PKG_VERSION"), "termkrush starting");
+
+    // Hidden hook so an integration test can exercise the panic path and
+    // assert a crash line was written.
+    if args.iter().any(|a| a == "--panic-test") {
+        panic!("synthetic panic for crash-hook test");
+    }
+
+    // The version banner is program output (stdout), not a diagnostic.
     println!("{}", version_banner());
 }
 

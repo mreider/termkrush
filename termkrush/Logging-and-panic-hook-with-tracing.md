@@ -2,13 +2,17 @@
 title: Logging and panic hook with tracing
 type: feature
 created: "2026-06-04T09:11:00Z"
-modified: "2026-06-04T09:11:00Z"
+modified: "2026-06-04T12:24:16Z"
 author: Matt Reider
-status: unstarted
+status: accepted
 estimate: "1"
 epic: foundation
 tags: [foundation, observability]
 project: termkrush
+started: "2026-06-04T12:22:48Z"
+finished: "2026-06-04T12:24:16Z"
+delivered: "2026-06-04T12:24:16Z"
+accepted: "2026-06-04T12:24:16Z"
 ---
 
 ## Problem statement

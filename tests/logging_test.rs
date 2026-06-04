@@ -73,9 +73,12 @@ fn panic_writes_crash_line() {
         line.contains("synthetic panic for crash-hook test"),
         "crash line should carry the panic message: {line:?}"
     );
-    // The crash line names a source location (file:line).
+    // The crash line names a source location (file:line). Match on the
+    // file name without the directory prefix: Rust records the path with
+    // the host separator, so it is `src/main.rs` on unix but `src\main.rs`
+    // on Windows — assert on `main.rs:` to stay platform-agnostic.
     assert!(
-        line.contains("src/main.rs:"),
+        line.contains("main.rs:"),
         "crash line should name a location: {line:?}"
     );
 

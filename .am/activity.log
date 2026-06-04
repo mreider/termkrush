@@ -27,3 +27,6 @@
 2026-06-04T12:29:52Z	Matt Reider	accepted	termkrush/CI-build-matrix-on-every-PR.md	
 2026-06-04T12:30:28Z	Matt Reider	started	termkrush/Coverage-reporting-in-CI.md	pull
 2026-06-04T12:32:34Z	Matt Reider	accepted	termkrush/Coverage-reporting-in-CI.md	
+2026-06-04T12:33:19Z	Matt Reider	bug	termkrush/Bug-logging-crash-line-test-asserts-unix-path-separator-fails-on-Windows-CI.md	target=priority position=top
+2026-06-04T12:33:19Z	Matt Reider	started	termkrush/Bug-logging-crash-line-test-asserts-unix-path-separator-fails-on-Windows-CI.md	pull
+2026-06-04T12:33:41Z	Matt Reider	finished	termkrush/Bug-logging-crash-line-test-asserts-unix-path-separator-fails-on-Windows-CI.md	

@@ -6,7 +6,6 @@
 | User | Title | Points | Tags |
 |---|---|:---:|---|
 |  | [ASCII waveform per deck](termkrush/ASCII-waveform-per-deck.md) |  | [tui](.am/tags/tui.md) [icebox](.am/tags/icebox.md) [viz](.am/tags/viz.md) |
-|  | [Add MIT license and README seed](termkrush/Add-MIT-license-and-README-seed.md) | 1 | [foundation](.am/tags/foundation.md) [docs](.am/tags/docs.md) |
 |  | [Auto-analyze on download finish](termkrush/Auto-analyze-on-download-finish.md) | 2 | [download](.am/tags/download.md) [tempo](.am/tags/tempo.md) |
 |  | [Auto-fade transition over N bars](termkrush/Auto-fade-transition-over-N-bars.md) | 3 | [mix](.am/tags/mix.md) [sync](.am/tags/sync.md) |
 |  | [Auto-mix playlist queue](termkrush/Auto-mix-playlist-queue.md) |  | [automix](.am/tags/automix.md) [icebox](.am/tags/icebox.md) |
@@ -87,7 +86,7 @@
 |  | [Coverage reporting in CI](termkrush/Coverage-reporting-in-CI.md) |  | [test](.am/tags/test.md) [ci](.am/tags/ci.md) [foundation](.am/tags/foundation.md) |
 |  | [Property-based testing for DSP code](termkrush/Property-based-testing-for-DSP-code.md) |  | [test](.am/tags/test.md) [dsp](.am/tags/dsp.md) [foundation](.am/tags/foundation.md) |
 |  | [Test fixtures: curated mp3 set with manifest](termkrush/Test-fixtures-curated-mp3-set-with-manifest.md) |  | [test](.am/tags/test.md) [fixtures](.am/tags/fixtures.md) [foundation](.am/tags/foundation.md) |
-| Total Points | | 119 | |
+| Total Points | | 118 | |
 
 ### Started
 | User | Title | Points | Tags |
@@ -105,6 +104,7 @@
 | User | Title | Points | Tags |
 |---|---|:---:|---|
 |  | [Scaffold Rust project layout](termkrush/Scaffold-Rust-project-layout.md) | 2 | [foundation](.am/tags/foundation.md) [rust](.am/tags/rust.md) |
+|  | [Add MIT license and README seed](termkrush/Add-MIT-license-and-README-seed.md) | 1 | [foundation](.am/tags/foundation.md) [docs](.am/tags/docs.md) |
 
 ### Rejected
 | User | Title | Points | Tags |

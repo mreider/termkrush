@@ -60,7 +60,6 @@
 |  | [Symphonia mp3 decode pipeline](termkrush/Symphonia-mp3-decode-pipeline.md) | 3 | [audio](.am/tags/audio.md) [one-deck](.am/tags/one-deck.md) |
 |  | [Sync deck BPM to reference deck](termkrush/Sync-deck-BPM-to-reference-deck.md) | 3 | [tempo](.am/tags/tempo.md) [sync](.am/tags/sync.md) |
 |  | [TUI deck panel](termkrush/TUI-deck-panel.md) | 2 | [tui](.am/tags/tui.md) [one-deck](.am/tags/one-deck.md) |
-|  | [Tag-triggered release pipeline](termkrush/Tag-triggered-release-pipeline.md) | 3 | [foundation](.am/tags/foundation.md) [ci](.am/tags/ci.md) [release](.am/tags/release.md) |
 |  | [Tap tempo](termkrush/Tap-tempo.md) |  | [tempo](.am/tags/tempo.md) [icebox](.am/tags/icebox.md) |
 |  | [Tempo nudge controls](termkrush/Tempo-nudge-controls.md) | 2 | [tempo](.am/tags/tempo.md) [tui](.am/tags/tui.md) |
 |  | [Tempo ramping curves](termkrush/Tempo-ramping-curves.md) |  | [tempo](.am/tags/tempo.md) [icebox](.am/tags/icebox.md) |
@@ -79,7 +78,7 @@
 |  | [V0.6.0 record](termkrush/v060-record.md) |  |  |
 |  | [Yt-dlp shell-out for media URLs](termkrush/yt-dlp-shell-out-for-media-URLs.md) | 3 | [download](.am/tags/download.md) [yt-dlp](.am/tags/yt-dlp.md) |
 |  | [Property-based testing for DSP code](termkrush/Property-based-testing-for-DSP-code.md) |  | [test](.am/tags/test.md) [dsp](.am/tags/dsp.md) [foundation](.am/tags/foundation.md) |
-| Total Points | | 112 | |
+| Total Points | | 109 | |
 
 ### Started
 | User | Title | Points | Tags |
@@ -106,6 +105,7 @@
 |  | [TUI shell with ratatui](termkrush/TUI-shell-with-ratatui.md) | 2 | [foundation](.am/tags/foundation.md) [tui](.am/tags/tui.md) |
 |  | [CI build matrix on every PR](termkrush/CI-build-matrix-on-every-PR.md) | 3 | [foundation](.am/tags/foundation.md) [ci](.am/tags/ci.md) |
 |  | [Coverage reporting in CI](termkrush/Coverage-reporting-in-CI.md) |  | [test](.am/tags/test.md) [ci](.am/tags/ci.md) [foundation](.am/tags/foundation.md) |
+|  | [Tag-triggered release pipeline](termkrush/Tag-triggered-release-pipeline.md) | 3 | [foundation](.am/tags/foundation.md) [ci](.am/tags/ci.md) [release](.am/tags/release.md) |
 
 ### Rejected
 | User | Title | Points | Tags |

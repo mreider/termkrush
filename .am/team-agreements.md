@@ -10,6 +10,17 @@ Soft rules. The dev pair surfaces conflicts at the relevant moment; the PM can o
 - No `unwrap()` / `expect()` in release-mode code paths outside of `main.rs` startup.
 - Logging uses `tracing`. No `println!` for diagnostics.
 
+## Tests and bugs (Pivotal flow)
+
+- **Tests are part of the definition of done.** A feature story is not finishable until tests covering its new behavior pass locally and in CI. The acceptance criteria are the spec for those tests.
+- **No fix without a bug.** When a test fails (CI or local), or any defect is found against accepted work, file a bug story with `am create-item "Bug: ..." --target priority --position top --type bug`. Then `am pull` it. **Do not silently fix in another story's commit.**
+- **Bugs are not estimated.** Strip points if asked to add them.
+- **Bugs go to the top.** Filed bugs default to the top of priority. The PM can reorder.
+- **Performance regressions are bugs.** A failing perf assertion is a bug; file it, pull it, fix it under that story.
+- **Flaky tests are bugs.** A test that passes/fails non-deterministically is a defect — file a bug, do not retry-on-flake.
+- **Test infrastructure changes are chores.** New harnesses, fixtures, coverage, CI rigging carry no estimate.
+- **Rejected stories don't become new bugs.** If a delivered story is rejected by the PM, that's a rejection on the same story — fix it under the original story and re-deliver. Bugs are for defects against *accepted* work.
+
 ## Scope & flow
 
 - Features over 8 points are epics. Split before pulling.

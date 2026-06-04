@@ -19,6 +19,29 @@ This repo is built **the Pivotal way**, top-of-backlog first, one story at a tim
 - **Dev pair does not accept.** Never flip status to `accepted` yourself. Stage at `delivered` and wait.
 - **Releases are date markers.** No status flow on `type: release`. They land only after the preceding feature stories are accepted.
 - **No release before v0.1.0 spins.** The first usable bar is two-deck mix with sync + crossfade. Nothing is tagged before that story is delivered and accepted.
+- **No fix without a bug.** When a test fails or any defect surfaces against accepted work, file a bug story before touching code. The fix lives under the bug story, not piggybacked on another story's commit. (See "When tests fail" below.)
+
+## When tests fail
+
+CI red, a local test failing, a perf assertion regressing, a manual verification revealing broken behavior against an *accepted* story — every one of those is a **bug**. The flow is the same as features, only the type and estimate differ:
+
+```
+am create-item "Bug: <one-line symptom>" --target priority --position top
+am set-type termkrush/<slug>.md bug          # strips estimate; no points
+am pull                                       # pick it up next; the gate now allows code edits
+# ...write a failing test that reproduces it, then make it pass...
+am finish termkrush/<slug>.md
+am deliver termkrush/<slug>.md                # stop here; PM accepts
+```
+
+- Bugs land at the **top of priority** by default. The PM can reorder.
+- Bugs are **never estimated**. `coach-check` will refuse `set_estimate` on a bug-typed story.
+- A flaky test is a bug. A perf regression is a bug. A docs/build/CI break against accepted work is a bug.
+- **Rejection ≠ bug.** If the PM rejects a delivered story, that is `am reject` with a reason; fix under the *same* story and re-deliver. Bugs are only for defects against work already accepted.
+
+## Test infrastructure
+
+Tests for new behavior live with the feature story that adds the behavior — the acceptance criteria are the spec. Shared rigging — fixtures, audio assertion helpers, golden snapshots, coverage tools, CI tweaks — are **chores** (no estimate). If you find yourself wanting to add cross-cutting test infra inside a feature story, stop and file a chore instead; it keeps the feature scope honest and the chore reusable.
 
 ## Soft rules (warn, do not refuse)
 

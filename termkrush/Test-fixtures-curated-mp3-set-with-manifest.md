@@ -2,12 +2,16 @@
 title: 'Test fixtures: curated mp3 set with manifest'
 type: chore
 created: "2026-06-04T09:41:11Z"
-modified: "2026-06-04T09:41:11Z"
+modified: "2026-06-04T12:16:29Z"
 author: Matt Reider
-status: unstarted
+status: accepted
 epic: foundation
 tags: [test, fixtures, foundation]
 project: termkrush
+started: "2026-06-04T12:14:12Z"
+finished: "2026-06-04T12:16:29Z"
+delivered: "2026-06-04T12:16:29Z"
+accepted: "2026-06-04T12:16:29Z"
 ---
 
 ## Why this is a chore

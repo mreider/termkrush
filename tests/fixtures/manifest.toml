@@ -1,0 +1,65 @@
+# Test-audio fixture manifest.
+#
+# Every file here is SYNTHESIZED by scripts/gen-fixtures.sh — there is no
+# third-party audio in this repo, so the whole set is released under
+# CC0-1.0 (public-domain dedication) and can be redistributed freely. The
+# generator is deterministic; regenerate with `bash scripts/gen-fixtures.sh`
+# and the bytes are identical.
+#
+# Format is WAV (16-bit signed PCM, mono, 44.1 kHz) rather than mp3: the
+# project has no mp3 encoder yet, and the decoder (symphonia) reads WAV
+# natively. `bpm` is omitted for the non-rhythmic tones; the click tracks
+# carry an exact, known tempo so BPM-detection tests have ground truth.
+
+[[fixture]]
+name = "sine_a440"
+file = "sine_a440_10s.wav"
+key = "A"                     # 440 Hz == A4
+duration_secs = 10.0
+sample_rate = 44100
+channels = 1
+format = "wav"
+source = "synthesized: pure 440 Hz sine, amplitude 0.6"
+license = "CC0-1.0"
+
+[[fixture]]
+name = "sweep_20_20k"
+file = "sweep_20_20k_10s.wav"
+duration_secs = 10.0
+sample_rate = 44100
+channels = 1
+format = "wav"
+source = "synthesized: logarithmic sine sweep 20 Hz -> 20 kHz"
+license = "CC0-1.0"
+
+[[fixture]]
+name = "click_120bpm"
+file = "click_120bpm_12s.wav"
+bpm = 120.0
+duration_secs = 12.0
+sample_rate = 44100
+channels = 1
+format = "wav"
+source = "synthesized: 1 kHz tone-burst metronome, exactly 120 BPM"
+license = "CC0-1.0"
+
+[[fixture]]
+name = "house_128"
+file = "click_128bpm_10s.wav"
+bpm = 128.0
+duration_secs = 10.0
+sample_rate = 44100
+channels = 1
+format = "wav"
+source = "synthesized: 1 kHz tone-burst metronome, exactly 128 BPM (house tempo)"
+license = "CC0-1.0"
+
+[[fixture]]
+name = "noise_white"
+file = "noise_white_5s.wav"
+duration_secs = 5.0
+sample_rate = 44100
+channels = 1
+format = "wav"
+source = "synthesized: seeded LCG white noise, amplitude 0.4"
+license = "CC0-1.0"

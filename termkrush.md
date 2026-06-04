@@ -81,7 +81,6 @@
 |  | [V0.5.0 more decks](termkrush/v050-more-decks.md) |  |  |
 |  | [V0.6.0 record](termkrush/v060-record.md) |  |  |
 |  | [Yt-dlp shell-out for media URLs](termkrush/yt-dlp-shell-out-for-media-URLs.md) | 3 | [download](.am/tags/download.md) [yt-dlp](.am/tags/yt-dlp.md) |
-|  | [Audio assertion harness with golden snapshots](termkrush/Audio-assertion-harness-with-golden-snapshots.md) |  | [test](.am/tags/test.md) [dsp](.am/tags/dsp.md) [foundation](.am/tags/foundation.md) |
 |  | [Bug-filing helper script and skill](termkrush/Bug-filing-helper-script-and-skill.md) |  | [process](.am/tags/process.md) [test](.am/tags/test.md) [foundation](.am/tags/foundation.md) |
 |  | [Coverage reporting in CI](termkrush/Coverage-reporting-in-CI.md) |  | [test](.am/tags/test.md) [ci](.am/tags/ci.md) [foundation](.am/tags/foundation.md) |
 |  | [Property-based testing for DSP code](termkrush/Property-based-testing-for-DSP-code.md) |  | [test](.am/tags/test.md) [dsp](.am/tags/dsp.md) [foundation](.am/tags/foundation.md) |
@@ -105,6 +104,7 @@
 |  | [Scaffold Rust project layout](termkrush/Scaffold-Rust-project-layout.md) | 2 | [foundation](.am/tags/foundation.md) [rust](.am/tags/rust.md) |
 |  | [Add MIT license and README seed](termkrush/Add-MIT-license-and-README-seed.md) | 1 | [foundation](.am/tags/foundation.md) [docs](.am/tags/docs.md) |
 |  | [Test fixtures: curated mp3 set with manifest](termkrush/Test-fixtures-curated-mp3-set-with-manifest.md) |  | [test](.am/tags/test.md) [fixtures](.am/tags/fixtures.md) [foundation](.am/tags/foundation.md) |
+|  | [Audio assertion harness with golden snapshots](termkrush/Audio-assertion-harness-with-golden-snapshots.md) |  | [test](.am/tags/test.md) [dsp](.am/tags/dsp.md) [foundation](.am/tags/foundation.md) |
 
 ### Rejected
 | User | Title | Points | Tags |

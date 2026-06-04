@@ -88,6 +88,7 @@
 ### Finished
 | User | Title | Points | Tags |
 |---|---|:---:|---|
+|  | [Bug: logging crash-line test asserts unix path separator, fails on Windows CI](termkrush/Bug-logging-crash-line-test-asserts-unix-path-separator-fails-on-Windows-CI.md) |  |  |
 
 ### Delivered
 | User | Title | Points | Tags |

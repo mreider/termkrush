@@ -7,6 +7,7 @@ author: Matt Reider
 status: finished
 started: "2026-06-04T12:33:19Z"
 finished: "2026-06-04T12:33:41Z"
+project: termkrush
 ---
 
 ## Problem statement

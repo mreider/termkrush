@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "agilemarkdown": {
+      "command": "am",
+      "args": ["mcp"]
+    }
+  }
+}

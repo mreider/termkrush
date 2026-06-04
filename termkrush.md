@@ -61,7 +61,6 @@
 |  | [Symphonia mp3 decode pipeline](termkrush/Symphonia-mp3-decode-pipeline.md) | 3 | [audio](.am/tags/audio.md) [one-deck](.am/tags/one-deck.md) |
 |  | [Sync deck BPM to reference deck](termkrush/Sync-deck-BPM-to-reference-deck.md) | 3 | [tempo](.am/tags/tempo.md) [sync](.am/tags/sync.md) |
 |  | [TUI deck panel](termkrush/TUI-deck-panel.md) | 2 | [tui](.am/tags/tui.md) [one-deck](.am/tags/one-deck.md) |
-|  | [TUI shell with ratatui](termkrush/TUI-shell-with-ratatui.md) | 2 | [foundation](.am/tags/foundation.md) [tui](.am/tags/tui.md) |
 |  | [Tag-triggered release pipeline](termkrush/Tag-triggered-release-pipeline.md) | 3 | [foundation](.am/tags/foundation.md) [ci](.am/tags/ci.md) [release](.am/tags/release.md) |
 |  | [Tap tempo](termkrush/Tap-tempo.md) |  | [tempo](.am/tags/tempo.md) [icebox](.am/tags/icebox.md) |
 |  | [Tempo nudge controls](termkrush/Tempo-nudge-controls.md) | 2 | [tempo](.am/tags/tempo.md) [tui](.am/tags/tui.md) |
@@ -82,7 +81,7 @@
 |  | [Yt-dlp shell-out for media URLs](termkrush/yt-dlp-shell-out-for-media-URLs.md) | 3 | [download](.am/tags/download.md) [yt-dlp](.am/tags/yt-dlp.md) |
 |  | [Coverage reporting in CI](termkrush/Coverage-reporting-in-CI.md) |  | [test](.am/tags/test.md) [ci](.am/tags/ci.md) [foundation](.am/tags/foundation.md) |
 |  | [Property-based testing for DSP code](termkrush/Property-based-testing-for-DSP-code.md) |  | [test](.am/tags/test.md) [dsp](.am/tags/dsp.md) [foundation](.am/tags/foundation.md) |
-| Total Points | | 117 | |
+| Total Points | | 115 | |
 
 ### Started
 | User | Title | Points | Tags |
@@ -105,6 +104,7 @@
 |  | [Audio assertion harness with golden snapshots](termkrush/Audio-assertion-harness-with-golden-snapshots.md) |  | [test](.am/tags/test.md) [dsp](.am/tags/dsp.md) [foundation](.am/tags/foundation.md) |
 |  | [Bug-filing helper script and skill](termkrush/Bug-filing-helper-script-and-skill.md) |  | [process](.am/tags/process.md) [test](.am/tags/test.md) [foundation](.am/tags/foundation.md) |
 |  | [Logging and panic hook with tracing](termkrush/Logging-and-panic-hook-with-tracing.md) | 1 | [foundation](.am/tags/foundation.md) [observability](.am/tags/observability.md) |
+|  | [TUI shell with ratatui](termkrush/TUI-shell-with-ratatui.md) | 2 | [foundation](.am/tags/foundation.md) [tui](.am/tags/tui.md) |
 
 ### Rejected
 | User | Title | Points | Tags |

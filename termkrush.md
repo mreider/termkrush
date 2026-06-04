@@ -85,7 +85,6 @@
 |  | [Bug-filing helper script and skill](termkrush/Bug-filing-helper-script-and-skill.md) |  | [process](.am/tags/process.md) [test](.am/tags/test.md) [foundation](.am/tags/foundation.md) |
 |  | [Coverage reporting in CI](termkrush/Coverage-reporting-in-CI.md) |  | [test](.am/tags/test.md) [ci](.am/tags/ci.md) [foundation](.am/tags/foundation.md) |
 |  | [Property-based testing for DSP code](termkrush/Property-based-testing-for-DSP-code.md) |  | [test](.am/tags/test.md) [dsp](.am/tags/dsp.md) [foundation](.am/tags/foundation.md) |
-|  | [Test fixtures: curated mp3 set with manifest](termkrush/Test-fixtures-curated-mp3-set-with-manifest.md) |  | [test](.am/tags/test.md) [fixtures](.am/tags/fixtures.md) [foundation](.am/tags/foundation.md) |
 | Total Points | | 118 | |
 
 ### Started
@@ -105,6 +104,7 @@
 |---|---|:---:|---|
 |  | [Scaffold Rust project layout](termkrush/Scaffold-Rust-project-layout.md) | 2 | [foundation](.am/tags/foundation.md) [rust](.am/tags/rust.md) |
 |  | [Add MIT license and README seed](termkrush/Add-MIT-license-and-README-seed.md) | 1 | [foundation](.am/tags/foundation.md) [docs](.am/tags/docs.md) |
+|  | [Test fixtures: curated mp3 set with manifest](termkrush/Test-fixtures-curated-mp3-set-with-manifest.md) |  | [test](.am/tags/test.md) [fixtures](.am/tags/fixtures.md) [foundation](.am/tags/foundation.md) |
 
 ### Rejected
 | User | Title | Points | Tags |

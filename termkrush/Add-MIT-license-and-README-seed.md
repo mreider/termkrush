@@ -2,13 +2,17 @@
 title: Add MIT license and README seed
 type: feature
 created: "2026-06-04T09:11:00Z"
-modified: "2026-06-04T09:11:00Z"
+modified: "2026-06-04T12:13:19Z"
 author: Matt Reider
-status: unstarted
+status: accepted
 estimate: "1"
 epic: foundation
 tags: [foundation, docs]
 project: termkrush
+started: "2026-06-04T12:12:45Z"
+finished: "2026-06-04T12:13:19Z"
+delivered: "2026-06-04T12:13:19Z"
+accepted: "2026-06-04T12:13:19Z"
 ---
 
 ## Problem statement

@@ -1,0 +1,23 @@
+# Codecov configuration.
+#
+# The hard, always-visible floor lives in CI (`cargo llvm-cov
+# --fail-under-lines`). This file adds the relative gate the story asks
+# for: a PR may not drop project coverage by more than 2 percentage
+# points versus its base. `informational` patch status keeps new-code
+# coverage advisory rather than blocking individual diffs.
+coverage:
+  status:
+    project:
+      default:
+        # Allow a 2pp slip before the check goes red.
+        threshold: 2%
+        # No absolute target yet — the CI floor enforces the absolute
+        # minimum; this status enforces "don't regress".
+        target: auto
+    patch:
+      default:
+        informational: true
+
+comment:
+  layout: "reach, diff, files"
+  require_changes: true

@@ -4,6 +4,10 @@ agilemarkdown_bash_autocomplete
 # Rust build output
 /target/
 
+# Coverage artifacts
+/lcov.info
+*.profraw
+
 # TermKrush runtime store (downloaded tracks, cache, recordings)
 /.termkrush/
 

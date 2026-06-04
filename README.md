@@ -1,5 +1,8 @@
 # TermKrush
 
+[![CI](https://github.com/mreider/termkrush/actions/workflows/ci.yml/badge.svg)](https://github.com/mreider/termkrush/actions/workflows/ci.yml)
+[![codecov](https://codecov.io/gh/mreider/termkrush/branch/main/graph/badge.svg)](https://codecov.io/gh/mreider/termkrush)
+
 A keyboard-first terminal DJ application. Pull tracks locally, beat-match and
 crossfade up to four decks, keyboard-jog scratch over marked zones, add minimal
 FX (filter, echo, reverb), and record the master to wav/mp3 — all from your

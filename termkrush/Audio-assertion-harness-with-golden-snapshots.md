@@ -2,12 +2,16 @@
 title: Audio assertion harness with golden snapshots
 type: chore
 created: "2026-06-04T09:41:11Z"
-modified: "2026-06-04T09:41:11Z"
+modified: "2026-06-04T12:19:08Z"
 author: Matt Reider
-status: unstarted
+status: accepted
 epic: foundation
 tags: [test, dsp, foundation]
 project: termkrush
+started: "2026-06-04T12:17:13Z"
+finished: "2026-06-04T12:19:08Z"
+delivered: "2026-06-04T12:19:08Z"
+accepted: "2026-06-04T12:19:08Z"
 ---
 
 ## Why this is a chore

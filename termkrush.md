@@ -10,7 +10,6 @@
 |  | [Auto-fade transition over N bars](termkrush/Auto-fade-transition-over-N-bars.md) | 3 | [mix](.am/tags/mix.md) [sync](.am/tags/sync.md) |
 |  | [Auto-mix playlist queue](termkrush/Auto-mix-playlist-queue.md) |  | [automix](.am/tags/automix.md) [icebox](.am/tags/icebox.md) |
 |  | [Bitcrush FX](termkrush/Bitcrush-FX.md) |  | [fx](.am/tags/fx.md) [icebox](.am/tags/icebox.md) |
-|  | [CI build matrix on every PR](termkrush/CI-build-matrix-on-every-PR.md) | 3 | [foundation](.am/tags/foundation.md) [ci](.am/tags/ci.md) |
 |  | [Cache BPM and analysis per file](termkrush/Cache-BPM-and-analysis-per-file.md) | 2 | [tempo](.am/tags/tempo.md) [cache](.am/tags/cache.md) |
 |  | [Crossfader assignment per deck](termkrush/Crossfader-assignment-per-deck.md) | 3 | [mix](.am/tags/mix.md) [multi-deck](.am/tags/multi-deck.md) |
 |  | [Crossfader audio mix](termkrush/Crossfader-audio-mix.md) | 3 | [mix](.am/tags/mix.md) [two-decks](.am/tags/two-decks.md) |
@@ -81,7 +80,7 @@
 |  | [Yt-dlp shell-out for media URLs](termkrush/yt-dlp-shell-out-for-media-URLs.md) | 3 | [download](.am/tags/download.md) [yt-dlp](.am/tags/yt-dlp.md) |
 |  | [Coverage reporting in CI](termkrush/Coverage-reporting-in-CI.md) |  | [test](.am/tags/test.md) [ci](.am/tags/ci.md) [foundation](.am/tags/foundation.md) |
 |  | [Property-based testing for DSP code](termkrush/Property-based-testing-for-DSP-code.md) |  | [test](.am/tags/test.md) [dsp](.am/tags/dsp.md) [foundation](.am/tags/foundation.md) |
-| Total Points | | 115 | |
+| Total Points | | 112 | |
 
 ### Started
 | User | Title | Points | Tags |
@@ -105,6 +104,7 @@
 |  | [Bug-filing helper script and skill](termkrush/Bug-filing-helper-script-and-skill.md) |  | [process](.am/tags/process.md) [test](.am/tags/test.md) [foundation](.am/tags/foundation.md) |
 |  | [Logging and panic hook with tracing](termkrush/Logging-and-panic-hook-with-tracing.md) | 1 | [foundation](.am/tags/foundation.md) [observability](.am/tags/observability.md) |
 |  | [TUI shell with ratatui](termkrush/TUI-shell-with-ratatui.md) | 2 | [foundation](.am/tags/foundation.md) [tui](.am/tags/tui.md) |
+|  | [CI build matrix on every PR](termkrush/CI-build-matrix-on-every-PR.md) | 3 | [foundation](.am/tags/foundation.md) [ci](.am/tags/ci.md) |
 
 ### Rejected
 | User | Title | Points | Tags |

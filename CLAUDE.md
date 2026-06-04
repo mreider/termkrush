@@ -1,4 +1,4 @@
-# Bigpoppa — agent rules of engagement
+# TermKrush — agent rules of engagement
 
 This repo is built **the Pivotal way**, top-of-backlog first, one story at a time. The rules below are mandatory for any agent (Claude Code, Cursor, Copilot, future tools) operating in this repo. They are enforced by hooks in `.claude/settings.json`; please do not work around the enforcement — escalate to the PM (Matt) instead.
 
@@ -26,9 +26,9 @@ This repo is built **the Pivotal way**, top-of-backlog first, one story at a tim
 
 ## Enforcement
 
-`.claude/hooks/started-story-gate.sh` runs as a PreToolUse hook on `Edit`, `Write`, and `NotebookEdit`. It refuses with the rule + next-move pattern unless at least one story in `bigpoppa/*.md` has `status: started`. **Always allowed regardless** (so you can manage the backlog itself):
+`.claude/hooks/started-story-gate.sh` runs as a PreToolUse hook on `Edit`, `Write`, and `NotebookEdit`. It refuses with the rule + next-move pattern unless at least one story in `termkrush/*.md` has `status: started`. **Always allowed regardless** (so you can manage the backlog itself):
 
-- `bigpoppa/*.md` — story files
+- `termkrush/*.md` — story files
 - `.am/*` — config, cache, generated views, team agreements, inception, learnings
 - `.claude/*`, `.cursor/*` — agent config
 - `CLAUDE.md`, `AGENTS.md`, `.github/copilot-instructions.md`, `.gitignore`

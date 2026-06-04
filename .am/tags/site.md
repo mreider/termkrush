@@ -5,6 +5,6 @@
 ## Unstarted
 | User | Project | Title | Points | Tags |
 |---|---|---|:---:|---|
-|  | [bigpoppa](../../bigpoppa.md) | [GitHub Pages from /docs](../../bigpoppa/GitHub-Pages-from-docs.md) | 2 | [site](site.md) [release](release.md) [docs](docs.md) |
-|  | [bigpoppa](../../bigpoppa.md) | [Wire Buy Me A Coffee into README and site](../../bigpoppa/Wire-Buy-Me-A-Coffee-into-README-and-site.md) |  | [site](site.md) [docs](docs.md) [bmac](bmac.md) |
+|  | [termkrush](../../termkrush.md) | [GitHub Pages from /docs](../../termkrush/GitHub-Pages-from-docs.md) | 2 | [site](site.md) [release](release.md) [docs](docs.md) |
+|  | [termkrush](../../termkrush.md) | [Wire Buy Me A Coffee into README and site](../../termkrush/Wire-Buy-Me-A-Coffee-into-README-and-site.md) |  | [site](site.md) [docs](docs.md) [bmac](bmac.md) |
 | Total Points | | | 2 | |

@@ -5,6 +5,6 @@
 ## Unstarted
 | User | Project | Title | Points | Tags |
 |---|---|---|:---:|---|
-|  | [bigpoppa](../../bigpoppa.md) | [Spectrum analyzer](../../bigpoppa/Spectrum-analyzer.md) |  | [tui](tui.md) [icebox](icebox.md) [viz](viz.md) |
-|  | [bigpoppa](../../bigpoppa.md) | [ASCII waveform per deck](../../bigpoppa/ASCII-waveform-per-deck.md) |  | [tui](tui.md) [icebox](icebox.md) [viz](viz.md) |
+|  | [termkrush](../../termkrush.md) | [Spectrum analyzer](../../termkrush/Spectrum-analyzer.md) |  | [tui](tui.md) [icebox](icebox.md) [viz](viz.md) |
+|  | [termkrush](../../termkrush.md) | [ASCII waveform per deck](../../termkrush/ASCII-waveform-per-deck.md) |  | [tui](tui.md) [icebox](icebox.md) [viz](viz.md) |
 | Total Points | | | 0 | |

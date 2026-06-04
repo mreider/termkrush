@@ -25,7 +25,7 @@ DJ software is heavy, GUI-bound, and locked to specific hardware ecosystems. The
 
 ## Success
 
-A user can sit down, run `big-poppa`, load two tracks they downloaded that morning, sync the BPMs, and crossfade between them in a way that sounds good — without reading docs. First release marker is the moment that becomes true.
+A user can sit down, run `termkrush`, load two tracks they downloaded that morning, sync the BPMs, and crossfade between them in a way that sounds good — without reading docs. First release marker is the moment that becomes true.
 
 Beyond that:
 

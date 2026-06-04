@@ -5,8 +5,8 @@
 ## Unstarted
 | User | Project | Title | Points | Tags |
 |---|---|---|:---:|---|
-|  | [bigpoppa](../../bigpoppa.md) | [Crossfader cut and momentary kill](../../bigpoppa/Crossfader-cut-and-momentary-kill.md) | 2 | [mix](mix.md) [scratch](scratch.md) |
-|  | [bigpoppa](../../bigpoppa.md) | [Keyboard jog scratch](../../bigpoppa/Keyboard-jog-scratch.md) | 5 | [scratch](scratch.md) [dsp](dsp.md) |
-|  | [bigpoppa](../../bigpoppa.md) | [Mark scratch zone on a deck](../../bigpoppa/Mark-scratch-zone-on-a-deck.md) | 2 | [scratch](scratch.md) [deck](deck.md) |
-|  | [bigpoppa](../../bigpoppa.md) | [Reverse playback during scratch](../../bigpoppa/Reverse-playback-during-scratch.md) | 3 | [scratch](scratch.md) [dsp](dsp.md) |
+|  | [termkrush](../../termkrush.md) | [Crossfader cut and momentary kill](../../termkrush/Crossfader-cut-and-momentary-kill.md) | 2 | [mix](mix.md) [scratch](scratch.md) |
+|  | [termkrush](../../termkrush.md) | [Keyboard jog scratch](../../termkrush/Keyboard-jog-scratch.md) | 5 | [scratch](scratch.md) [dsp](dsp.md) |
+|  | [termkrush](../../termkrush.md) | [Mark scratch zone on a deck](../../termkrush/Mark-scratch-zone-on-a-deck.md) | 2 | [scratch](scratch.md) [deck](deck.md) |
+|  | [termkrush](../../termkrush.md) | [Reverse playback during scratch](../../termkrush/Reverse-playback-during-scratch.md) | 3 | [scratch](scratch.md) [dsp](dsp.md) |
 | Total Points | | | 12 | |

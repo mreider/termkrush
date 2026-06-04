@@ -1,5 +1,5 @@
 {
-  "//": "Agile Markdown coach gate plus bigpoppa-specific Pivotal-flow enforcement.",
+  "//": "Agile Markdown coach gate plus termkrush-specific Pivotal-flow enforcement.",
   "hooks": {
     "SessionStart": [
       {

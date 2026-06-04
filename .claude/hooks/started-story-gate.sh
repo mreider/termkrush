@@ -1,19 +1,19 @@
 #!/usr/bin/env bash
-# Bigpoppa: enforce Pivotal-style WIP discipline.
+# TermKrush: enforce Pivotal-style WIP discipline.
 #
-# Refuses Edit / Write / NotebookEdit on any file inside the bigpoppa repo
+# Refuses Edit / Write / NotebookEdit on any file inside the termkrush repo
 # unless at least one story is in `started` state. This makes code edits
 # illegal without an explicit pulled story, the same rule Pivotal teams
 # enforced manually.
 #
 # Always allowed (backlog and agent infra; required for managing the work):
-#   - bigpoppa/bigpoppa/*.md      (story files)
-#   - bigpoppa/.am/*              (config, cache, generated views)
-#   - bigpoppa/.claude/*          (agent config and hooks)
-#   - bigpoppa/.cursor/*          (cursor rules)
-#   - bigpoppa/CLAUDE.md, AGENTS.md, .github/copilot-instructions.md
-#   - bigpoppa/.gitignore
-#   - any path outside the bigpoppa repo (e.g. /tmp/ scratch files)
+#   - termkrush/termkrush/*.md      (story files)
+#   - termkrush/.am/*              (config, cache, generated views)
+#   - termkrush/.claude/*          (agent config and hooks)
+#   - termkrush/.cursor/*          (cursor rules)
+#   - termkrush/CLAUDE.md, AGENTS.md, .github/copilot-instructions.md
+#   - termkrush/.gitignore
+#   - any path outside the termkrush repo (e.g. /tmp/ scratch files)
 #
 # Exits:
 #   0 — allowed (the tool call proceeds)
@@ -21,8 +21,8 @@
 
 set -euo pipefail
 
-REPO_ROOT="/Users/matt/cutting/bigpoppa"
-BACKLOG_DIR="$REPO_ROOT/bigpoppa"
+REPO_ROOT="/Users/matt/cutting/termkrush"
+BACKLOG_DIR="$REPO_ROOT/termkrush"
 
 input="$(cat)"
 
@@ -71,11 +71,11 @@ if [ "${started_count:-0}" -eq 0 ]; then
     echo "Rule: code changes happen on a started story. No story is in progress."
     echo "Next:"
     echo "  am next                                # show the top of the backlog"
-    echo "  am align bigpoppa/<story>.md           # restate the story, confirm with PM"
+    echo "  am align termkrush/<story>.md           # restate the story, confirm with PM"
     echo "  am pull                                # next + start the top of priority"
-    echo "  am start bigpoppa/<story>.md           # start a specific story"
+    echo "  am start termkrush/<story>.md           # start a specific story"
     echo
-    echo "Edits to the backlog itself (bigpoppa/*.md, .am/*, .claude/*) are allowed regardless."
+    echo "Edits to the backlog itself (termkrush/*.md, .am/*, .claude/*) are allowed regardless."
   } >&2
   exit 2
 fi

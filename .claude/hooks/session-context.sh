@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Bigpoppa SessionStart hook: prints the dashboard, next pull, and any started
+# TermKrush SessionStart hook: prints the dashboard, next pull, and any started
 # stories so every session begins with the same shared context the PM and dev
 # pair would have on Pivotal's web UI.
 #
@@ -7,7 +7,7 @@
 
 set -uo pipefail
 
-REPO_ROOT="/Users/matt/cutting/bigpoppa"
+REPO_ROOT="/Users/matt/cutting/termkrush"
 
 if ! command -v am >/dev/null 2>&1; then
   echo "agilemarkdown (am) is not on PATH; install it to see backlog context."
@@ -16,7 +16,7 @@ fi
 
 cd "$REPO_ROOT" 2>/dev/null || exit 0
 
-echo "## Bigpoppa backlog state"
+echo "## TermKrush backlog state"
 echo
 echo "### Dashboard"
 echo '```'
@@ -31,10 +31,10 @@ echo
 
 # Started stories (WIP)
 started=()
-if compgen -G "$REPO_ROOT/bigpoppa/*.md" >/dev/null; then
+if compgen -G "$REPO_ROOT/termkrush/*.md" >/dev/null; then
   while IFS= read -r f; do
     [ -n "$f" ] && started+=("$f")
-  done < <(grep -l '^status: started$' "$REPO_ROOT"/bigpoppa/*.md 2>/dev/null || true)
+  done < <(grep -l '^status: started$' "$REPO_ROOT"/termkrush/*.md 2>/dev/null || true)
 fi
 
 if [ ${#started[@]} -gt 0 ]; then

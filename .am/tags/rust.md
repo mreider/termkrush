@@ -5,5 +5,5 @@
 ## Unstarted
 | User | Project | Title | Points | Tags |
 |---|---|---|:---:|---|
-|  | [bigpoppa](../../bigpoppa.md) | [Scaffold Rust project layout](../../bigpoppa/Scaffold-Rust-project-layout.md) | 2 | [foundation](foundation.md) [rust](rust.md) |
+|  | [termkrush](../../termkrush.md) | [Scaffold Rust project layout](../../termkrush/Scaffold-Rust-project-layout.md) | 2 | [foundation](foundation.md) [rust](rust.md) |
 | Total Points | | | 2 | |

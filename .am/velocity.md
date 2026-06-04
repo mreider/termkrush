@@ -4,7 +4,7 @@
 
 ---
 
-[bigpoppa](bigpoppa.md)
+[termkrush](termkrush.md)
 
 ```
 Velocity (last 12 iterations of 1 week)

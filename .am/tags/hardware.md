@@ -5,6 +5,6 @@
 ## Unstarted
 | User | Project | Title | Points | Tags |
 |---|---|---|:---:|---|
-|  | [bigpoppa](../../bigpoppa.md) | [Pre-fade cue listen on second output](../../bigpoppa/Pre-fade-cue-listen-on-second-output.md) |  | [audio](audio.md) [icebox](icebox.md) [hardware](hardware.md) |
-|  | [bigpoppa](../../bigpoppa.md) | [MIDI controller support](../../bigpoppa/MIDI-controller-support.md) |  | [midi](midi.md) [icebox](icebox.md) [hardware](hardware.md) |
+|  | [termkrush](../../termkrush.md) | [Pre-fade cue listen on second output](../../termkrush/Pre-fade-cue-listen-on-second-output.md) |  | [audio](audio.md) [icebox](icebox.md) [hardware](hardware.md) |
+|  | [termkrush](../../termkrush.md) | [MIDI controller support](../../termkrush/MIDI-controller-support.md) |  | [midi](midi.md) [icebox](icebox.md) [hardware](hardware.md) |
 | Total Points | | | 0 | |

@@ -5,6 +5,6 @@
 ## Unstarted
 | User | Project | Title | Points | Tags |
 |---|---|---|:---:|---|
-|  | [bigpoppa](../../bigpoppa.md) | [Multi-detector BPM consensus](../../bigpoppa/Multi-detector-BPM-consensus.md) |  | [tempo](tempo.md) [analysis](analysis.md) [icebox](icebox.md) |
-|  | [bigpoppa](../../bigpoppa.md) | [Offline BPM detection on load](../../bigpoppa/Offline-BPM-detection-on-load.md) | 5 | [tempo](tempo.md) [analysis](analysis.md) |
+|  | [termkrush](../../termkrush.md) | [Multi-detector BPM consensus](../../termkrush/Multi-detector-BPM-consensus.md) |  | [tempo](tempo.md) [analysis](analysis.md) [icebox](icebox.md) |
+|  | [termkrush](../../termkrush.md) | [Offline BPM detection on load](../../termkrush/Offline-BPM-detection-on-load.md) | 5 | [tempo](tempo.md) [analysis](analysis.md) |
 | Total Points | | | 5 | |

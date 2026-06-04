@@ -5,11 +5,11 @@
 ## Unstarted
 | User | Project | Title | Points | Tags |
 |---|---|---|:---:|---|
-|  | [bigpoppa](../../bigpoppa.md) | [Crossfader assignment per deck](../../bigpoppa/Crossfader-assignment-per-deck.md) | 3 | [mix](mix.md) [multi-deck](multi-deck.md) |
-|  | [bigpoppa](../../bigpoppa.md) | [Crossfader curve options](../../bigpoppa/Crossfader-curve-options.md) |  | [mix](mix.md) [icebox](icebox.md) |
-|  | [bigpoppa](../../bigpoppa.md) | [Refactor mixer for N decks](../../bigpoppa/Refactor-mixer-for-N-decks.md) | 5 | [architecture](architecture.md) [mix](mix.md) [multi-deck](multi-deck.md) |
-|  | [bigpoppa](../../bigpoppa.md) | [Crossfader cut and momentary kill](../../bigpoppa/Crossfader-cut-and-momentary-kill.md) | 2 | [mix](mix.md) [scratch](scratch.md) |
-|  | [bigpoppa](../../bigpoppa.md) | [Auto-fade transition over N bars](../../bigpoppa/Auto-fade-transition-over-N-bars.md) | 3 | [mix](mix.md) [sync](sync.md) |
-|  | [bigpoppa](../../bigpoppa.md) | [Crossfader audio mix](../../bigpoppa/Crossfader-audio-mix.md) | 3 | [mix](mix.md) [two-decks](two-decks.md) |
-|  | [bigpoppa](../../bigpoppa.md) | [Per-deck and master volume](../../bigpoppa/Per-deck-and-master-volume.md) | 2 | [deck](deck.md) [mix](mix.md) [one-deck](one-deck.md) |
+|  | [termkrush](../../termkrush.md) | [Crossfader assignment per deck](../../termkrush/Crossfader-assignment-per-deck.md) | 3 | [mix](mix.md) [multi-deck](multi-deck.md) |
+|  | [termkrush](../../termkrush.md) | [Crossfader curve options](../../termkrush/Crossfader-curve-options.md) |  | [mix](mix.md) [icebox](icebox.md) |
+|  | [termkrush](../../termkrush.md) | [Refactor mixer for N decks](../../termkrush/Refactor-mixer-for-N-decks.md) | 5 | [architecture](architecture.md) [mix](mix.md) [multi-deck](multi-deck.md) |
+|  | [termkrush](../../termkrush.md) | [Crossfader cut and momentary kill](../../termkrush/Crossfader-cut-and-momentary-kill.md) | 2 | [mix](mix.md) [scratch](scratch.md) |
+|  | [termkrush](../../termkrush.md) | [Auto-fade transition over N bars](../../termkrush/Auto-fade-transition-over-N-bars.md) | 3 | [mix](mix.md) [sync](sync.md) |
+|  | [termkrush](../../termkrush.md) | [Crossfader audio mix](../../termkrush/Crossfader-audio-mix.md) | 3 | [mix](mix.md) [two-decks](two-decks.md) |
+|  | [termkrush](../../termkrush.md) | [Per-deck and master volume](../../termkrush/Per-deck-and-master-volume.md) | 2 | [deck](deck.md) [mix](mix.md) [one-deck](one-deck.md) |
 | Total Points | | | 18 | |

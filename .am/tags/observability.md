@@ -5,5 +5,5 @@
 ## Unstarted
 | User | Project | Title | Points | Tags |
 |---|---|---|:---:|---|
-|  | [bigpoppa](../../bigpoppa.md) | [Logging and panic hook with tracing](../../bigpoppa/Logging-and-panic-hook-with-tracing.md) | 1 | [foundation](foundation.md) [observability](observability.md) |
+|  | [termkrush](../../termkrush.md) | [Logging and panic hook with tracing](../../termkrush/Logging-and-panic-hook-with-tracing.md) | 1 | [foundation](foundation.md) [observability](observability.md) |
 | Total Points | | | 1 | |

@@ -5,6 +5,6 @@
 ## Unstarted
 | User | Project | Title | Points | Tags |
 |---|---|---|:---:|---|
-|  | [bigpoppa](../../bigpoppa.md) | [Multiple hot cues per deck](../../bigpoppa/Multiple-hot-cues-per-deck.md) |  | [deck](deck.md) [cue](cue.md) [icebox](icebox.md) |
-|  | [bigpoppa](../../bigpoppa.md) | [Manual cue points per deck](../../bigpoppa/Manual-cue-points-per-deck.md) | 3 | [deck](deck.md) [cue](cue.md) |
+|  | [termkrush](../../termkrush.md) | [Multiple hot cues per deck](../../termkrush/Multiple-hot-cues-per-deck.md) |  | [deck](deck.md) [cue](cue.md) [icebox](icebox.md) |
+|  | [termkrush](../../termkrush.md) | [Manual cue points per deck](../../termkrush/Manual-cue-points-per-deck.md) | 3 | [deck](deck.md) [cue](cue.md) |
 | Total Points | | | 3 | |

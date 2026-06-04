@@ -5,7 +5,7 @@
 ## Unstarted
 | User | Project | Title | Points | Tags |
 |---|---|---|:---:|---|
-|  | [bigpoppa](../../bigpoppa.md) | [Crossfader audio mix](../../bigpoppa/Crossfader-audio-mix.md) | 3 | [mix](mix.md) [two-decks](two-decks.md) |
-|  | [bigpoppa](../../bigpoppa.md) | [Two-deck TUI layout](../../bigpoppa/Two-deck-TUI-layout.md) | 3 | [tui](tui.md) [two-decks](two-decks.md) |
-|  | [bigpoppa](../../bigpoppa.md) | [Deck B mirror of Deck A](../../bigpoppa/Deck-B-mirror-of-Deck-A.md) | 2 | [deck](deck.md) [two-decks](two-decks.md) |
+|  | [termkrush](../../termkrush.md) | [Crossfader audio mix](../../termkrush/Crossfader-audio-mix.md) | 3 | [mix](mix.md) [two-decks](two-decks.md) |
+|  | [termkrush](../../termkrush.md) | [Two-deck TUI layout](../../termkrush/Two-deck-TUI-layout.md) | 3 | [tui](tui.md) [two-decks](two-decks.md) |
+|  | [termkrush](../../termkrush.md) | [Deck B mirror of Deck A](../../termkrush/Deck-B-mirror-of-Deck-A.md) | 2 | [deck](deck.md) [two-decks](two-decks.md) |
 | Total Points | | | 8 | |

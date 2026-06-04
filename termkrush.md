@@ -78,7 +78,6 @@
 |  | [V0.5.0 more decks](termkrush/v050-more-decks.md) |  |  |
 |  | [V0.6.0 record](termkrush/v060-record.md) |  |  |
 |  | [Yt-dlp shell-out for media URLs](termkrush/yt-dlp-shell-out-for-media-URLs.md) | 3 | [download](.am/tags/download.md) [yt-dlp](.am/tags/yt-dlp.md) |
-|  | [Coverage reporting in CI](termkrush/Coverage-reporting-in-CI.md) |  | [test](.am/tags/test.md) [ci](.am/tags/ci.md) [foundation](.am/tags/foundation.md) |
 |  | [Property-based testing for DSP code](termkrush/Property-based-testing-for-DSP-code.md) |  | [test](.am/tags/test.md) [dsp](.am/tags/dsp.md) [foundation](.am/tags/foundation.md) |
 | Total Points | | 112 | |
 
@@ -105,6 +104,7 @@
 |  | [Logging and panic hook with tracing](termkrush/Logging-and-panic-hook-with-tracing.md) | 1 | [foundation](.am/tags/foundation.md) [observability](.am/tags/observability.md) |
 |  | [TUI shell with ratatui](termkrush/TUI-shell-with-ratatui.md) | 2 | [foundation](.am/tags/foundation.md) [tui](.am/tags/tui.md) |
 |  | [CI build matrix on every PR](termkrush/CI-build-matrix-on-every-PR.md) | 3 | [foundation](.am/tags/foundation.md) [ci](.am/tags/ci.md) |
+|  | [Coverage reporting in CI](termkrush/Coverage-reporting-in-CI.md) |  | [test](.am/tags/test.md) [ci](.am/tags/ci.md) [foundation](.am/tags/foundation.md) |
 
 ### Rejected
 | User | Title | Points | Tags |

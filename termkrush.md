@@ -32,7 +32,6 @@
 |  | [Harmonic key detection Camelot](termkrush/Harmonic-key-detection-Camelot.md) |  | [tempo](.am/tags/tempo.md) [key](.am/tags/key.md) [icebox](.am/tags/icebox.md) |
 |  | [Keyboard jog scratch](termkrush/Keyboard-jog-scratch.md) | 5 | [scratch](.am/tags/scratch.md) [dsp](.am/tags/dsp.md) |
 |  | [Local crate view](termkrush/Local-crate-view.md) | 2 | [library](.am/tags/library.md) [tui](.am/tags/tui.md) [one-deck](.am/tags/one-deck.md) |
-|  | [Logging and panic hook with tracing](termkrush/Logging-and-panic-hook-with-tracing.md) | 1 | [foundation](.am/tags/foundation.md) [observability](.am/tags/observability.md) |
 |  | [Loop roll quarter and eighth beat loops](termkrush/Loop-roll-quarter-and-eighth-beat-loops.md) |  | [loop](.am/tags/loop.md) [icebox](.am/tags/icebox.md) |
 |  | [MIDI controller support](termkrush/MIDI-controller-support.md) |  | [midi](.am/tags/midi.md) [icebox](.am/tags/icebox.md) [hardware](.am/tags/hardware.md) |
 |  | [MP3 encoder](termkrush/MP3-encoder.md) | 5 | [record](.am/tags/record.md) [io](.am/tags/io.md) [encode](.am/tags/encode.md) |
@@ -83,7 +82,7 @@
 |  | [Yt-dlp shell-out for media URLs](termkrush/yt-dlp-shell-out-for-media-URLs.md) | 3 | [download](.am/tags/download.md) [yt-dlp](.am/tags/yt-dlp.md) |
 |  | [Coverage reporting in CI](termkrush/Coverage-reporting-in-CI.md) |  | [test](.am/tags/test.md) [ci](.am/tags/ci.md) [foundation](.am/tags/foundation.md) |
 |  | [Property-based testing for DSP code](termkrush/Property-based-testing-for-DSP-code.md) |  | [test](.am/tags/test.md) [dsp](.am/tags/dsp.md) [foundation](.am/tags/foundation.md) |
-| Total Points | | 118 | |
+| Total Points | | 117 | |
 
 ### Started
 | User | Title | Points | Tags |
@@ -105,6 +104,7 @@
 |  | [Test fixtures: curated mp3 set with manifest](termkrush/Test-fixtures-curated-mp3-set-with-manifest.md) |  | [test](.am/tags/test.md) [fixtures](.am/tags/fixtures.md) [foundation](.am/tags/foundation.md) |
 |  | [Audio assertion harness with golden snapshots](termkrush/Audio-assertion-harness-with-golden-snapshots.md) |  | [test](.am/tags/test.md) [dsp](.am/tags/dsp.md) [foundation](.am/tags/foundation.md) |
 |  | [Bug-filing helper script and skill](termkrush/Bug-filing-helper-script-and-skill.md) |  | [process](.am/tags/process.md) [test](.am/tags/test.md) [foundation](.am/tags/foundation.md) |
+|  | [Logging and panic hook with tracing](termkrush/Logging-and-panic-hook-with-tracing.md) | 1 | [foundation](.am/tags/foundation.md) [observability](.am/tags/observability.md) |
 
 ### Rejected
 | User | Title | Points | Tags |

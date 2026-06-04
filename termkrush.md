@@ -57,7 +57,6 @@
 |  | [Reverb effect](termkrush/Reverb-effect.md) | 3 | [fx](.am/tags/fx.md) [dsp](.am/tags/dsp.md) |
 |  | [Reverse playback during scratch](termkrush/Reverse-playback-during-scratch.md) | 3 | [scratch](.am/tags/scratch.md) [dsp](.am/tags/dsp.md) |
 |  | [Sampler pads](termkrush/Sampler-pads.md) |  | [sampler](.am/tags/sampler.md) [icebox](.am/tags/icebox.md) [fx](.am/tags/fx.md) |
-|  | [Scaffold Rust project layout](termkrush/Scaffold-Rust-project-layout.md) | 2 | [foundation](.am/tags/foundation.md) [rust](.am/tags/rust.md) |
 |  | [Seek and scrub position](termkrush/Seek-and-scrub-position.md) | 2 | [deck](.am/tags/deck.md) [one-deck](.am/tags/one-deck.md) |
 |  | [Smart crates](termkrush/Smart-crates.md) |  | [library](.am/tags/library.md) [icebox](.am/tags/icebox.md) |
 |  | [Spectrum analyzer](termkrush/Spectrum-analyzer.md) |  | [tui](.am/tags/tui.md) [icebox](.am/tags/icebox.md) [viz](.am/tags/viz.md) |
@@ -88,7 +87,7 @@
 |  | [Coverage reporting in CI](termkrush/Coverage-reporting-in-CI.md) |  | [test](.am/tags/test.md) [ci](.am/tags/ci.md) [foundation](.am/tags/foundation.md) |
 |  | [Property-based testing for DSP code](termkrush/Property-based-testing-for-DSP-code.md) |  | [test](.am/tags/test.md) [dsp](.am/tags/dsp.md) [foundation](.am/tags/foundation.md) |
 |  | [Test fixtures: curated mp3 set with manifest](termkrush/Test-fixtures-curated-mp3-set-with-manifest.md) |  | [test](.am/tags/test.md) [fixtures](.am/tags/fixtures.md) [foundation](.am/tags/foundation.md) |
-| Total Points | | 121 | |
+| Total Points | | 119 | |
 
 ### Started
 | User | Title | Points | Tags |
@@ -105,6 +104,7 @@
 ### Accepted
 | User | Title | Points | Tags |
 |---|---|:---:|---|
+|  | [Scaffold Rust project layout](termkrush/Scaffold-Rust-project-layout.md) | 2 | [foundation](.am/tags/foundation.md) [rust](.am/tags/rust.md) |
 
 ### Rejected
 | User | Title | Points | Tags |

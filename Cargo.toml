@@ -1,0 +1,23 @@
+[package]
+name = "termkrush"
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.75"
+description = "A keyboard-first terminal DJ application: beat-match, crossfade, scratch, and record from the comfort of your shell."
+authors = ["Matt Reider <mreider@gmail.com>"]
+license = "MIT"
+repository = "https://github.com/mreider/termkrush"
+homepage = "https://github.com/mreider/termkrush"
+readme = "README.md"
+keywords = ["dj", "audio", "tui", "music", "terminal"]
+categories = ["command-line-utilities", "multimedia::audio"]
+
+[[bin]]
+name = "termkrush"
+path = "src/main.rs"
+
+[dependencies]
+
+[profile.release]
+opt-level = 3
+lto = true

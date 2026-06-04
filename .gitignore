@@ -1,2 +1,11 @@
 agilemarkdown
 agilemarkdown_bash_autocomplete
+
+# Rust build output
+/target/
+
+# TermKrush runtime store (downloaded tracks, cache, recordings)
+/.termkrush/
+
+# Recorded / downloaded audio should never be committed
+*.mp3

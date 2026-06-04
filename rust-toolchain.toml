@@ -1,0 +1,11 @@
+# Toolchain pin for reproducible builds across contributors and CI.
+#
+# The project's MSRV is 1.75 (declared as `rust-version` in Cargo.toml and
+# enforced by CI on a separate MSRV job). We build day-to-day on the
+# `stable` channel rather than pinning the exact MSRV here so contributors
+# pick up bug/security fixes in the toolchain automatically; the MSRV job
+# is what guarantees we don't accidentally rely on features newer than
+# 1.75.
+[toolchain]
+channel = "stable"
+components = ["rustfmt", "clippy"]

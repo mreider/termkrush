@@ -25,3 +25,4 @@ tracing-appender = "0.2"
 [profile.release]
 opt-level = 3
 lto = true
+strip = true       # strip symbols at link time — cross-target safe, no external strip

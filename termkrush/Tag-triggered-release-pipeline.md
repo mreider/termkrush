@@ -2,13 +2,17 @@
 title: Tag-triggered release pipeline
 type: feature
 created: "2026-06-04T09:11:00Z"
-modified: "2026-06-04T09:11:00Z"
+modified: "2026-06-04T12:39:53Z"
 author: Matt Reider
-status: unstarted
+status: accepted
 estimate: "3"
 epic: foundation
 tags: [foundation, ci, release]
 project: termkrush
+started: "2026-06-04T12:38:24Z"
+finished: "2026-06-04T12:39:53Z"
+delivered: "2026-06-04T12:39:53Z"
+accepted: "2026-06-04T12:39:53Z"
 ---
 
 ## Problem statement

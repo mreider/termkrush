@@ -30,3 +30,7 @@
 2026-06-04T12:33:19Z	Matt Reider	bug	termkrush/Bug-logging-crash-line-test-asserts-unix-path-separator-fails-on-Windows-CI.md	target=priority position=top
 2026-06-04T12:33:19Z	Matt Reider	started	termkrush/Bug-logging-crash-line-test-asserts-unix-path-separator-fails-on-Windows-CI.md	pull
 2026-06-04T12:33:41Z	Matt Reider	finished	termkrush/Bug-logging-crash-line-test-asserts-unix-path-separator-fails-on-Windows-CI.md	
+2026-06-04T12:38:24Z	Matt Reider	started	termkrush/Tag-triggered-release-pipeline.md	pull
+2026-06-04T12:39:53Z	Matt Reider	finished	termkrush/Tag-triggered-release-pipeline.md	
+2026-06-04T12:39:53Z	Matt Reider	delivered	termkrush/Tag-triggered-release-pipeline.md	
+2026-06-04T12:39:53Z	Matt Reider	accepted	termkrush/Tag-triggered-release-pipeline.md	

@@ -23,15 +23,14 @@ This repo is built **the Pivotal way**, top-of-backlog first, one story at a tim
 
 ## When tests fail
 
-CI red, a local test failing, a perf assertion regressing, a manual verification revealing broken behavior against an *accepted* story — every one of those is a **bug**. The flow is the same as features, only the type and estimate differ:
+CI red, a local test failing, a perf assertion regressing, a manual verification revealing broken behavior against an *accepted* story — every one of those is a **bug**. File it first, then fix under it. The fastest path is the `/file-bug` skill or the helper script (both wrap `am bug`, which creates the item, sets `type: bug`, strips the estimate, and ranks it to the top of priority in one shot):
 
 ```
-am create-item "Bug: <one-line symptom>" --target priority --position top
-am set-type termkrush/<slug>.md bug          # strips estimate; no points
-am pull                                       # pick it up next; the gate now allows code edits
+scripts/file-bug.sh "Bug: <one-line symptom>"   # creates + templates the body + opens $EDITOR
+# ...or, plain: (cd termkrush && am bug "Bug: <symptom>")
+am pull                                          # pick it up next; the gate now allows code edits
 # ...write a failing test that reproduces it, then make it pass...
-am finish termkrush/<slug>.md
-am deliver termkrush/<slug>.md                # stop here; PM accepts
+am finish termkrush/<slug>.md                    # bugs shortcut finish -> accepted
 ```
 
 - Bugs land at the **top of priority** by default. The PM can reorder.

@@ -2,12 +2,16 @@
 title: Bug-filing helper script and skill
 type: chore
 created: "2026-06-04T09:41:11Z"
-modified: "2026-06-04T09:41:11Z"
+modified: "2026-06-04T12:21:30Z"
 author: Matt Reider
-status: unstarted
+status: accepted
 epic: foundation
 tags: [process, test, foundation]
 project: termkrush
+started: "2026-06-04T12:20:06Z"
+finished: "2026-06-04T12:21:30Z"
+delivered: "2026-06-04T12:21:30Z"
+accepted: "2026-06-04T12:21:30Z"
 ---
 
 ## Why this is a chore

@@ -70,8 +70,7 @@
 |  | [Crossfader between the turntables](termkrush/Crossfader-between-the-turntables.md) | 2 |  |
 |  | [Lower-corner 8-bit DJ cat that bobs to the BPM](termkrush/Lower-corner-8-bit-DJ-cat-that-bobs-to-the-BPM.md) | 3 |  |
 |  | [Per-deck track switching from the loaded list](termkrush/Per-deck-track-switching-from-the-loaded-list.md) | 3 |  |
-|  | [Turntable platter visuals per deck](termkrush/Turntable-platter-visuals-per-deck.md) | 3 |  |
-| Total Points | | 95 | |
+| Total Points | | 92 | |
 
 ### Started
 | User | Title | Points | Tags |
@@ -115,6 +114,7 @@
 |  | [Two-deck TUI layout](termkrush/Two-deck-TUI-layout.md) | 3 | [tui](.am/tags/tui.md) [two-decks](.am/tags/two-decks.md) |
 |  | [Property-based testing for DSP code](termkrush/Property-based-testing-for-DSP-code.md) |  | [test](.am/tags/test.md) [dsp](.am/tags/dsp.md) [foundation](.am/tags/foundation.md) |
 |  | [Ergonomic keyboard layout for live performance](termkrush/Ergonomic-keyboard-layout-for-live-performance.md) | 3 |  |
+|  | [Turntable platter visuals per deck](termkrush/Turntable-platter-visuals-per-deck.md) | 3 |  |
 
 ### Rejected
 | User | Title | Points | Tags |

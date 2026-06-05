@@ -6,5 +6,10 @@
 | User | Project | Title | Points | Tags |
 |---|---|---|:---:|---|
 |  | [termkrush](../../termkrush.md) | [Multi-detector BPM consensus](../../termkrush/Multi-detector-BPM-consensus.md) |  | [tempo](tempo.md) [analysis](analysis.md) [icebox](icebox.md) |
+| Total Points | | | 0 | |
+
+## Started
+| User | Project | Title | Points | Tags |
+|---|---|---|:---:|---|
 |  | [termkrush](../../termkrush.md) | [Offline BPM detection on load](../../termkrush/Offline-BPM-detection-on-load.md) | 5 | [tempo](tempo.md) [analysis](analysis.md) |
 | Total Points | | | 5 | |

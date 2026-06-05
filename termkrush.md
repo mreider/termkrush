@@ -35,7 +35,6 @@
 |  | [Master tap into ring buffer](termkrush/Master-tap-into-ring-buffer.md) | 3 | [record](.am/tags/record.md) [architecture](.am/tags/architecture.md) |
 |  | [Multi-detector BPM consensus](termkrush/Multi-detector-BPM-consensus.md) |  | [tempo](.am/tags/tempo.md) [analysis](.am/tags/analysis.md) [icebox](.am/tags/icebox.md) |
 |  | [Multiple hot cues per deck](termkrush/Multiple-hot-cues-per-deck.md) |  | [deck](.am/tags/deck.md) [cue](.am/tags/cue.md) [icebox](.am/tags/icebox.md) |
-|  | [Offline BPM detection on load](termkrush/Offline-BPM-detection-on-load.md) | 5 | [tempo](.am/tags/tempo.md) [analysis](.am/tags/analysis.md) |
 |  | [Per-deck FX bus](termkrush/Per-deck-FX-bus.md) | 3 | [fx](.am/tags/fx.md) [architecture](.am/tags/architecture.md) |
 |  | [Phaser FX](termkrush/Phaser-FX.md) |  | [fx](.am/tags/fx.md) [icebox](.am/tags/icebox.md) |
 |  | [Pitch-preserving time-stretch](termkrush/Pitch-preserving-time-stretch.md) | 5 | [tempo](.am/tags/tempo.md) [dsp](.am/tags/dsp.md) |
@@ -67,11 +66,13 @@
 |  | [V0.5.0 more decks](termkrush/v050-more-decks.md) |  |  |
 |  | [V0.6.0 record](termkrush/v060-record.md) |  |  |
 |  | [Yt-dlp shell-out for media URLs](termkrush/yt-dlp-shell-out-for-media-URLs.md) | 3 | [download](.am/tags/download.md) [yt-dlp](.am/tags/yt-dlp.md) |
-| Total Points | | 84 | |
+| Total Points | | 79 | |
 
 ### Started
 | User | Title | Points | Tags |
 |---|---|:---:|---|
+|  | [Offline BPM detection on load](termkrush/Offline-BPM-detection-on-load.md) | 5 | [tempo](.am/tags/tempo.md) [analysis](.am/tags/analysis.md) |
+| Total Points | | 5 | |
 
 ### Finished
 | User | Title | Points | Tags |

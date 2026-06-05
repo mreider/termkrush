@@ -17,22 +17,42 @@ pub const DECKS: usize = 2;
 pub const MASTER_MIN: f32 = 0.0;
 pub const MASTER_MAX: f32 = 1.5;
 
+/// Crossfader position range: `-1.0` = deck A only, `+1.0` = deck B only,
+/// `0.0` = both decks at unity.
+pub const XFADE_MIN: f32 = -1.0;
+pub const XFADE_MAX: f32 = 1.0;
+
 /// Max change in applied master gain per frame, matching the deck's ramp
 /// so master moves de-zipper too.
 const MASTER_RAMP_STEP: f32 = 1.0 / 512.0;
 
-/// The master bus: owns the decks, sums them, and applies master gain.
+/// Max change in the crossfader position per frame, so slides de-zipper.
+const XFADE_RAMP_STEP: f32 = 1.0 / 512.0;
+
+/// Linear crossfader law: position `pos` in `[-1, 1]` to (deck A, deck B)
+/// gains. `0` leaves both at unity; the off-side deck ramps to silence as
+/// the fader travels to the far end.
+fn xfade_gains(pos: f32) -> (f32, f32) {
+    (1.0 - pos.max(0.0), 1.0 + pos.min(0.0))
+}
+
+/// The master bus: owns the decks, crossfades A↔B, and applies master gain.
 #[derive(Debug)]
 pub struct Mixer {
-    /// The decks, summed into the master mix.
+    /// The decks: index 0 is deck A, index 1 is deck B.
     decks: [Deck; DECKS],
     /// Target master gain (what the dB readout shows).
     master: f32,
     /// Applied master gain, ramped toward `master` per frame.
     smoothed: f32,
+    /// Target crossfader position (`-1` A only … `+1` B only).
+    xfade: f32,
+    /// Applied crossfader position, ramped toward `xfade` per frame.
+    xfade_smoothed: f32,
     /// Reusable per-deck scratch for [`fill_mix`](Self::fill_mix), so the
     /// mix path does not allocate every block.
-    scratch: Vec<f32>,
+    scratch_a: Vec<f32>,
+    scratch_b: Vec<f32>,
 }
 
 impl Default for Mixer {
@@ -42,13 +62,16 @@ impl Default for Mixer {
 }
 
 impl Mixer {
-    /// A master bus at unity gain with empty decks.
+    /// A master bus at unity gain, crossfader centered, empty decks.
     pub fn new() -> Self {
         Mixer {
             decks: [Deck::new(), Deck::new()],
             master: 1.0,
             smoothed: 1.0,
-            scratch: Vec::new(),
+            xfade: 0.0,
+            xfade_smoothed: 0.0,
+            scratch_a: Vec::new(),
+            scratch_b: Vec::new(),
         }
     }
 
@@ -62,18 +85,53 @@ impl Mixer {
         &mut self.decks[i]
     }
 
-    /// Sum every deck's next block into `out` (interleaved stereo) and
-    /// apply the master gain. Decks play independently; a stopped/paused
-    /// deck contributes silence. This is what the audio pump calls.
+    /// Set the crossfader position, clamped to `[-1, 1]`.
+    pub fn set_xfade(&mut self, pos: f32) {
+        self.xfade = pos.clamp(XFADE_MIN, XFADE_MAX);
+    }
+
+    /// Nudge the crossfader by `delta` (clamped). Bound to `[`/`]` in the UI.
+    pub fn nudge_xfade(&mut self, delta: f32) {
+        self.set_xfade(self.xfade + delta);
+    }
+
+    /// Return the crossfader to center (both decks at unity). Bound to `\`.
+    pub fn center_xfade(&mut self) {
+        self.xfade = 0.0;
+    }
+
+    /// Current target crossfader position.
+    pub fn xfade(&self) -> f32 {
+        self.xfade
+    }
+
+    /// Mix the two decks through the crossfader into `out` (interleaved
+    /// stereo) and apply the master gain. Decks play independently; a
+    /// stopped/paused deck contributes silence. The crossfader position is
+    /// ramped per frame so slides don't click. This is what the pump calls.
     pub fn fill_mix(&mut self, out: &mut [f32]) {
-        out.iter_mut().for_each(|s| *s = 0.0);
-        self.scratch.resize(out.len(), 0.0);
-        for deck in &mut self.decks {
-            deck.fill(&mut self.scratch);
-            for (o, s) in out.iter_mut().zip(self.scratch.iter()) {
-                *o += *s;
+        self.scratch_a.resize(out.len(), 0.0);
+        self.scratch_b.resize(out.len(), 0.0);
+        self.decks[0].fill(&mut self.scratch_a);
+        self.decks[1].fill(&mut self.scratch_b);
+
+        let target = self.xfade;
+        let mut x = self.xfade_smoothed;
+        for i in 0..out.len() / 2 {
+            // Ramp the fader toward its target, then derive the A/B gains.
+            if x < target {
+                x = (x + XFADE_RAMP_STEP).min(target);
+            } else if x > target {
+                x = (x - XFADE_RAMP_STEP).max(target);
             }
+            let (ga, gb) = xfade_gains(x);
+            let l = self.scratch_a[i * 2] * ga + self.scratch_b[i * 2] * gb;
+            let r = self.scratch_a[i * 2 + 1] * ga + self.scratch_b[i * 2 + 1] * gb;
+            out[i * 2] = l;
+            out[i * 2 + 1] = r;
         }
+        self.xfade_smoothed = x;
+
         self.apply(out);
     }
 
@@ -174,6 +232,94 @@ mod tests {
             m.deck(1).position_frames(),
             0,
             "loading/playing one leaves the other put"
+        );
+    }
+
+    #[test]
+    fn xfade_gains_follow_linear_law() {
+        assert_eq!(xfade_gains(0.0), (1.0, 1.0), "center: both unity");
+        assert_eq!(xfade_gains(1.0), (0.0, 1.0), "+1: B only");
+        assert_eq!(xfade_gains(-1.0), (1.0, 0.0), "-1: A only");
+        let (a, b) = xfade_gains(0.5);
+        assert!((a - 0.5).abs() < 1e-6 && (b - 1.0).abs() < 1e-6);
+        let (a, b) = xfade_gains(-0.5);
+        assert!((a - 1.0).abs() < 1e-6 && (b - 0.5).abs() < 1e-6);
+    }
+
+    #[test]
+    fn xfade_clamps_and_centers() {
+        let mut m = Mixer::new();
+        m.set_xfade(9.0);
+        assert_eq!(m.xfade(), XFADE_MAX);
+        m.set_xfade(-9.0);
+        assert_eq!(m.xfade(), XFADE_MIN);
+        m.nudge_xfade(0.5);
+        assert!((m.xfade() - (-0.5)).abs() < 1e-6);
+        m.center_xfade();
+        assert_eq!(m.xfade(), 0.0);
+    }
+
+    #[test]
+    fn full_left_is_deck_a_only_full_right_is_deck_b_only() {
+        let mut m = Mixer::new();
+        m.deck_mut(0).load(track(20_000, 0.4)); // A
+        m.deck_mut(1).load(track(20_000, 0.6)); // B
+        m.deck_mut(0).play();
+        m.deck_mut(1).play();
+
+        // Full left: after the fader ramps, only A (0.4) is heard.
+        m.set_xfade(-1.0);
+        let mut buf = vec![0.0f32; 8192];
+        m.fill_mix(&mut buf);
+        let last = buf[buf.len() - 1];
+        assert!(
+            (last - 0.4).abs() < 1e-3,
+            "full-left should be deck A only, got {last}"
+        );
+
+        // Full right: only B (0.6).
+        m.set_xfade(1.0);
+        let mut buf = vec![0.0f32; 8192];
+        m.fill_mix(&mut buf);
+        let last = buf[buf.len() - 1];
+        assert!(
+            (last - 0.6).abs() < 1e-3,
+            "full-right should be deck B only, got {last}"
+        );
+    }
+
+    #[test]
+    fn center_plays_both_at_unity() {
+        let mut m = Mixer::new();
+        m.deck_mut(0).load(track(1000, 0.3));
+        m.deck_mut(1).load(track(1000, 0.3));
+        m.deck_mut(0).play();
+        m.deck_mut(1).play();
+        // Default fader is centered.
+        let mut buf = vec![0.0f32; 64];
+        m.fill_mix(&mut buf);
+        assert!(
+            buf.iter().all(|&s| (s - 0.6).abs() < 1e-4),
+            "center: A+B at unity"
+        );
+    }
+
+    #[test]
+    fn xfade_slide_is_smoothed() {
+        let mut m = Mixer::new();
+        m.deck_mut(0).load(track(20_000, 0.4));
+        m.deck_mut(1).load(track(20_000, 0.6));
+        m.deck_mut(0).play();
+        m.deck_mut(1).play();
+        // Jump the target hard to +1; the first frame must not snap to
+        // B-only — it should still be ~both (A+B ≈ 1.0).
+        m.set_xfade(1.0);
+        let mut buf = vec![0.0f32; 8];
+        m.fill_mix(&mut buf);
+        assert!(
+            (buf[0] - 1.0).abs() < 0.02,
+            "first frame should barely move from center (no zipper), got {}",
+            buf[0]
         );
     }
 

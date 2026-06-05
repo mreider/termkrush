@@ -38,6 +38,9 @@ const DECK_LABELS: [&str; DECKS] = ["A", "B"];
 /// Per-keypress gain nudge (linear), for both deck and master.
 const GAIN_NUDGE: f32 = 0.05;
 
+/// Per-keypress crossfader slide.
+const XFADE_NUDGE: f32 = 0.05;
+
 /// Seek amounts (seconds): arrows jump, Shift+arrows jump far, `,`/`.` scrub.
 const SEEK_JUMP: f64 = 5.0;
 const SEEK_FAR: f64 = 30.0;
@@ -73,6 +76,7 @@ pub enum Action {
     Filter,
     LoadSelected,
     Focus,
+    Crossfade,
 }
 
 /// UI state for the shell: the decks + master bus (owned by [`Mixer`]),
@@ -224,6 +228,19 @@ impl App {
                 self.mixer.nudge_master(-GAIN_NUDGE);
                 Action::MasterGain
             }
+            // Crossfader: `[` toward A, `]` toward B, `\` re-centers.
+            (KeyCode::Char('['), _) => {
+                self.mixer.nudge_xfade(-XFADE_NUDGE);
+                Action::Crossfade
+            }
+            (KeyCode::Char(']'), _) => {
+                self.mixer.nudge_xfade(XFADE_NUDGE);
+                Action::Crossfade
+            }
+            (KeyCode::Char('\\'), _) => {
+                self.mixer.center_xfade();
+                Action::Crossfade
+            }
             // Seek/scrub. Shift+arrow jumps far; `,`/`.` scrub finely.
             (KeyCode::Left, m) if m.contains(KeyModifiers::SHIFT) => {
                 self.focused_mut().seek_by(-SEEK_FAR);
@@ -350,11 +367,10 @@ pub fn draw(f: &mut Frame, app: &App) {
     f.render_widget(wordmark, rows[1]);
 
     // Transport hint row — green accent.
-    let tagline = Paragraph::new(
-        "tab focus  / filter  enter load  space play  ←/→ seek  +/- vol   ? help  q quit",
-    )
-    .alignment(Alignment::Center)
-    .style(Style::default().fg(GREEN).bg(BG));
+    let tagline =
+        Paragraph::new("tab deck  space play  ←/→ seek  +/- vol  [ ]\\ xfade   ? help  q quit")
+            .alignment(Alignment::Center)
+            .style(Style::default().fg(GREEN).bg(BG));
     f.render_widget(tagline, rows[2]);
 
     // Body: crate browser on the left, both decks stacked + master on the right.
@@ -365,6 +381,7 @@ pub fn draw(f: &mut Frame, app: &App) {
     let right = Layout::vertical([
         Constraint::Length(6), // deck A
         Constraint::Length(6), // deck B
+        Constraint::Length(1), // crossfader
         Constraint::Length(1), // master
         Constraint::Min(0),
     ])
@@ -380,6 +397,12 @@ pub fn draw(f: &mut Frame, app: &App) {
         );
     }
 
+    // Crossfader readout: A |───●───| B, handle at the current position.
+    let xfade = Paragraph::new(format!("A {} B", crossfader_bar(app.mixer.xfade(), 21)))
+        .alignment(Alignment::Center)
+        .style(Style::default().fg(AMBER).bg(BG));
+    f.render_widget(xfade, right[2]);
+
     let master = Paragraph::new(format!(
         "master {:.2}  {}   ( < / > )",
         app.mixer.master_gain(),
@@ -387,7 +410,7 @@ pub fn draw(f: &mut Frame, app: &App) {
     ))
     .alignment(Alignment::Center)
     .style(Style::default().fg(GREEN).bg(BG));
-    f.render_widget(master, right[2]);
+    f.render_widget(master, right[3]);
 
     if app.show_help {
         draw_help(f, area);
@@ -541,6 +564,23 @@ fn progress_bar(frac: f64, width: usize) -> String {
     s
 }
 
+/// A `|───●───|` crossfader slider `width` cells wide between the bars,
+/// with the handle `●` at `pos` in `[-1, 1]` (`-1` left, `0` center, `+1`
+/// right). `width` should be odd so center lands on a cell.
+fn crossfader_bar(pos: f32, width: usize) -> String {
+    let pos = pos.clamp(-1.0, 1.0);
+    let last = width.saturating_sub(1);
+    // Map [-1, 1] -> [0, width-1].
+    let handle = (((pos + 1.0) / 2.0) * last as f32).round() as usize;
+    let mut s = String::with_capacity(width + 2);
+    s.push('|');
+    for i in 0..width {
+        s.push(if i == handle { '●' } else { '─' });
+    }
+    s.push('|');
+    s
+}
+
 /// Format seconds as `mm:ss.s`.
 fn fmt_clock(secs: f64) -> String {
     let secs = secs.max(0.0);
@@ -552,14 +592,14 @@ fn fmt_clock(secs: f64) -> String {
 /// A centered help overlay (stub: lists the keys it knows so far).
 fn draw_help(f: &mut Frame, area: Rect) {
     let w = 52.min(area.width);
-    let h = 19.min(area.height);
+    let h = 20.min(area.height);
     let x = area.x + (area.width.saturating_sub(w)) / 2;
     let y = area.y + (area.height.saturating_sub(h)) / 2;
     let popup = Rect::new(x, y, w, h);
 
     f.render_widget(Clear, popup);
     let help = Paragraph::new(
-        "Keys\n\n  / filter    j / k  pick    enter  load track\n  tab        switch focused deck (A / B)\n  o          load demo track\n  space      play / pause\n  s          stop (rewind to 0)\n  ← / →      seek ±5s   (shift: ±30s)\n  , / .      scrub ±0.1s\n  + / -      deck volume\n  < / >      master volume\n  ?          toggle this help\n  q  / C-c   quit",
+        "Keys\n\n  / filter    j / k  pick    enter  load track\n  tab        switch focused deck (A / B)\n  o          load demo track\n  space      play / pause\n  s          stop (rewind to 0)\n  ← / →      seek ±5s   (shift: ±30s)\n  , / .      scrub ±0.1s\n  + / -      deck volume\n  < / >      master volume\n  [ ] \\      crossfader A | center | B\n  ?          toggle this help\n  q  / C-c   quit",
     )
     .block(
         Block::bordered()
@@ -1213,5 +1253,37 @@ mod tests {
             text.contains("▸ Deck A"),
             "focus marker should be on Deck A by default:\n{text}"
         );
+    }
+
+    #[test]
+    fn bracket_keys_slide_and_backslash_centers_crossfader() {
+        let mut app = App::new();
+        assert_eq!(app.on_key(key('[')), Action::Crossfade);
+        assert!(
+            (app.mixer.xfade() - (-0.05)).abs() < 1e-6,
+            "[ slides toward A"
+        );
+        assert_eq!(app.on_key(key(']')), Action::Crossfade);
+        assert!(app.mixer.xfade().abs() < 1e-6, "] slides back toward B");
+        app.on_key(key(']')); // now +0.05
+        assert_eq!(app.on_key(key('\\')), Action::Crossfade);
+        assert_eq!(app.mixer.xfade(), 0.0, "\\ re-centers");
+    }
+
+    #[test]
+    fn crossfader_bar_places_handle() {
+        // 21-wide bar: handle index 0 (left), 10 (center), 20 (right).
+        assert!(crossfader_bar(-1.0, 21).starts_with("|●"));
+        assert!(crossfader_bar(1.0, 21).ends_with("●|"));
+        let centered = crossfader_bar(0.0, 21);
+        // '|' at byte 0, then cells; center handle is the 11th char.
+        assert_eq!(centered.chars().nth(11), Some('●'));
+    }
+
+    #[test]
+    fn crossfader_renders_in_panel() {
+        let app = App::new();
+        let text = buffer_text(&render(&app, 100, 28));
+        assert!(text.contains('●'), "crossfader handle missing:\n{text}");
     }
 }

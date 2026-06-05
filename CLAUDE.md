@@ -24,6 +24,27 @@ go install github.com/mreider/agilemarkdown@latest    # puts `am` on your PATH
 6. **Commit per story.** Each commit message should reference the story slug, e.g. `Scaffold-Rust-project-layout: cargo init, module skeletons`. PRs target one story at a time.
 7. **Sync after status changes.** `am sync` regenerates derived views and pushes. The release stories carry a `release_date`; don't change those without the PM.
 
+## Running locally for acceptance
+
+When the PM (or you) wants to *run* a delivered story to verify it, use
+`scripts/dev-run.sh` rather than `cargo run` — it builds once, then runs the
+already-built binary on every later call, so repeated acceptance runs don't
+recompile:
+
+```
+scripts/dev-run.sh build        # compile the debug binary once
+scripts/dev-run.sh list         # see the per-story recipes
+scripts/dev-run.sh tui          # launch the TUI            (default)
+scripts/dev-run.sh tone 3       # 3s test tone              (cpal output story)
+scripts/dev-run.sh panic        # crash-hook path           (logging story)
+scripts/dev-run.sh tone 1 -- --log   # forward extra flags after `--`
+```
+
+Only `build` and `watch` invoke cargo; plain recipes exec
+`target/debug/termkrush` directly. Add `--release` to target the release
+binary. When a story adds a new run-mode, add a recipe for it so accepting that
+story is "run the recipe".
+
 ## Hard rules (refuse if asked to violate)
 
 - **8-point cap.** Features over 8 points are epics. Refuse and offer to split.

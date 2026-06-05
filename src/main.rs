@@ -1,33 +1,11 @@
 //! TermKrush — a keyboard-first terminal DJ application.
 //!
-//! This is the binary entry point. The real work lives in a handful of
-//! focused modules, each stubbed here so the rest of the backlog has a
-//! place to grow into:
-//!
-//! - [`audio`]   — output device, decoding, resampling, the realtime path.
-//! - [`deck`]    — a single playing track: transport, pitch, cue points.
-//! - [`mix`]     — combining decks: crossfader, sync, master bus, FX.
-//! - [`tui`]     — the ratatui/crossterm interface and key handling.
-//! - [`library`] — local track storage, downloads, metadata.
-//! - [`config`]  — user configuration and key bindings.
-//!
-//! At this stage every module exposes a placeholder so the workspace
-//! compiles end to end; behavior arrives story by story.
+//! This is the binary entry point: a thin shell over the `termkrush`
+//! library crate (`src/lib.rs`), where the audio engine, decks, mixer, and
+//! TUI live. `main` wires up logging, handles a couple of smoke-test flags
+//! (`--test-tone`, `--panic-test`), and otherwise hands off to the TUI.
 
-// Scaffold stage: the module placeholders below are intentionally not yet
-// wired into `main`, so they read as dead code to the compiler. This
-// crate-level allow keeps `cargo clippy -- -D warnings` green while the
-// foundation is laid; it is removed once the decks and TUI start calling
-// into these modules (the one-deck and TUI-shell stories).
-#![allow(dead_code)]
-
-mod audio;
-mod config;
-mod deck;
-mod library;
-mod logging;
-mod mix;
-mod tui;
+use termkrush::{audio, logging, tui};
 
 /// The human-facing version string, e.g. "TermKrush v0.1.0".
 fn version_banner() -> String {
@@ -38,7 +16,7 @@ fn version_banner() -> String {
 /// process exit code: 0 on success, 1 if the output device is
 /// unavailable (logged gracefully, never panics).
 fn run_test_tone(secs: f32) -> i32 {
-    use audio::{AudioOutput, Sink, SineSink};
+    use audio::{AudioOutput, SineSink, Sink};
     use std::time::Duration;
 
     let (out, mut producer) = match AudioOutput::start(1 << 15) {
@@ -52,7 +30,9 @@ fn run_test_tone(secs: f32) -> i32 {
 
     let sample_rate = out.sample_rate;
     let channels = out.channels;
-    eprintln!("termkrush: playing 440 Hz test tone for {secs:.1}s at {sample_rate} Hz, {channels} ch");
+    eprintln!(
+        "termkrush: playing 440 Hz test tone for {secs:.1}s at {sample_rate} Hz, {channels} ch"
+    );
 
     let mut sink = SineSink::new(440.0, sample_rate, 0.3, channels);
     let total = (sample_rate as f32 * secs) as usize * channels as usize;

@@ -23,6 +23,11 @@ rtrb = "0.3"
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
 tracing-appender = "0.2"
+# Decoding: symphonia reads the container + codec; only the formats we use
+# are enabled (mp3 for the decode story, wav+pcm for the synthesized fixtures).
+symphonia = { version = "0.5", default-features = false, features = ["mp3", "wav", "pcm"] }
+# Resampling: convert a decoded track's sample rate to the output rate.
+rubato = "0.16"
 
 [profile.release]
 opt-level = 3

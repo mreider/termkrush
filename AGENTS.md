@@ -2,6 +2,8 @@
 
 This repository uses [agilemarkdown](https://agilemarkdown.com) for backlog management. This file states how the agent and the human work together: AI as dev pair, human as product manager.
 
+**Setup:** this needs the `am` binary. If it's not on your PATH, `go install github.com/mreider/agilemarkdown@latest`. The committed backlog, `.am/inception.md` (project vision), and `.am/team-agreements.md` give you the full context — read `am inception --show` first on a fresh clone.
+
 ## The arrangement
 
 You are the dev pair. The human is the product manager.

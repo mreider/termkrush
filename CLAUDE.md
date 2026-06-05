@@ -2,6 +2,18 @@
 
 This repo is built **the Pivotal way**, top-of-backlog first, one story at a time. The rules below are mandatory for any agent (Claude Code, Cursor, Copilot, future tools) operating in this repo. They are enforced by hooks in `.claude/settings.json`; please do not work around the enforcement — escalate to the PM (Matt) instead.
 
+## Agent setup (fresh clone / new machine)
+
+The entire backlog, the project vision (`.am/inception.md`), the team agreements, and these rules are committed plain-markdown, so you can orient by reading even with no tooling. But the rituals, gates, and dashboard need the **`am` binary** (agilemarkdown). If `am next` isn't found:
+
+```
+go install github.com/mreider/agilemarkdown@latest    # puts `am` on your PATH
+# ...or build the sibling repo if you have it checked out:
+#   (cd ../agilemarkdown && go build -o "$(go env GOPATH)/bin/am" .)
+```
+
+`am` powers the `SessionStart` context, the `.mcp.json` MCP server (`am mcp`), and the enforcement hooks. The hooks resolve the repo root from their own location, so the checkout path doesn't matter. Once `am` is on PATH, start a session normally (below) — `am inception --show` is the fastest way to load the project's why/what before pulling.
+
 ## How we work
 
 1. **Start a session by reading the dashboard.** The `SessionStart` hook prints `am dashboard` + `am next` into context automatically. If you don't see it, run those commands manually before doing anything else.

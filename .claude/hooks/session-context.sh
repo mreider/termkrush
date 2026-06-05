@@ -1,53 +1,33 @@
 #!/usr/bin/env bash
-# TermKrush SessionStart hook: prints the dashboard, next pull, and any started
-# stories so every session begins with the same shared context the PM and dev
-# pair would have on Pivotal's web UI.
+# TermKrush SessionStart hook: prints `am brief` (project vision + dashboard +
+# next pull + WIP + agreements) so every session begins with the same shared
+# context the PM and dev pair would have on Pivotal's web UI.
 #
 # Output goes into the session's context as a system reminder.
 
 set -uo pipefail
 
-REPO_ROOT="/Users/matt/cutting/termkrush"
+# Derive the repo root from this script's own location so a fresh clone
+# (any path, any machine) gets full session context without editing this
+# file. Falls back to git toplevel if BASH_SOURCE is unavailable.
+REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." 2>/dev/null && pwd)"
+REPO_ROOT="${REPO_ROOT:-$(git rev-parse --show-toplevel 2>/dev/null)}"
 
 if ! command -v am >/dev/null 2>&1; then
-  echo "agilemarkdown (am) is not on PATH; install it to see backlog context."
+  echo "agilemarkdown (am) is not on PATH. Install it to get backlog context:"
+  echo "  go install github.com/mreider/agilemarkdown@latest   # or build the sibling agilemarkdown repo"
   exit 0
 fi
 
 cd "$REPO_ROOT" 2>/dev/null || exit 0
 
-echo "## TermKrush backlog state"
-echo
-echo "### Dashboard"
-echo '```'
-am dashboard 2>/dev/null | grep -v "can't set bash autocomplete" || true
-echo '```'
-echo
-echo "### Top of priority"
-echo '```'
-am next 2>/dev/null | grep -v "can't set bash autocomplete" || true
-echo '```'
-echo
+# `am brief` (agilemarkdown >= 2026.06) prints the whole onboarding blob in
+# one shot: project vision (from .am/inception.md), the dashboard, the next
+# pull, work in progress, and the working agreements. The grep is defensive
+# against older builds that leaked an autocomplete warning onto stdout.
+am brief 2>/dev/null | grep -v "can't set bash autocomplete" || true
 
-# Started stories (WIP)
-started=()
-if compgen -G "$REPO_ROOT/termkrush/*.md" >/dev/null; then
-  while IFS= read -r f; do
-    [ -n "$f" ] && started+=("$f")
-  done < <(grep -l '^status: started$' "$REPO_ROOT"/termkrush/*.md 2>/dev/null || true)
-fi
-
-if [ ${#started[@]} -gt 0 ]; then
-  echo "### Stories in progress (WIP)"
-  for f in "${started[@]}"; do
-    title=$(grep -m1 '^title:' "$f" | sed 's/^title: *//; s/^"//; s/"$//')
-    rel="${f#$REPO_ROOT/}"
-    echo "- $title  ($rel)"
-  done
-else
-  echo "### Stories in progress"
-  echo "_None. The next code edit will be refused until \`am pull <slug>\` starts a story._"
-fi
 echo
-echo "_The coach gate refuses code edits while no story is started. The backlog "
-echo "and \`.claude/\`, \`.am/\`, \`.cursor/\` paths are always editable._"
+echo "_Coach gate: code edits are refused while no story is \`started\` — \`am pull\`"
+echo "the top of priority first. The backlog (termkrush/*.md) and the \`.am/\`,"
+echo "\`.claude/\`, \`.cursor/\` paths are always editable._"

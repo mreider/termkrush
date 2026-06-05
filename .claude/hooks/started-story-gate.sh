@@ -21,7 +21,11 @@
 
 set -euo pipefail
 
-REPO_ROOT="/Users/matt/cutting/termkrush"
+# Derive the repo root from this script's own location
+# (.claude/hooks/started-story-gate.sh -> repo root) so the gate works in
+# any clone, on any machine, regardless of the checkout path or the cwd
+# Claude Code happens to invoke the hook from.
+REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 BACKLOG_DIR="$REPO_ROOT/termkrush"
 
 input="$(cat)"

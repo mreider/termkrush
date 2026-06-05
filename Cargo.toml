@@ -17,7 +17,9 @@ name = "termkrush"
 path = "src/main.rs"
 
 [dependencies]
+cpal = "0.15"
 ratatui = "0.29"
+rtrb = "0.3"
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
 tracing-appender = "0.2"

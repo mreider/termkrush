@@ -2,12 +2,16 @@
 title: Ergonomic keyboard layout for live performance
 type: feature
 created: "2026-06-05T21:18:13Z"
-modified: "2026-06-05T21:19:41Z"
+modified: "2026-06-05T21:30:49Z"
 author: Matt Reider
-status: unstarted
+status: accepted
 estimate: "3"
 epic: controls
 project: termkrush
+started: "2026-06-05T21:23:50Z"
+finished: "2026-06-05T21:30:48Z"
+delivered: "2026-06-05T21:30:49Z"
+accepted: "2026-06-05T21:30:49Z"
 ---
 
 ## Problem statement
@@ -16,17 +20,22 @@ Today's keys are letter-mnemonics scattered across the board (space=play, s=stop
 
 ## Possible solution
 
-- A deck-symmetric, home-row-anchored scheme: **left hand drives deck A, right hand drives deck B**, with the crossfader and shared controls on the center keys / space (thumbs). Cluster each hand's transport, cue/seek, and volume so they fall under the resting fingers.
-- Keep destructive keys (quit) out of the performance cluster.
-- Rebind every action from the two-deck era to the new scheme in one pass; `?` help stays authoritative.
+- Deck-symmetric, home-row-anchored: **left hand drives deck A, right hand drives deck B**, crossfader between the hands, globals off the play cluster.
 
 ## Acceptance
 
-- [ ] A documented ergonomic key map exists, organized by finger position (left=A, right=B, center/space=crossfader/common) — not by letter mnemonic.
-- [ ] Every existing action (play/pause, stop, seek/scrub, deck volume, master, crossfader, deck focus, load, crate filter) is reachable in the new layout.
-- [ ] Help overlay + README cheatsheet reflect the new map; `on_key` tests updated to it.
-- [ ] No action is bound to a key merely because it matches the action's name.
+- [x] A documented ergonomic key map exists, organized by finger position (left=A, right=B, crossfader between) — not by letter mnemonic.
+- [x] Every existing action is reachable: play/pause (f/j), cue-stop (d/k), volume (w·s / o·l), seek (e·r / i·u, shift=far), crossfader (g/h, space=center), master ([ / ]), fine scrub (, / . on focused), deck focus (tab), crate (/ filter, ↑/↓, enter), demo (\), hide crate (z).
+- [x] Help overlay + README cheatsheet reflect the new map; `on_key` tests updated to it (109 tests green).
+- [x] No action is bound to a key because it matches the action's name.
 
-## Prerequisites
+## Implementation notes
 
-All current keybindings (transport, seek, volume, master, crossfader, focus, crate) — accepted. **This is first in the batch**: the turntable and sampler stories build their keys on this scheme.
+- Transport is now applied **directly to deck A or deck B** by which hand's key you press (not the focused deck). `focus` (tab) now only steers crate loads and fine scrub, plus the visual highlight.
+- Finger logic: index home = play (f/j), middle home = cue (d/k), ring column = volume (w·s / o·l), index/middle top row = seek (e·r / i·u); the two index inner-reach keys g/h are the crossfader, space (thumb) recenters.
+- `q`/`Ctrl-C` quit stay off the play cluster; `\` loads the demo (was `o`); `z` hides the crate (was `c`).
+- This is the keymap the turntable + sampler stories build on (why it ranked first).
+
+## Note (review)
+
+Ergonomics verified by construction + the full `on_key` test suite; the *feel* of the layout is best confirmed by playing it (`scripts/dev-run.sh tui`). The scheme is opinionated — easy to tweak individual keys later since they're all in one match.

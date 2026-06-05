@@ -41,7 +41,8 @@ const GAIN_NUDGE: f32 = 0.05;
 /// Per-keypress crossfader slide.
 const XFADE_NUDGE: f32 = 0.05;
 
-/// Seek amounts (seconds): arrows jump, Shift+arrows jump far, `,`/`.` scrub.
+/// Seek amounts (seconds): the per-deck seek keys jump `SEEK_JUMP`, with
+/// Shift held they jump `SEEK_FAR`; `,`/`.` scrub the focused deck finely.
 const SEEK_JUMP: f64 = 5.0;
 const SEEK_FAR: f64 = 30.0;
 const SEEK_SCRUB: f64 = 0.1;
@@ -56,11 +57,12 @@ pub const BG: Color = Color::Rgb(0x06, 0x09, 0x07);
 /// Redraw cap: poll for input up to this long, giving ~30 Hz when idle.
 const FRAME: Duration = Duration::from_millis(33);
 
-/// What an input event asks the app to do. Deck transport is applied to
-/// the focused deck inside `on_key`; the variant is returned so the caller
-/// (and the tests) can observe what happened. `OpenFile`/`LoadSelected`
-/// are the exceptions: loading a track is I/O, so `on_key` only signals
-/// intent and the event loop performs the decode.
+/// What an input event asks the app to do. Deck transport is applied
+/// directly to deck A (left-hand keys) or deck B (right-hand keys) inside
+/// `on_key`; the variant is returned so the caller (and the tests) can
+/// observe what happened. `OpenFile`/`LoadSelected` are the exceptions:
+/// loading a track is I/O, so `on_key` only signals intent and the event
+/// loop performs the decode. `focus` only steers crate loads and fine scrub.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Action {
     None,
@@ -179,7 +181,15 @@ impl App {
         if self.filter.is_some() {
             return self.on_key_filter(key);
         }
+        // Ergonomic, deck-symmetric layout: the LEFT hand drives deck A,
+        // the RIGHT hand mirrors it for deck B, the crossfader sits between
+        // the hands, and the crate/global keys stay off the play cluster.
+        // Keys are chosen by finger position, not by what letter the action
+        // starts with. See `keymap` docs / the help overlay.
+        let shift = key.modifiers.contains(KeyModifiers::SHIFT);
+        let seek_amt = if shift { SEEK_FAR } else { SEEK_JUMP };
         match (key.code, key.modifiers) {
+            // ---- global / out of the play cluster ----
             (KeyCode::Char('q'), _) => {
                 self.should_quit = true;
                 Action::Quit
@@ -187,11 +197,6 @@ impl App {
             (KeyCode::Char('c'), KeyModifiers::CONTROL) => {
                 self.should_quit = true;
                 Action::Quit
-            }
-            // Collapse/expand the crate browser to give the decks more room.
-            (KeyCode::Char('c'), _) => {
-                self.crate_collapsed = !self.crate_collapsed;
-                Action::ToggleCrate
             }
             (KeyCode::Char('?'), _) => {
                 self.show_help = !self.show_help;
@@ -201,70 +206,83 @@ impl App {
                 self.show_help = false;
                 Action::ToggleHelp
             }
-            // Tab cycles which deck the transport keys target.
-            (KeyCode::Tab, _) => {
-                self.focus = (self.focus + 1) % DECKS;
-                Action::Focus
-            }
-            // Deck transport on the focused deck.
-            (KeyCode::Char(' '), _) => {
-                self.focused_mut().toggle();
+
+            // ---- DECK A — left hand ----
+            // index home = play, middle home = cue, ring column = volume,
+            // index/middle top = seek.
+            (KeyCode::Char('f'), _) => {
+                self.mixer.deck_mut(0).toggle();
                 Action::PlayPause
             }
-            (KeyCode::Char('s'), _) => {
-                self.focused_mut().stop();
+            (KeyCode::Char('d'), _) => {
+                self.mixer.deck_mut(0).stop();
                 Action::Stop
             }
-            // Loading a file is I/O — signal intent, let the event loop decode.
-            (KeyCode::Char('o'), _) => Action::OpenFile,
-            // Deck volume: `+`/`=` up, `-` down.
-            (KeyCode::Char('+' | '='), _) => {
-                self.focused_mut().nudge_gain(GAIN_NUDGE);
+            (KeyCode::Char('w'), _) => {
+                self.mixer.deck_mut(0).nudge_gain(GAIN_NUDGE);
                 Action::DeckGain
             }
-            (KeyCode::Char('-'), _) => {
-                self.focused_mut().nudge_gain(-GAIN_NUDGE);
+            (KeyCode::Char('s'), _) => {
+                self.mixer.deck_mut(0).nudge_gain(-GAIN_NUDGE);
                 Action::DeckGain
             }
-            // Master volume: `>` up, `<` down. (These stand in for the
-            // spec's "Shift +/-", which terminals encode ambiguously.)
-            (KeyCode::Char('>'), _) => {
-                self.mixer.nudge_master(GAIN_NUDGE);
-                Action::MasterGain
+            (KeyCode::Char('e'), _) => {
+                self.mixer.deck_mut(0).seek_by(-seek_amt);
+                Action::Seek
             }
-            (KeyCode::Char('<'), _) => {
+            (KeyCode::Char('r'), _) => {
+                self.mixer.deck_mut(0).seek_by(seek_amt);
+                Action::Seek
+            }
+
+            // ---- DECK B — right hand (mirror) ----
+            (KeyCode::Char('j'), _) => {
+                self.mixer.deck_mut(1).toggle();
+                Action::PlayPause
+            }
+            (KeyCode::Char('k'), _) => {
+                self.mixer.deck_mut(1).stop();
+                Action::Stop
+            }
+            (KeyCode::Char('o'), _) => {
+                self.mixer.deck_mut(1).nudge_gain(GAIN_NUDGE);
+                Action::DeckGain
+            }
+            (KeyCode::Char('l'), _) => {
+                self.mixer.deck_mut(1).nudge_gain(-GAIN_NUDGE);
+                Action::DeckGain
+            }
+            (KeyCode::Char('i'), _) => {
+                self.mixer.deck_mut(1).seek_by(-seek_amt);
+                Action::Seek
+            }
+            (KeyCode::Char('u'), _) => {
+                self.mixer.deck_mut(1).seek_by(seek_amt);
+                Action::Seek
+            }
+
+            // ---- crossfader — between the hands (index inner reach) ----
+            (KeyCode::Char('g'), _) => {
+                self.mixer.nudge_xfade(-XFADE_NUDGE); // toward deck A
+                Action::Crossfade
+            }
+            (KeyCode::Char('h'), _) => {
+                self.mixer.nudge_xfade(XFADE_NUDGE); // toward deck B
+                Action::Crossfade
+            }
+            (KeyCode::Char(' '), _) => {
+                self.mixer.center_xfade(); // big neutral key = recenter
+                Action::Crossfade
+            }
+
+            // ---- master + fine scrub (focused deck) ----
+            (KeyCode::Char('['), _) => {
                 self.mixer.nudge_master(-GAIN_NUDGE);
                 Action::MasterGain
             }
-            // Crossfader: `[` toward A, `]` toward B, `\` re-centers.
-            (KeyCode::Char('['), _) => {
-                self.mixer.nudge_xfade(-XFADE_NUDGE);
-                Action::Crossfade
-            }
             (KeyCode::Char(']'), _) => {
-                self.mixer.nudge_xfade(XFADE_NUDGE);
-                Action::Crossfade
-            }
-            (KeyCode::Char('\\'), _) => {
-                self.mixer.center_xfade();
-                Action::Crossfade
-            }
-            // Seek/scrub. Shift+arrow jumps far; `,`/`.` scrub finely.
-            (KeyCode::Left, m) if m.contains(KeyModifiers::SHIFT) => {
-                self.focused_mut().seek_by(-SEEK_FAR);
-                Action::Seek
-            }
-            (KeyCode::Right, m) if m.contains(KeyModifiers::SHIFT) => {
-                self.focused_mut().seek_by(SEEK_FAR);
-                Action::Seek
-            }
-            (KeyCode::Left, _) => {
-                self.focused_mut().seek_by(-SEEK_JUMP);
-                Action::Seek
-            }
-            (KeyCode::Right, _) => {
-                self.focused_mut().seek_by(SEEK_JUMP);
-                Action::Seek
+                self.mixer.nudge_master(GAIN_NUDGE);
+                Action::MasterGain
             }
             (KeyCode::Char(','), _) => {
                 self.focused_mut().seek_by(-SEEK_SCRUB);
@@ -274,18 +292,23 @@ impl App {
                 self.focused_mut().seek_by(SEEK_SCRUB);
                 Action::Seek
             }
-            // Crate browsing: `/` filter, `j`/`k` navigate, Enter loads.
+
+            // ---- crate browser + deck focus (for load / fine scrub target) ----
+            (KeyCode::Tab, _) => {
+                self.focus = (self.focus + 1) % DECKS;
+                Action::Focus
+            }
             (KeyCode::Char('/'), _) => {
                 self.filter = Some(String::new());
                 self.crate_sel = 0;
                 Action::Filter
             }
-            (KeyCode::Char('j'), _) => {
-                self.sel_down();
+            (KeyCode::Up, _) => {
+                self.sel_up();
                 Action::CrateNav
             }
-            (KeyCode::Char('k'), _) => {
-                self.sel_up();
+            (KeyCode::Down, _) => {
+                self.sel_down();
                 Action::CrateNav
             }
             (KeyCode::Enter, _) => {
@@ -296,8 +319,18 @@ impl App {
                     Action::None
                 }
             }
+            (KeyCode::Char('z'), _) => self.crate_collapse_toggle(),
+            (KeyCode::Char('\\'), _) => Action::OpenFile, // load demo into focused deck
+
             _ => Action::None,
         }
+    }
+
+    /// Toggle the crate browser's visibility (helper so the key arm stays
+    /// a one-liner).
+    fn crate_collapse_toggle(&mut self) -> Action {
+        self.crate_collapsed = !self.crate_collapsed;
+        Action::ToggleCrate
     }
 
     /// Key handling while the `/` filter is open: type to narrow, arrows
@@ -374,11 +407,10 @@ pub fn draw(f: &mut Frame, app: &App) {
         );
     f.render_widget(wordmark, rows[1]);
 
-    // Transport hint row — green accent.
-    let tagline =
-        Paragraph::new("tab deck  space play  ←/→ seek  +/- vol  [ ]\\ xfade   ? help  q quit")
-            .alignment(Alignment::Center)
-            .style(Style::default().fg(GREEN).bg(BG));
+    // Transport hint row — green accent. Left hand = A, right hand = B.
+    let tagline = Paragraph::new("A f·play d·cue   g/h xfade   B j·play k·cue    ? help   q quit")
+        .alignment(Alignment::Center)
+        .style(Style::default().fg(GREEN).bg(BG));
     f.render_widget(tagline, rows[2]);
 
     // Body: an optional crate browser on the left, the mixer area on the
@@ -620,15 +652,16 @@ fn fmt_clock(secs: f64) -> String {
 
 /// A centered help overlay (stub: lists the keys it knows so far).
 fn draw_help(f: &mut Frame, area: Rect) {
-    let w = 52.min(area.width);
-    let h = 21.min(area.height);
+    let w = 56.min(area.width);
+    let h = 22.min(area.height);
     let x = area.x + (area.width.saturating_sub(w)) / 2;
     let y = area.y + (area.height.saturating_sub(h)) / 2;
     let popup = Rect::new(x, y, w, h);
 
     f.render_widget(Clear, popup);
+    // Keys are by finger position: left hand = deck A, right hand = deck B.
     let help = Paragraph::new(
-        "Keys\n\n  / filter    j / k  pick    enter  load track\n  tab        switch focused deck (A / B)\n  c          collapse / expand crate panel\n  o          load demo track\n  space      play / pause\n  s          stop (rewind to 0)\n  ← / →      seek ±5s   (shift: ±30s)\n  , / .      scrub ±0.1s\n  + / -      deck volume\n  < / >      master volume\n  [ ] \\      crossfader A | center | B\n  ?          toggle this help\n  q  / C-c   quit",
+        "Keys  —  left hand = A,  right hand = B\n\n              DECK A        DECK B\n  play/pause    f             j\n  cue (stop)    d             k\n  volume +/-    w / s         o / l\n  seek -/+      e / r         i / u    (shift: far)\n\n  crossfader    g  ◄A   B►  h     space  center\n  master  -/+   [ / ]\n  fine scrub    , / .   (focused deck)\n\n  crate   tab focus   / filter   ↑/↓ pick   enter load\n          \\ load demo   z hide crate\n  ?  help     q / C-c  quit",
     )
     .block(
         Block::bordered()
@@ -944,29 +977,29 @@ mod tests {
     }
 
     #[test]
-    fn space_toggles_play_pause() {
-        let mut app = loaded_app();
-        assert_eq!(app.focused_mut().state(), DeckState::Loaded);
-        assert_eq!(app.on_key(key(' ')), Action::PlayPause);
-        assert_eq!(app.focused_mut().state(), DeckState::Playing);
-        assert_eq!(app.on_key(key(' ')), Action::PlayPause);
-        assert_eq!(app.focused_mut().state(), DeckState::Paused);
+    fn f_toggles_deck_a_play_pause() {
+        let mut app = loaded_app(); // track on deck A (focus 0)
+        assert_eq!(app.mixer.deck(0).state(), DeckState::Loaded);
+        assert_eq!(app.on_key(key('f')), Action::PlayPause);
+        assert_eq!(app.mixer.deck(0).state(), DeckState::Playing);
+        assert_eq!(app.on_key(key('f')), Action::PlayPause);
+        assert_eq!(app.mixer.deck(0).state(), DeckState::Paused);
     }
 
     #[test]
-    fn s_stops_the_deck() {
+    fn d_stops_deck_a() {
         let mut app = loaded_app();
-        app.on_key(key(' ')); // play
-        assert_eq!(app.on_key(key('s')), Action::Stop);
-        assert_eq!(app.focused_mut().state(), DeckState::Stopped);
+        app.on_key(key('f')); // play A
+        assert_eq!(app.on_key(key('d')), Action::Stop);
+        assert_eq!(app.mixer.deck(0).state(), DeckState::Stopped);
     }
 
     #[test]
-    fn o_signals_open_without_doing_io() {
+    fn backslash_signals_open_without_doing_io() {
         let mut app = App::new();
-        assert_eq!(app.on_key(key('o')), Action::OpenFile);
+        assert_eq!(app.on_key(key('\\')), Action::OpenFile);
         // on_key must not load anything itself — that's the event loop's job.
-        assert_eq!(app.focused_mut().state(), DeckState::Empty);
+        assert_eq!(app.mixer.deck(0).state(), DeckState::Empty);
     }
 
     /// An app with a track of `frames` stereo frames at sample rate `rate`
@@ -1009,8 +1042,8 @@ mod tests {
 
     #[test]
     fn panel_elapsed_advances_then_freezes_and_glyph_changes() {
-        let mut app = app_with_track(1000, 100); // 10.0s, rate 100
-        app.on_key(key(' ')); // play
+        let mut app = app_with_track(1000, 100); // 10.0s, rate 100 on deck A
+        app.on_key(key('f')); // play A
 
         // Advance 3 seconds (300 frames at rate 100).
         let mut buf = vec![0.0f32; 600];
@@ -1023,7 +1056,7 @@ mod tests {
         assert!(text.contains('▶'), "playing glyph missing:\n{text}");
 
         // Pause: elapsed freezes and the glyph changes.
-        app.on_key(key(' '));
+        app.on_key(key('f'));
         let before = app.focused_mut().position_secs();
         app.focused_mut().fill(&mut vec![0.0f32; 600]); // no-op while paused
         assert_eq!(
@@ -1062,25 +1095,32 @@ mod tests {
     }
 
     #[test]
-    fn plus_minus_nudge_deck_gain() {
-        let mut app = loaded_app();
-        assert_eq!(app.on_key(key('+')), Action::DeckGain);
-        assert!((app.focused_mut().gain() - 1.05).abs() < 1e-6);
-        assert_eq!(app.on_key(key('=')), Action::DeckGain); // '=' is an alias for '+'
-        assert!((app.focused_mut().gain() - 1.10).abs() < 1e-6);
-        assert_eq!(app.on_key(key('-')), Action::DeckGain);
-        assert!((app.focused_mut().gain() - 1.05).abs() < 1e-6);
+    fn w_s_nudge_deck_a_gain_o_l_nudge_deck_b() {
+        let mut app = loaded_app(); // track on A
+        assert_eq!(app.on_key(key('w')), Action::DeckGain); // A up
+        assert!((app.mixer.deck(0).gain() - 1.05).abs() < 1e-6);
+        assert_eq!(app.on_key(key('s')), Action::DeckGain); // A down
+        assert!((app.mixer.deck(0).gain() - 1.0).abs() < 1e-6);
+        // Right-hand keys drive deck B's gain, not deck A's.
+        assert_eq!(app.on_key(key('o')), Action::DeckGain); // B up
+        assert!((app.mixer.deck(1).gain() - 1.05).abs() < 1e-6);
+        assert_eq!(app.on_key(key('l')), Action::DeckGain); // B down
+        assert!((app.mixer.deck(1).gain() - 1.0).abs() < 1e-6);
+        assert!(
+            (app.mixer.deck(0).gain() - 1.0).abs() < 1e-6,
+            "deck A untouched by B keys"
+        );
     }
 
     #[test]
-    fn angle_brackets_nudge_master_gain() {
+    fn brackets_nudge_master_gain() {
         let mut app = loaded_app();
-        assert_eq!(app.on_key(key('>')), Action::MasterGain);
+        assert_eq!(app.on_key(key(']')), Action::MasterGain);
         assert!((app.mixer.master_gain() - 1.05).abs() < 1e-6);
-        assert_eq!(app.on_key(key('<')), Action::MasterGain);
+        assert_eq!(app.on_key(key('[')), Action::MasterGain);
         assert!((app.mixer.master_gain() - 1.0).abs() < 1e-6);
         // Deck gain is untouched by master keys.
-        assert!((app.focused_mut().gain() - 1.0).abs() < 1e-6);
+        assert!((app.mixer.deck(0).gain() - 1.0).abs() < 1e-6);
     }
 
     #[test]
@@ -1102,41 +1142,38 @@ mod tests {
     }
 
     #[test]
-    fn arrow_keys_seek_the_deck() {
-        let mut app = app_with_track(2000, 100); // 20s at rate 100
-        assert_eq!(
-            app.on_key(KeyEvent::new(KeyCode::Right, KeyModifiers::NONE)),
-            Action::Seek
-        );
+    fn e_r_seek_deck_a() {
+        let mut app = app_with_track(2000, 100); // 20s on deck A
+        assert_eq!(app.on_key(key('r')), Action::Seek); // forward
         assert!(
-            (app.focused_mut().position_secs() - 5.0).abs() < 1e-9,
-            "Right => +5s"
+            (app.mixer.deck(0).position_secs() - 5.0).abs() < 1e-9,
+            "r => +5s"
         );
-        app.on_key(KeyEvent::new(KeyCode::Left, KeyModifiers::NONE));
+        app.on_key(key('e')); // back
         assert!(
-            (app.focused_mut().position_secs() - 0.0).abs() < 1e-9,
-            "Left => -5s"
+            (app.mixer.deck(0).position_secs() - 0.0).abs() < 1e-9,
+            "e => -5s"
         );
-        app.on_key(KeyEvent::new(KeyCode::Left, KeyModifiers::NONE));
-        assert_eq!(app.focused_mut().position_frames(), 0, "clamps at start");
+        app.on_key(key('e'));
+        assert_eq!(app.mixer.deck(0).position_frames(), 0, "clamps at start");
     }
 
     #[test]
-    fn shift_arrow_seeks_far_and_eof_stops() {
-        let mut app = app_with_track(2000, 100); // 20s
-                                                 // Shift+Right = +30s, past the 20s end => clamp to EOF and stop.
+    fn shift_seek_is_far_and_eof_stops() {
+        let mut app = app_with_track(2000, 100); // 20s on deck A
+                                                 // Shift+r = +30s, past the 20s end => clamp to EOF and stop.
         assert_eq!(
-            app.on_key(KeyEvent::new(KeyCode::Right, KeyModifiers::SHIFT)),
+            app.on_key(KeyEvent::new(KeyCode::Char('r'), KeyModifiers::SHIFT)),
             Action::Seek
         );
-        assert_eq!(app.focused_mut().position_frames(), 2000, "clamped to EOF");
-        assert_eq!(app.focused_mut().state(), DeckState::Stopped);
+        assert_eq!(app.mixer.deck(0).position_frames(), 2000, "clamped to EOF");
+        assert_eq!(app.mixer.deck(0).state(), DeckState::Stopped);
     }
 
     #[test]
-    fn comma_period_scrub_finely() {
-        let mut app = app_with_track(2000, 100);
-        app.on_key(KeyEvent::new(KeyCode::Right, KeyModifiers::NONE)); // 5.0s
+    fn comma_period_scrub_focused_deck_finely() {
+        let mut app = app_with_track(2000, 100); // deck A focused
+        app.on_key(key('r')); // 5.0s
         assert_eq!(app.on_key(key('.')), Action::Seek);
         assert!((app.focused_mut().position_secs() - 5.1).abs() < 1e-9);
         assert_eq!(app.on_key(key(',')), Action::Seek);
@@ -1176,11 +1213,13 @@ mod tests {
     }
 
     #[test]
-    fn jk_navigate_and_enter_loads_selected() {
+    fn arrows_navigate_and_enter_loads_selected() {
         let mut app = app_with_crate(&["alpha.mp3", "beta.mp3", "gamma.mp3"]);
-        assert_eq!(app.on_key(key('j')), Action::CrateNav); // -> beta
-        assert_eq!(app.on_key(key('j')), Action::CrateNav); // -> gamma
-        assert_eq!(app.on_key(key('k')), Action::CrateNav); // -> beta
+        let down = || KeyEvent::new(KeyCode::Down, KeyModifiers::NONE);
+        let up = || KeyEvent::new(KeyCode::Up, KeyModifiers::NONE);
+        assert_eq!(app.on_key(down()), Action::CrateNav); // -> beta
+        assert_eq!(app.on_key(down()), Action::CrateNav); // -> gamma
+        assert_eq!(app.on_key(up()), Action::CrateNav); // -> beta
         assert_eq!(
             app.on_key(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE)),
             Action::LoadSelected
@@ -1192,13 +1231,15 @@ mod tests {
     }
 
     #[test]
-    fn jk_navigation_clamps_at_ends() {
+    fn arrow_navigation_clamps_at_ends() {
         let mut app = app_with_crate(&["a.mp3", "b.mp3"]);
-        app.on_key(key('k')); // already at top, stays 0
+        let down = || KeyEvent::new(KeyCode::Down, KeyModifiers::NONE);
+        let up = || KeyEvent::new(KeyCode::Up, KeyModifiers::NONE);
+        app.on_key(up()); // already at top, stays 0
         assert_eq!(app.crate_sel, 0);
-        app.on_key(key('j'));
-        app.on_key(key('j'));
-        app.on_key(key('j')); // past the end, clamps to last
+        app.on_key(down());
+        app.on_key(down());
+        app.on_key(down()); // past the end, clamps to last
         assert_eq!(app.crate_sel, 1);
     }
 
@@ -1272,33 +1313,32 @@ mod tests {
     }
 
     #[test]
-    fn transport_affects_only_focused_deck_and_decks_play_together() {
+    fn each_hand_drives_its_own_deck_independently() {
         let mut app = App::new();
         app.mixer.deck_mut(0).load(synth_track(2000));
         app.mixer.deck_mut(1).load(synth_track(2000));
 
-        // Focus 0: play hits deck 0 only.
-        app.on_key(key(' '));
+        // Left hand: `f` plays deck A only.
+        app.on_key(key('f'));
         assert_eq!(app.mixer.deck(0).state(), DeckState::Playing);
         assert_eq!(app.mixer.deck(1).state(), DeckState::Loaded);
 
-        // Tab to deck 1 and play: both decks play simultaneously.
-        app.on_key(KeyEvent::new(KeyCode::Tab, KeyModifiers::NONE));
-        app.on_key(key(' '));
+        // Right hand: `j` plays deck B — both now play simultaneously.
+        app.on_key(key('j'));
         assert_eq!(
             app.mixer.deck(0).state(),
             DeckState::Playing,
-            "deck 0 keeps playing"
+            "A keeps playing"
         );
         assert_eq!(app.mixer.deck(1).state(), DeckState::Playing);
 
-        // Stop targets only the focused deck (1); deck 0 is undisturbed.
-        app.on_key(key('s'));
+        // `k` stops only deck B; deck A is undisturbed (no focus involved).
+        app.on_key(key('k'));
         assert_eq!(app.mixer.deck(1).state(), DeckState::Stopped);
         assert_eq!(
             app.mixer.deck(0).state(),
             DeckState::Playing,
-            "other deck undisturbed"
+            "A undisturbed"
         );
     }
 
@@ -1338,34 +1378,34 @@ mod tests {
     }
 
     #[test]
-    fn c_collapses_and_expands_the_crate() {
+    fn z_collapses_and_expands_the_crate() {
         let mut app = app_with_crate(&["alpha.mp3"]);
         // Visible by default: the crate title shows.
         assert!(buffer_text(&render(&app, 100, 30)).contains("Crate"));
-        // `c` collapses it.
-        assert_eq!(app.on_key(key('c')), Action::ToggleCrate);
+        // `z` collapses it.
+        assert_eq!(app.on_key(key('z')), Action::ToggleCrate);
         assert!(
             !buffer_text(&render(&app, 100, 30)).contains("Crate"),
             "crate should be hidden when collapsed"
         );
-        // `c` again brings it back.
-        assert_eq!(app.on_key(key('c')), Action::ToggleCrate);
+        // `z` again brings it back.
+        assert_eq!(app.on_key(key('z')), Action::ToggleCrate);
         assert!(buffer_text(&render(&app, 100, 30)).contains("Crate"));
     }
 
     #[test]
-    fn bracket_keys_slide_and_backslash_centers_crossfader() {
+    fn gh_slide_and_space_centers_crossfader() {
         let mut app = App::new();
-        assert_eq!(app.on_key(key('[')), Action::Crossfade);
+        assert_eq!(app.on_key(key('g')), Action::Crossfade);
         assert!(
             (app.mixer.xfade() - (-0.05)).abs() < 1e-6,
-            "[ slides toward A"
+            "g slides toward A"
         );
-        assert_eq!(app.on_key(key(']')), Action::Crossfade);
-        assert!(app.mixer.xfade().abs() < 1e-6, "] slides back toward B");
-        app.on_key(key(']')); // now +0.05
-        assert_eq!(app.on_key(key('\\')), Action::Crossfade);
-        assert_eq!(app.mixer.xfade(), 0.0, "\\ re-centers");
+        assert_eq!(app.on_key(key('h')), Action::Crossfade);
+        assert!(app.mixer.xfade().abs() < 1e-6, "h slides back toward B");
+        app.on_key(key('h')); // now +0.05
+        assert_eq!(app.on_key(key(' ')), Action::Crossfade);
+        assert_eq!(app.mixer.xfade(), 0.0, "space re-centers");
     }
 
     #[test]

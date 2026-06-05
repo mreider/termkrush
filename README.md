@@ -39,20 +39,28 @@ Rust 1.75+ (MSRV). The toolchain pin lives in `rust-toolchain.toml`.
 
 ## Keyboard cheatsheet
 
-_Fills in further as crossfade, scratch, and FX land._
+The layout is **ergonomic, not mnemonic** — keys are placed by finger, not by
+the action's initial letter. Your **left hand drives Deck A**, your **right
+hand mirrors it for Deck B**, and the crossfader sits between the hands. (Full
+map is in the in-app `?` help.)
+
+|                | **Deck A** (left) | **Deck B** (right) |
+|----------------|:------:|:------:|
+| play / pause   | `f`    | `j`    |
+| cue (stop → 0) | `d`    | `k`    |
+| volume up/down | `w` / `s` | `o` / `l` |
+| seek − / +     | `e` / `r` | `i` / `u` | _(hold `shift` = far)_ |
 
 | Key            | Action                                  |
 |----------------|-----------------------------------------|
-| `/`            | filter the crate; `Esc` clears          |
-| `j` / `k`      | move the crate selection                |
-| `enter`        | load the highlighted track              |
-| `o`            | load the demo track (or `$TERMKRUSH_DEMO_TRACK`) |
-| `space`        | play / pause                            |
-| `s`            | stop (rewind to 0)                      |
-| `←` / `→`      | seek ±5s (`shift` ±30s)                  |
-| `,` / `.`      | scrub ±0.1s                             |
-| `+` / `-`      | deck volume                             |
-| `<` / `>`      | master volume                           |
+| `g` / `h`      | crossfader toward A / toward B          |
+| `space`        | re-center the crossfader                |
+| `[` / `]`      | master volume down / up                 |
+| `,` / `.`      | fine scrub the focused deck (±0.1s)     |
+| `tab`          | switch focused deck (load / scrub target) |
+| `/`            | filter the crate; `↑`/`↓` pick; `enter` load |
+| `\`            | load the demo track (or `$TERMKRUSH_DEMO_TRACK`) |
+| `z`            | hide / show the crate panel             |
 | `?`            | toggle help                             |
 | `q` / `C-c`    | quit                                    |
 

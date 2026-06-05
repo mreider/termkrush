@@ -64,3 +64,7 @@
 2026-06-05T17:44:03Z	Matt Reider	finished	termkrush/Seek-and-scrub-position.md	
 2026-06-05T17:44:03Z	Matt Reider	delivered	termkrush/Seek-and-scrub-position.md	
 2026-06-05T17:44:03Z	Matt Reider	accepted	termkrush/Seek-and-scrub-position.md	Deck::seek/seek_by (absolute+relative, clamp, EOF->stop), keys ←/→ ±5s, Shift ±30s, ,/. ±0.1s. Declick via gain fade-in on seek (pull-model equivalent of muting one buffer; verified structurally not by ear). fmt/clippy/-Dwarnings + 70 tests green.
+2026-06-05T17:45:48Z	Matt Reider	started	termkrush/Local-crate-view.md	
+2026-06-05T17:53:41Z	Matt Reider	finished	termkrush/Local-crate-view.md	
+2026-06-05T17:53:41Z	Matt Reider	delivered	termkrush/Local-crate-view.md	
+2026-06-05T17:53:41Z	Matt Reider	accepted	termkrush/Local-crate-view.md	Config (toml, ~/.config/termkrush/config.toml, crate_root) + recursive mp3 Crate::scan + fuzzy / filter + j/k nav + enter-load crate panel; README documents config+keys. j/k chosen over arrows (arrows=seek). Per-row duration/BPM deferred to the analysis-cache story ('if cached'). fmt/clippy/-Dwarnings + 84 tests green. Completes the one-deck epic (7/7).

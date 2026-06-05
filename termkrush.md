@@ -29,7 +29,6 @@
 |  | [GitHub Pages from /docs](termkrush/GitHub-Pages-from-docs.md) | 2 | [site](.am/tags/site.md) [release](.am/tags/release.md) [docs](.am/tags/docs.md) |
 |  | [Harmonic key detection Camelot](termkrush/Harmonic-key-detection-Camelot.md) |  | [tempo](.am/tags/tempo.md) [key](.am/tags/key.md) [icebox](.am/tags/icebox.md) |
 |  | [Keyboard jog scratch](termkrush/Keyboard-jog-scratch.md) | 5 | [scratch](.am/tags/scratch.md) [dsp](.am/tags/dsp.md) |
-|  | [Local crate view](termkrush/Local-crate-view.md) | 2 | [library](.am/tags/library.md) [tui](.am/tags/tui.md) [one-deck](.am/tags/one-deck.md) |
 |  | [Loop roll quarter and eighth beat loops](termkrush/Loop-roll-quarter-and-eighth-beat-loops.md) |  | [loop](.am/tags/loop.md) [icebox](.am/tags/icebox.md) |
 |  | [MIDI controller support](termkrush/MIDI-controller-support.md) |  | [midi](.am/tags/midi.md) [icebox](.am/tags/icebox.md) [hardware](.am/tags/hardware.md) |
 |  | [MP3 encoder](termkrush/MP3-encoder.md) | 5 | [record](.am/tags/record.md) [io](.am/tags/io.md) [encode](.am/tags/encode.md) |
@@ -72,7 +71,7 @@
 |  | [V0.6.0 record](termkrush/v060-record.md) |  |  |
 |  | [Yt-dlp shell-out for media URLs](termkrush/yt-dlp-shell-out-for-media-URLs.md) | 3 | [download](.am/tags/download.md) [yt-dlp](.am/tags/yt-dlp.md) |
 |  | [Property-based testing for DSP code](termkrush/Property-based-testing-for-DSP-code.md) |  | [test](.am/tags/test.md) [dsp](.am/tags/dsp.md) [foundation](.am/tags/foundation.md) |
-| Total Points | | 94 | |
+| Total Points | | 92 | |
 
 ### Started
 | User | Title | Points | Tags |
@@ -108,6 +107,7 @@
 |  | [TUI deck panel](termkrush/TUI-deck-panel.md) | 2 | [tui](.am/tags/tui.md) [one-deck](.am/tags/one-deck.md) |
 |  | [Per-deck and master volume](termkrush/Per-deck-and-master-volume.md) | 2 | [deck](.am/tags/deck.md) [mix](.am/tags/mix.md) [one-deck](.am/tags/one-deck.md) |
 |  | [Seek and scrub position](termkrush/Seek-and-scrub-position.md) | 2 | [deck](.am/tags/deck.md) [one-deck](.am/tags/one-deck.md) |
+|  | [Local crate view](termkrush/Local-crate-view.md) | 2 | [library](.am/tags/library.md) [tui](.am/tags/tui.md) [one-deck](.am/tags/one-deck.md) |
 
 ### Rejected
 | User | Title | Points | Tags |

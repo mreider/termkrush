@@ -10,7 +10,7 @@
 Velocity (last 12 iterations of 1 week)
 
   32 |                                    
-  28 |                                  ▃▃
+  28 |                                  ▇▇
   24 |                                  ▇▇
   20 |                                  ▇▇
   16 |                                  ▇▇

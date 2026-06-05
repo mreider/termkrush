@@ -138,6 +138,36 @@ impl Deck {
         }
     }
 
+    /// Move the playhead to an absolute position in seconds (clamped to
+    /// `[0, end]`). Seeking at or past the end clamps to EOF and stops the
+    /// deck. The transport state is otherwise preserved. No-op with no
+    /// track.
+    ///
+    /// To avoid a click at the splice, the applied gain is reset so the
+    /// audio fades back in from silence over the ramp (~12ms) — the
+    /// pull-model equivalent of muting one buffer across the seek.
+    pub fn seek(&mut self, secs: f64) {
+        let Some(track) = &self.track else {
+            return;
+        };
+        let total = track.frames();
+        let rate = track.sample_rate.max(1) as f64;
+        let frame = (secs.max(0.0) * rate).round() as usize;
+        if frame >= total {
+            self.pos = total; // clamp to EOF
+            self.state = DeckState::Stopped;
+        } else {
+            self.pos = frame;
+        }
+        self.smoothed_gain = 0.0; // declick: ramp the level back up post-seek
+    }
+
+    /// Seek by a relative offset in seconds (negative seeks backward),
+    /// clamped to the track bounds. Bound to the arrow / scrub keys.
+    pub fn seek_by(&mut self, delta_secs: f64) {
+        self.seek(self.position_secs() + delta_secs);
+    }
+
     /// Fill `out` (interleaved stereo, even length) with the next frames,
     /// advancing the playhead while playing. Returns the number of stereo
     /// frames actually drawn from the track — `0` when empty, loaded,
@@ -410,5 +440,70 @@ mod tests {
         // Tail has fully ramped to the 0.5 target.
         let last = buf[buf.len() - 1];
         assert!((last - 0.5).abs() < 1e-4, "expected ~0.5, got {last}");
+    }
+
+    #[test]
+    fn seek_moves_playhead_to_absolute_position() {
+        let mut d = Deck::new();
+        d.load(track(1000, 0.5, 100)); // 10s at rate 100
+        d.seek(3.0);
+        assert_eq!(d.position_frames(), 300);
+        assert!((d.position_secs() - 3.0).abs() < 1e-9);
+    }
+
+    #[test]
+    fn seek_by_is_relative_and_clamps_at_zero() {
+        let mut d = Deck::new();
+        d.load(track(1000, 0.5, 100));
+        d.seek(2.0);
+        d.seek_by(1.5);
+        assert!((d.position_secs() - 3.5).abs() < 1e-9);
+        d.seek_by(-100.0); // backward past the start
+        assert_eq!(d.position_frames(), 0);
+    }
+
+    #[test]
+    fn seek_past_eof_clamps_and_stops() {
+        let mut d = Deck::new();
+        d.load(track(1000, 0.5, 100));
+        d.play();
+        d.seek(9_999.0); // way past the 10s end
+        assert_eq!(d.position_frames(), 1000, "clamped to EOF");
+        assert_eq!(d.state(), DeckState::Stopped, "EOF seek stops the deck");
+    }
+
+    #[test]
+    fn seek_within_track_preserves_play_state() {
+        let mut d = Deck::new();
+        d.load(track(1000, 0.5, 100));
+        d.play();
+        d.seek(4.0);
+        assert_eq!(d.state(), DeckState::Playing);
+    }
+
+    #[test]
+    fn seek_declicks_by_fading_in() {
+        let mut d = Deck::new();
+        d.load(track(50_000, 0.5, 44_100));
+        d.play();
+        // Ramp the gain to full (>512 frames), so we'd hear a click on a
+        // raw splice.
+        let mut buf = vec![0.0f32; 4096];
+        d.fill(&mut buf);
+        assert!(
+            (buf[buf.len() - 1] - 0.5).abs() < 1e-4,
+            "level should be full pre-seek"
+        );
+
+        d.seek(0.2); // a within-track jump
+        let mut after = [0.0f32; 8];
+        d.fill(&mut after);
+        // The first post-seek sample fades in from silence rather than
+        // jumping to full level — no click.
+        assert!(
+            after[0].abs() < 0.05,
+            "post-seek should fade in (declick), got {}",
+            after[0]
+        );
     }
 }

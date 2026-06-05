@@ -32,6 +32,11 @@ use crate::mix::Mixer;
 /// Per-keypress gain nudge (linear), for both deck and master.
 const GAIN_NUDGE: f32 = 0.05;
 
+/// Seek amounts (seconds): arrows jump, Shift+arrows jump far, `,`/`.` scrub.
+const SEEK_JUMP: f64 = 5.0;
+const SEEK_FAR: f64 = 30.0;
+const SEEK_SCRUB: f64 = 0.1;
+
 /// CRT amber, `#ffb000` — the wordmark and accents.
 pub const AMBER: Color = Color::Rgb(0xff, 0xb0, 0x00);
 /// CRT green, `#45f07d` — secondary text.
@@ -57,6 +62,7 @@ pub enum Action {
     OpenFile,
     DeckGain,
     MasterGain,
+    Seek,
 }
 
 /// UI state for the shell: the single v1 deck plus the master bus.
@@ -134,6 +140,31 @@ impl App {
                 self.mixer.nudge_master(-GAIN_NUDGE);
                 Action::MasterGain
             }
+            // Seek/scrub. Shift+arrow jumps far; `,`/`.` scrub finely.
+            (KeyCode::Left, m) if m.contains(KeyModifiers::SHIFT) => {
+                self.deck.seek_by(-SEEK_FAR);
+                Action::Seek
+            }
+            (KeyCode::Right, m) if m.contains(KeyModifiers::SHIFT) => {
+                self.deck.seek_by(SEEK_FAR);
+                Action::Seek
+            }
+            (KeyCode::Left, _) => {
+                self.deck.seek_by(-SEEK_JUMP);
+                Action::Seek
+            }
+            (KeyCode::Right, _) => {
+                self.deck.seek_by(SEEK_JUMP);
+                Action::Seek
+            }
+            (KeyCode::Char(','), _) => {
+                self.deck.seek_by(-SEEK_SCRUB);
+                Action::Seek
+            }
+            (KeyCode::Char('.'), _) => {
+                self.deck.seek_by(SEEK_SCRUB);
+                Action::Seek
+            }
             _ => Action::None,
         }
     }
@@ -168,10 +199,11 @@ pub fn draw(f: &mut Frame, app: &App) {
     f.render_widget(wordmark, rows[1]);
 
     // Transport hint row — green accent.
-    let tagline =
-        Paragraph::new("o load  space play/pause  s stop  +/- vol  </> master   ? help  q quit")
-            .alignment(Alignment::Center)
-            .style(Style::default().fg(GREEN).bg(BG));
+    let tagline = Paragraph::new(
+        "o load  space play  s stop  ←/→ seek  +/- vol  </> master   ? help  q quit",
+    )
+    .alignment(Alignment::Center)
+    .style(Style::default().fg(GREEN).bg(BG));
     f.render_widget(tagline, rows[2]);
 
     let panel_area = centered_rect(rows[3], 54, 6);
@@ -300,15 +332,15 @@ fn fmt_clock(secs: f64) -> String {
 
 /// A centered help overlay (stub: lists the keys it knows so far).
 fn draw_help(f: &mut Frame, area: Rect) {
-    let w = 46.min(area.width);
-    let h = 13.min(area.height);
+    let w = 50.min(area.width);
+    let h = 16.min(area.height);
     let x = area.x + (area.width.saturating_sub(w)) / 2;
     let y = area.y + (area.height.saturating_sub(h)) / 2;
     let popup = Rect::new(x, y, w, h);
 
     f.render_widget(Clear, popup);
     let help = Paragraph::new(
-        "Keys\n\n  o       load demo track\n  space   play / pause\n  s       stop (rewind to 0)\n  + / -   deck volume\n  < / >   master volume\n  ?       toggle this help\n  q       quit\n  C-c     quit",
+        "Keys\n\n  o          load demo track\n  space      play / pause\n  s          stop (rewind to 0)\n  ← / →      seek ±5s   (shift: ±30s)\n  , / .      scrub ±0.1s\n  + / -      deck volume\n  < / >      master volume\n  ?          toggle this help\n  q  / C-c   quit",
     )
     .block(
         Block::bordered()
@@ -728,5 +760,44 @@ mod tests {
         assert_eq!(fmt_db(1.0), "+0.0 dB");
         assert_eq!(fmt_db(0.5), "-6.0 dB");
         assert_eq!(fmt_db(0.0), "-inf dB");
+    }
+
+    #[test]
+    fn arrow_keys_seek_the_deck() {
+        let mut app = app_with_track(2000, 100); // 20s at rate 100
+        assert_eq!(
+            app.on_key(KeyEvent::new(KeyCode::Right, KeyModifiers::NONE)),
+            Action::Seek
+        );
+        assert!(
+            (app.deck.position_secs() - 5.0).abs() < 1e-9,
+            "Right => +5s"
+        );
+        app.on_key(KeyEvent::new(KeyCode::Left, KeyModifiers::NONE));
+        assert!((app.deck.position_secs() - 0.0).abs() < 1e-9, "Left => -5s");
+        app.on_key(KeyEvent::new(KeyCode::Left, KeyModifiers::NONE));
+        assert_eq!(app.deck.position_frames(), 0, "clamps at start");
+    }
+
+    #[test]
+    fn shift_arrow_seeks_far_and_eof_stops() {
+        let mut app = app_with_track(2000, 100); // 20s
+                                                 // Shift+Right = +30s, past the 20s end => clamp to EOF and stop.
+        assert_eq!(
+            app.on_key(KeyEvent::new(KeyCode::Right, KeyModifiers::SHIFT)),
+            Action::Seek
+        );
+        assert_eq!(app.deck.position_frames(), 2000, "clamped to EOF");
+        assert_eq!(app.deck.state(), DeckState::Stopped);
+    }
+
+    #[test]
+    fn comma_period_scrub_finely() {
+        let mut app = app_with_track(2000, 100);
+        app.on_key(KeyEvent::new(KeyCode::Right, KeyModifiers::NONE)); // 5.0s
+        assert_eq!(app.on_key(key('.')), Action::Seek);
+        assert!((app.deck.position_secs() - 5.1).abs() < 1e-9);
+        assert_eq!(app.on_key(key(',')), Action::Seek);
+        assert!((app.deck.position_secs() - 5.0).abs() < 1e-9);
     }
 }

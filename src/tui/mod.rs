@@ -77,6 +77,7 @@ pub enum Action {
     LoadSelected,
     Focus,
     Crossfade,
+    ToggleCrate,
 }
 
 /// UI state for the shell: the decks + master bus (owned by [`Mixer`]),
@@ -97,6 +98,8 @@ pub struct App {
     /// Set when the user picks a track to load; the event loop performs the
     /// decode (I/O) and clears it.
     pending_load: Option<PathBuf>,
+    /// When true the crate browser is hidden, giving the decks full width.
+    crate_collapsed: bool,
 }
 
 impl App {
@@ -184,6 +187,11 @@ impl App {
             (KeyCode::Char('c'), KeyModifiers::CONTROL) => {
                 self.should_quit = true;
                 Action::Quit
+            }
+            // Collapse/expand the crate browser to give the decks more room.
+            (KeyCode::Char('c'), _) => {
+                self.crate_collapsed = !self.crate_collapsed;
+                Action::ToggleCrate
             }
             (KeyCode::Char('?'), _) => {
                 self.show_help = !self.show_help;
@@ -373,48 +381,64 @@ pub fn draw(f: &mut Frame, app: &App) {
             .style(Style::default().fg(GREEN).bg(BG));
     f.render_widget(tagline, rows[2]);
 
-    // Body: crate browser on the left, both decks stacked + master on the right.
-    let body =
-        Layout::horizontal([Constraint::Percentage(42), Constraint::Percentage(58)]).split(rows[3]);
-    draw_crate_panel(f, body[0], app);
+    // Body: an optional crate browser on the left, the mixer area on the
+    // right. The crate collapses (key `c`) to give the decks full width.
+    let mixer_area = if app.crate_collapsed {
+        rows[3]
+    } else {
+        let body = Layout::horizontal([Constraint::Length(32), Constraint::Min(0)]).split(rows[3]);
+        draw_crate_panel(f, body[0], app);
+        body[1]
+    };
 
-    let right = Layout::vertical([
-        Constraint::Length(6), // deck A
-        Constraint::Length(6), // deck B
-        Constraint::Length(1), // crossfader
-        Constraint::Length(1), // master
+    // Mixer area: decks A | B side by side on top, the mixer row beneath.
+    let stack = Layout::vertical([
+        Constraint::Length(8), // decks row
+        Constraint::Length(4), // mixer row (crossfader + master)
         Constraint::Min(0),
     ])
-    .split(body[1]);
+    .split(mixer_area);
 
+    let deck_cols = Layout::horizontal([Constraint::Percentage(50), Constraint::Percentage(50)])
+        .split(stack[0]);
     for i in 0..DECKS {
         draw_deck_panel(
             f,
-            right[i],
+            deck_cols[i],
             DECK_LABELS[i],
             app.mixer.deck(i),
             app.focus() == i,
         );
     }
 
-    // Crossfader readout: A |───●───| B, handle at the current position.
-    let xfade = Paragraph::new(format!("A {} B", crossfader_bar(app.mixer.xfade(), 21)))
-        .alignment(Alignment::Center)
-        .style(Style::default().fg(AMBER).bg(BG));
-    f.render_widget(xfade, right[2]);
-
-    let master = Paragraph::new(format!(
-        "master {:.2}  {}   ( < / > )",
-        app.mixer.master_gain(),
-        fmt_db(app.mixer.master_gain()),
-    ))
-    .alignment(Alignment::Center)
-    .style(Style::default().fg(GREEN).bg(BG));
-    f.render_widget(master, right[3]);
+    draw_mixer_panel(f, stack[1], app);
 
     if app.show_help {
         draw_help(f, area);
     }
+}
+
+/// The mixer row: a bordered panel with the crossfader fader graphic over
+/// the master readout, sitting beneath the two decks.
+fn draw_mixer_panel(f: &mut Frame, area: Rect, app: &App) {
+    let lines = vec![
+        Line::from(format!("A {} B", crossfader_bar(app.mixer.xfade(), 21)))
+            .style(Style::default().fg(AMBER).add_modifier(Modifier::BOLD)),
+        Line::from(format!(
+            "master {:.2}  {}",
+            app.mixer.master_gain(),
+            fmt_db(app.mixer.master_gain()),
+        )),
+    ];
+    let panel = Paragraph::new(lines)
+        .alignment(Alignment::Center)
+        .block(
+            Block::bordered()
+                .title("Mixer")
+                .style(Style::default().fg(GREEN).bg(BG)),
+        )
+        .style(Style::default().fg(GREEN).bg(BG));
+    f.render_widget(panel, area);
 }
 
 /// Render the crate browser: a bordered, scrollable list of tracks with
@@ -480,18 +504,21 @@ fn centered_rect(area: Rect, w: u16, h: u16) -> Rect {
     Rect::new(x, y, w, h)
 }
 
-/// A deck panel: track name, transport glyph + state + gain, a
-/// proportional position bar, and `elapsed / total`. The border is amber
-/// while playing; the `focused` deck is marked (`▸`) and brightened so the
-/// transport target is obvious.
-fn draw_deck_panel(f: &mut Frame, area: Rect, label: &str, deck: &Deck, focused: bool) {
-    let border = if deck.is_playing() {
+/// Deck panel border color: amber for the focused deck, dim for the rest
+/// (per the design). Pure so the focus-color rule can be unit-tested.
+fn deck_border(focused: bool) -> Color {
+    if focused {
         AMBER
-    } else if focused {
-        GREEN
     } else {
         Color::DarkGray
-    };
+    }
+}
+
+/// A deck panel: track name, transport glyph + state + gain, a
+/// proportional position bar, and `elapsed / total`. The focused deck has
+/// an amber border and a `▸` marker; unfocused decks are dim.
+fn draw_deck_panel(f: &mut Frame, area: Rect, label: &str, deck: &Deck, focused: bool) {
+    let border = deck_border(focused);
     let title = if focused {
         format!("▸ Deck {label}")
     } else {
@@ -592,14 +619,14 @@ fn fmt_clock(secs: f64) -> String {
 /// A centered help overlay (stub: lists the keys it knows so far).
 fn draw_help(f: &mut Frame, area: Rect) {
     let w = 52.min(area.width);
-    let h = 20.min(area.height);
+    let h = 21.min(area.height);
     let x = area.x + (area.width.saturating_sub(w)) / 2;
     let y = area.y + (area.height.saturating_sub(h)) / 2;
     let popup = Rect::new(x, y, w, h);
 
     f.render_widget(Clear, popup);
     let help = Paragraph::new(
-        "Keys\n\n  / filter    j / k  pick    enter  load track\n  tab        switch focused deck (A / B)\n  o          load demo track\n  space      play / pause\n  s          stop (rewind to 0)\n  ← / →      seek ±5s   (shift: ±30s)\n  , / .      scrub ±0.1s\n  + / -      deck volume\n  < / >      master volume\n  [ ] \\      crossfader A | center | B\n  ?          toggle this help\n  q  / C-c   quit",
+        "Keys\n\n  / filter    j / k  pick    enter  load track\n  tab        switch focused deck (A / B)\n  c          collapse / expand crate panel\n  o          load demo track\n  space      play / pause\n  s          stop (rewind to 0)\n  ← / →      seek ±5s   (shift: ±30s)\n  , / .      scrub ±0.1s\n  + / -      deck volume\n  < / >      master volume\n  [ ] \\      crossfader A | center | B\n  ?          toggle this help\n  q  / C-c   quit",
     )
     .block(
         Block::bordered()
@@ -1244,15 +1271,43 @@ mod tests {
     }
 
     #[test]
-    fn renders_both_deck_panels_with_focus_marker() {
+    fn both_deck_panels_and_bars_visible_at_100x30() {
+        // Acceptance: both decks fully visible with position bars at 100x30.
         let app = App::new();
-        let text = buffer_text(&render(&app, 100, 28));
+        let text = buffer_text(&render(&app, 100, 30));
         assert!(text.contains("Deck A"), "Deck A panel missing:\n{text}");
         assert!(text.contains("Deck B"), "Deck B panel missing:\n{text}");
         assert!(
             text.contains("▸ Deck A"),
             "focus marker should be on Deck A by default:\n{text}"
         );
+        // Position bars render (empty decks -> all-empty bar).
+        assert!(text.contains('['), "deck position bars missing:\n{text}");
+        // Crossfader fader graphic in the mixer row.
+        assert!(text.contains('●'), "crossfader graphic missing:\n{text}");
+    }
+
+    #[test]
+    fn deck_border_is_amber_focused_dim_unfocused() {
+        // Acceptance: focus border colors match the design.
+        assert_eq!(deck_border(true), AMBER);
+        assert_eq!(deck_border(false), Color::DarkGray);
+    }
+
+    #[test]
+    fn c_collapses_and_expands_the_crate() {
+        let mut app = app_with_crate(&["alpha.mp3"]);
+        // Visible by default: the crate title shows.
+        assert!(buffer_text(&render(&app, 100, 30)).contains("Crate"));
+        // `c` collapses it.
+        assert_eq!(app.on_key(key('c')), Action::ToggleCrate);
+        assert!(
+            !buffer_text(&render(&app, 100, 30)).contains("Crate"),
+            "crate should be hidden when collapsed"
+        );
+        // `c` again brings it back.
+        assert_eq!(app.on_key(key('c')), Action::ToggleCrate);
+        assert!(buffer_text(&render(&app, 100, 30)).contains("Crate"));
     }
 
     #[test]

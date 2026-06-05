@@ -11,5 +11,9 @@
 |  | [termkrush](../../termkrush.md) | [Seek and scrub position](../../termkrush/Seek-and-scrub-position.md) | 2 | [deck](deck.md) [one-deck](one-deck.md) |
 |  | [termkrush](../../termkrush.md) | [Symphonia mp3 decode pipeline](../../termkrush/Symphonia-mp3-decode-pipeline.md) | 3 | [audio](audio.md) [one-deck](one-deck.md) |
 |  | [termkrush](../../termkrush.md) | [TUI deck panel](../../termkrush/TUI-deck-panel.md) | 2 | [tui](tui.md) [one-deck](one-deck.md) |
+| Total Points | | | 14 | |
+
+## Accepted
+| User | Project | Title | Points | Tags |
+|---|---|---|:---:|---|
 |  | [termkrush](../../termkrush.md) | [Cpal audio output stream](../../termkrush/cpal-audio-output-stream.md) | 3 | [audio](audio.md) [one-deck](one-deck.md) |
-| Total Points | | | 17 | |

@@ -2,16 +2,16 @@
 title: Cpal audio output stream
 type: feature
 created: "2026-06-04T09:11:00Z"
-modified: "2026-06-04T13:28:08Z"
+modified: "2026-06-05T16:21:43Z"
 author: Matt Reider
-status: delivered
+status: accepted
 estimate: "3"
 epic: one-deck
 tags: [audio, one-deck]
 project: termkrush
 started: "2026-06-04T12:41:21Z"
-finished: "2026-06-04T13:28:08Z"
 delivered: "2026-06-04T13:28:08Z"
+accepted: "2026-06-05T16:21:43Z"
 ---
 
 ## Problem statement

@@ -69,7 +69,6 @@
 |  | [Visual beat-grid editing](termkrush/Visual-beat-grid-editing.md) |  | [tempo](.am/tags/tempo.md) [icebox](.am/tags/icebox.md) [tui](.am/tags/tui.md) |
 |  | [WAV writer](termkrush/WAV-writer.md) | 2 | [record](.am/tags/record.md) [io](.am/tags/io.md) |
 |  | [Wire Buy Me A Coffee into README and site](termkrush/Wire-Buy-Me-A-Coffee-into-README-and-site.md) |  | [site](.am/tags/site.md) [docs](.am/tags/docs.md) [bmac](.am/tags/bmac.md) |
-|  | [Cpal audio output stream](termkrush/cpal-audio-output-stream.md) | 3 | [audio](.am/tags/audio.md) [one-deck](.am/tags/one-deck.md) |
 |  | [V0.1.0 spins](termkrush/v010-spins.md) |  |  |
 |  | [V0.2.0 grab](termkrush/v020-grab.md) |  |  |
 |  | [V0.3.0 scratch](termkrush/v030-scratch.md) |  |  |
@@ -78,7 +77,7 @@
 |  | [V0.6.0 record](termkrush/v060-record.md) |  |  |
 |  | [Yt-dlp shell-out for media URLs](termkrush/yt-dlp-shell-out-for-media-URLs.md) | 3 | [download](.am/tags/download.md) [yt-dlp](.am/tags/yt-dlp.md) |
 |  | [Property-based testing for DSP code](termkrush/Property-based-testing-for-DSP-code.md) |  | [test](.am/tags/test.md) [dsp](.am/tags/dsp.md) [foundation](.am/tags/foundation.md) |
-| Total Points | | 109 | |
+| Total Points | | 106 | |
 
 ### Started
 | User | Title | Points | Tags |
@@ -106,6 +105,8 @@
 |  | [CI build matrix on every PR](termkrush/CI-build-matrix-on-every-PR.md) | 3 | [foundation](.am/tags/foundation.md) [ci](.am/tags/ci.md) |
 |  | [Coverage reporting in CI](termkrush/Coverage-reporting-in-CI.md) |  | [test](.am/tags/test.md) [ci](.am/tags/ci.md) [foundation](.am/tags/foundation.md) |
 |  | [Tag-triggered release pipeline](termkrush/Tag-triggered-release-pipeline.md) | 3 | [foundation](.am/tags/foundation.md) [ci](.am/tags/ci.md) [release](.am/tags/release.md) |
+|  | [Dev runner script: build once, run per-story without recompiling](termkrush/Dev-runner-script-build-once-run-per-story-without-recompiling.md) |  |  |
+|  | [Cpal audio output stream](termkrush/cpal-audio-output-stream.md) | 3 | [audio](.am/tags/audio.md) [one-deck](.am/tags/one-deck.md) |
 
 ### Rejected
 | User | Title | Points | Tags |

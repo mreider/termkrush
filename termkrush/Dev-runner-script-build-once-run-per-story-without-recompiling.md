@@ -9,6 +9,7 @@ started: "2026-06-05T16:21:05Z"
 finished: "2026-06-05T16:21:05Z"
 delivered: "2026-06-05T16:21:05Z"
 accepted: "2026-06-05T16:21:05Z"
+project: termkrush
 ---
 
 ## Why this is a chore

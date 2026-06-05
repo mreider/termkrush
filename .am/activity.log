@@ -102,3 +102,7 @@
 2026-06-05T21:18:29Z	Matt Reider	estimate	termkrush/Clip-pads-trigger-samples-over-the-mix.md	5
 2026-06-05T21:18:30Z	Matt Reider	set-type	termkrush/Lower-corner-8-bit-DJ-cat-that-bobs-to-the-BPM.md	feature
 2026-06-05T21:18:30Z	Matt Reider	estimate	termkrush/Lower-corner-8-bit-DJ-cat-that-bobs-to-the-BPM.md	3
+2026-06-05T21:23:50Z	Matt Reider	started	termkrush/Ergonomic-keyboard-layout-for-live-performance.md	
+2026-06-05T21:30:48Z	Matt Reider	finished	termkrush/Ergonomic-keyboard-layout-for-live-performance.md	
+2026-06-05T21:30:49Z	Matt Reider	delivered	termkrush/Ergonomic-keyboard-layout-for-live-performance.md	
+2026-06-05T21:30:49Z	Matt Reider	accepted	termkrush/Ergonomic-keyboard-layout-for-live-performance.md	Deck-symmetric finger-placement keymap: left hand=A (f play, d cue, w/s vol, e/r seek), right hand=B (j/k/o/l/i/u), crossfader g/h + space center, master [ ], fine scrub ,/. on focused, tab focus, / crate, \ demo, z hide. Transport now per-deck-direct (not focus-gated). README+help updated; 109 tests green. No mnemonics.

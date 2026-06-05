@@ -5,8 +5,10 @@
 //! output (here), `symphonia` for decoding, `rubato` for resampling and
 //! time-stretch, `hound` + an mp3 encoder for recording.
 
+pub mod bpm;
 pub mod decode;
 pub mod output;
 
+pub use bpm::detect_bpm;
 pub use decode::{decode_file, DecodeError, DecodedAudio};
 pub use output::{AudioOutput, SineSink, Sink};

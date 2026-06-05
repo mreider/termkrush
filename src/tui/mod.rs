@@ -519,11 +519,13 @@ fn deck_border(focused: bool) -> Color {
 /// an amber border and a `▸` marker; unfocused decks are dim.
 fn draw_deck_panel(f: &mut Frame, area: Rect, label: &str, deck: &Deck, focused: bool) {
     let border = deck_border(focused);
-    let title = if focused {
-        format!("▸ Deck {label}")
-    } else {
-        format!("  Deck {label}")
+    let marker = if focused { "▸ " } else { "  " };
+    // Show the detected tempo in the title once analysis completes.
+    let bpm = match deck.bpm() {
+        Some(b) => format!("  {b:.0} BPM"),
+        None => String::new(),
     };
+    let title = format!("{marker}Deck {label}{bpm}");
 
     let name = deck.display_name().unwrap_or("— no track —");
     let state_word = match deck.state() {
@@ -716,6 +718,9 @@ fn event_loop(terminal: &mut Term) -> io::Result<()> {
     let target_rate = audio_out.as_ref().map(|o| o.sample_rate).unwrap_or(44_100);
     let mut scratch: Vec<f32> = Vec::new();
 
+    // Background BPM detection posts (deck index, bpm) back to the UI loop.
+    let (bpm_tx, bpm_rx) = std::sync::mpsc::channel::<(usize, f32)>();
+
     tracing::info!("tui event loop started");
     while !app.should_quit {
         terminal.draw(|f| draw(f, &app))?;
@@ -724,14 +729,21 @@ fn event_loop(terminal: &mut Term) -> io::Result<()> {
             let ev = event::read()?;
             let focus = app.focus();
             match app.on_event(&ev) {
-                Action::OpenFile => load_demo_track(app.mixer.deck_mut(focus), target_rate),
+                Action::OpenFile => {
+                    let path = demo_track_path();
+                    load_into(&mut app.mixer, focus, &path, target_rate, &bpm_tx);
+                }
                 Action::LoadSelected => {
                     if let Some(path) = app.take_pending_load() {
-                        load_path(app.mixer.deck_mut(focus), &path, target_rate);
+                        load_into(&mut app.mixer, focus, &path, target_rate, &bpm_tx);
                     }
                 }
                 _ => {}
             }
+        }
+        // Apply any completed background BPM detections.
+        while let Ok((idx, bpm)) = bpm_rx.try_recv() {
+            app.mixer.deck_mut(idx).set_bpm(bpm);
         }
         // Top up the output ring from the mixed decks. Done here in the UI
         // loop (not a separate thread) so the realtime cpal callback stays
@@ -776,30 +788,50 @@ fn pump(
     }
 }
 
-/// Decode `path` at the output rate and load it into the deck, using the
-/// file name as the panel's title fallback. A decode failure is logged,
-/// not fatal, so the UI keeps running.
-fn load_path(deck: &mut Deck, path: &Path, target_rate: u32) {
+/// Decode `path` at the output rate, load it into deck `idx`, and kick off
+/// background BPM detection that posts its result back via `bpm_tx`. A
+/// decode failure is logged, not fatal, so the UI keeps running.
+fn load_into(
+    mixer: &mut Mixer,
+    idx: usize,
+    path: &Path,
+    target_rate: u32,
+    bpm_tx: &std::sync::mpsc::Sender<(usize, f32)>,
+) {
     match crate::audio::decode_file(path, target_rate) {
         Ok(track) => {
             tracing::info!(path = %path.display(), frames = track.frames(), "deck: loaded track");
+
+            // Detect tempo off the UI thread on a clone of the samples, so a
+            // ~0.5s analysis never blocks playback or redraw.
+            let (samples, ch, sr) = (track.samples.clone(), track.channels, track.sample_rate);
+            let tx = bpm_tx.clone();
+            std::thread::spawn(move || {
+                if let Some(bpm) = crate::audio::detect_bpm(&samples, ch, sr) {
+                    tracing::info!(deck = idx, bpm, "bpm: detected");
+                    let _ = tx.send((idx, bpm));
+                } else {
+                    tracing::info!(deck = idx, "bpm: no tempo detected");
+                }
+            });
+
             let name = path
                 .file_name()
                 .and_then(|n| n.to_str())
                 .unwrap_or("track")
                 .to_string();
-            deck.load_named(track, name);
+            mixer.deck_mut(idx).load_named(track, name);
         }
         Err(e) => tracing::error!(error = %e, path = %path.display(), "deck: failed to load track"),
     }
 }
 
-/// Load the `o` quick-demo track: `TERMKRUSH_DEMO_TRACK` if set, else the
+/// The `o` quick-demo track path: `TERMKRUSH_DEMO_TRACK` if set, else the
 /// bundled fixture. Handy when the crate is empty.
-fn load_demo_track(deck: &mut Deck, target_rate: u32) {
-    let path = std::env::var("TERMKRUSH_DEMO_TRACK")
-        .unwrap_or_else(|_| "tests/fixtures/sine_a440_10s.wav".to_string());
-    load_path(deck, Path::new(&path), target_rate);
+fn demo_track_path() -> PathBuf {
+    std::env::var("TERMKRUSH_DEMO_TRACK")
+        .unwrap_or_else(|_| "tests/fixtures/sine_a440_10s.wav".to_string())
+        .into()
 }
 
 #[cfg(test)]
@@ -1285,6 +1317,17 @@ mod tests {
         assert!(text.contains('['), "deck position bars missing:\n{text}");
         // Crossfader fader graphic in the mixer row.
         assert!(text.contains('●'), "crossfader graphic missing:\n{text}");
+    }
+
+    #[test]
+    fn deck_panel_shows_bpm_once_detected() {
+        let mut app = app_with_track(1000, 100);
+        app.mixer.deck_mut(0).set_bpm(128.0); // simulate background detection
+        let text = buffer_text(&render(&app, 100, 30));
+        assert!(
+            text.contains("128 BPM"),
+            "deck panel should show the detected BPM:\n{text}"
+        );
     }
 
     #[test]

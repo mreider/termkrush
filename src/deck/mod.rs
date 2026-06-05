@@ -46,6 +46,8 @@ pub struct Deck {
     /// Source display name (e.g. file name), used when the track carries
     /// no ID3 title. See [`display_name`](Self::display_name).
     name: Option<String>,
+    /// Detected tempo in BPM, filled in asynchronously after load.
+    bpm: Option<f32>,
 }
 
 /// Allowed gain range: silence up to +3.5 dB of headroom (1.5x linear).
@@ -73,6 +75,7 @@ impl Deck {
             gain: 1.0,
             smoothed_gain: 1.0,
             name: None,
+            bpm: None,
         }
     }
 
@@ -95,6 +98,20 @@ impl Deck {
         self.pos = 0;
         self.state = DeckState::Loaded;
         self.name = None;
+        self.bpm = None;
+    }
+
+    /// Record the detected tempo (BPM). Set asynchronously once background
+    /// analysis finishes; ignored if no track is loaded.
+    pub fn set_bpm(&mut self, bpm: f32) {
+        if self.track.is_some() {
+            self.bpm = Some(bpm);
+        }
+    }
+
+    /// Detected tempo in BPM, if analysis has completed.
+    pub fn bpm(&self) -> Option<f32> {
+        self.bpm
     }
 
     /// Like [`load`](Self::load), but also records a display name (the
@@ -505,5 +522,21 @@ mod tests {
             "post-seek should fade in (declick), got {}",
             after[0]
         );
+    }
+
+    #[test]
+    fn bpm_is_none_until_set_and_clears_on_reload() {
+        let mut d = Deck::new();
+        assert_eq!(d.bpm(), None);
+        d.set_bpm(128.0); // no track loaded -> ignored
+        assert_eq!(d.bpm(), None);
+
+        d.load(track(100, 0.5, 44_100));
+        assert_eq!(d.bpm(), None, "fresh load has no tempo yet");
+        d.set_bpm(128.0);
+        assert_eq!(d.bpm(), Some(128.0));
+
+        d.load(track(100, 0.5, 44_100));
+        assert_eq!(d.bpm(), None, "reloading clears the stale tempo");
     }
 }

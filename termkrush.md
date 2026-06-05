@@ -40,7 +40,6 @@
 |  | [Multiple hot cues per deck](termkrush/Multiple-hot-cues-per-deck.md) |  | [deck](.am/tags/deck.md) [cue](.am/tags/cue.md) [icebox](.am/tags/icebox.md) |
 |  | [Offline BPM detection on load](termkrush/Offline-BPM-detection-on-load.md) | 5 | [tempo](.am/tags/tempo.md) [analysis](.am/tags/analysis.md) |
 |  | [Per-deck FX bus](termkrush/Per-deck-FX-bus.md) | 3 | [fx](.am/tags/fx.md) [architecture](.am/tags/architecture.md) |
-|  | [Per-deck and master volume](termkrush/Per-deck-and-master-volume.md) | 2 | [deck](.am/tags/deck.md) [mix](.am/tags/mix.md) [one-deck](.am/tags/one-deck.md) |
 |  | [Phaser FX](termkrush/Phaser-FX.md) |  | [fx](.am/tags/fx.md) [icebox](.am/tags/icebox.md) |
 |  | [Pitch-preserving time-stretch](termkrush/Pitch-preserving-time-stretch.md) | 5 | [tempo](.am/tags/tempo.md) [dsp](.am/tags/dsp.md) |
 |  | [Pitch shift independent of tempo](termkrush/Pitch-shift-independent-of-tempo.md) |  | [dsp](.am/tags/dsp.md) [icebox](.am/tags/icebox.md) |
@@ -74,7 +73,7 @@
 |  | [V0.6.0 record](termkrush/v060-record.md) |  |  |
 |  | [Yt-dlp shell-out for media URLs](termkrush/yt-dlp-shell-out-for-media-URLs.md) | 3 | [download](.am/tags/download.md) [yt-dlp](.am/tags/yt-dlp.md) |
 |  | [Property-based testing for DSP code](termkrush/Property-based-testing-for-DSP-code.md) |  | [test](.am/tags/test.md) [dsp](.am/tags/dsp.md) [foundation](.am/tags/foundation.md) |
-| Total Points | | 98 | |
+| Total Points | | 96 | |
 
 ### Started
 | User | Title | Points | Tags |
@@ -108,6 +107,7 @@
 |  | [Mp3 test fixture: encode a synthesized WAV to mp3](termkrush/mp3-test-fixture-encode-a-synthesized-WAV-to-mp3.md) |  |  |
 |  | [Deck A: load file, play, pause, stop](termkrush/Deck-A-load-file-play-pause-stop.md) | 3 | [deck](.am/tags/deck.md) [one-deck](.am/tags/one-deck.md) |
 |  | [TUI deck panel](termkrush/TUI-deck-panel.md) | 2 | [tui](.am/tags/tui.md) [one-deck](.am/tags/one-deck.md) |
+|  | [Per-deck and master volume](termkrush/Per-deck-and-master-volume.md) | 2 | [deck](.am/tags/deck.md) [mix](.am/tags/mix.md) [one-deck](.am/tags/one-deck.md) |
 
 ### Rejected
 | User | Title | Points | Tags |

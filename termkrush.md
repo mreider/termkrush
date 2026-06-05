@@ -66,7 +66,13 @@
 |  | [V0.5.0 more decks](termkrush/v050-more-decks.md) |  |  |
 |  | [V0.6.0 record](termkrush/v060-record.md) |  |  |
 |  | [Yt-dlp shell-out for media URLs](termkrush/yt-dlp-shell-out-for-media-URLs.md) | 3 | [download](.am/tags/download.md) [yt-dlp](.am/tags/yt-dlp.md) |
-| Total Points | | 79 | |
+|  | [Clip pads trigger samples over the mix](termkrush/Clip-pads-trigger-samples-over-the-mix.md) | 5 |  |
+|  | [Crossfader between the turntables](termkrush/Crossfader-between-the-turntables.md) | 2 |  |
+|  | [Ergonomic keyboard layout for live performance](termkrush/Ergonomic-keyboard-layout-for-live-performance.md) | 3 |  |
+|  | [Lower-corner 8-bit DJ cat that bobs to the BPM](termkrush/Lower-corner-8-bit-DJ-cat-that-bobs-to-the-BPM.md) | 3 |  |
+|  | [Per-deck track switching from the loaded list](termkrush/Per-deck-track-switching-from-the-loaded-list.md) | 3 |  |
+|  | [Turntable platter visuals per deck](termkrush/Turntable-platter-visuals-per-deck.md) | 3 |  |
+| Total Points | | 98 | |
 
 ### Started
 | User | Title | Points | Tags |

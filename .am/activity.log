@@ -110,3 +110,7 @@
 2026-06-05T21:34:34Z	Matt Reider	finished	termkrush/Turntable-platter-visuals-per-deck.md	
 2026-06-05T21:34:34Z	Matt Reider	delivered	termkrush/Turntable-platter-visuals-per-deck.md	
 2026-06-05T21:34:34Z	Matt Reider	accepted	termkrush/Turntable-platter-visuals-per-deck.md	Per-deck record platter: 3-row ring with a ◆ marker walking 8 rim positions from platter_bucket(playhead) — spins while playing, still when stopped. Readout sits beside it; focus border amber/dim unchanged. fmt/clippy/-Dwarnings + 111 tests. Motion best seen live.
+2026-06-05T21:35:45Z	Matt Reider	started	termkrush/Per-deck-track-switching-from-the-loaded-list.md	
+2026-06-05T21:39:33Z	Matt Reider	finished	termkrush/Per-deck-track-switching-from-the-loaded-list.md	
+2026-06-05T21:39:33Z	Matt Reider	delivered	termkrush/Per-deck-track-switching-from-the-loaded-list.md	
+2026-06-05T21:39:33Z	Matt Reider	accepted	termkrush/Per-deck-track-switching-from-the-loaded-list.md	Session 'Loaded' shortlist (App.recent, dedup, cap 6, most-recent-first) shown in a panel under the crate; populated on successful load (load_into now returns bool). Toggle (tab) + crate-enter-into-focused + deck independence were already in place from keymap/crate/Deck-B — this adds the loaded list + verifies the switch flow. fmt/clippy/-Dwarnings + tests green.

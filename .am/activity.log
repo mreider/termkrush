@@ -76,3 +76,7 @@
 2026-06-05T18:51:37Z	Matt Reider	finished	termkrush/Crossfader-audio-mix.md	
 2026-06-05T18:51:38Z	Matt Reider	delivered	termkrush/Crossfader-audio-mix.md	
 2026-06-05T18:51:38Z	Matt Reider	accepted	termkrush/Crossfader-audio-mix.md	Linear crossfader (-1 A .. +1 B, 0 both unity) folded into fill_mix per-frame with ramped position (de-zipper); keys [ ] slide, \ centers; |───●───| readout. Signal chain deck gain -> xfade -> master, each smoothed. fmt/clippy/-Dwarnings + 98 tests. No clip ceiling on centered sum yet (headroom/limiter is separate).
+2026-06-05T18:53:31Z	Matt Reider	started	termkrush/Two-deck-TUI-layout.md	
+2026-06-05T18:55:59Z	Matt Reider	finished	termkrush/Two-deck-TUI-layout.md	
+2026-06-05T18:55:59Z	Matt Reider	delivered	termkrush/Two-deck-TUI-layout.md	
+2026-06-05T18:55:59Z	Matt Reider	accepted	termkrush/Two-deck-TUI-layout.md	Decks A|B side-by-side over a bordered Mixer row (crossfader fader graphic + master); collapsible crate (c); focus border amber/dim via testable deck_border(). Both panels+bars visible at 100x30. fmt/clippy/-Dwarnings + 100 tests. Completes two-decks epic (3/3). Visual proportions best confirmed by running it.

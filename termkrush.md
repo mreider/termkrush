@@ -56,7 +56,6 @@
 |  | [Tempo nudge controls](termkrush/Tempo-nudge-controls.md) | 2 | [tempo](.am/tags/tempo.md) [tui](.am/tags/tui.md) |
 |  | [Tempo ramping curves](termkrush/Tempo-ramping-curves.md) |  | [tempo](.am/tags/tempo.md) [icebox](.am/tags/icebox.md) |
 |  | [Track metadata ID3 editor](termkrush/Track-metadata-ID3-editor.md) |  | [metadata](.am/tags/metadata.md) [icebox](.am/tags/icebox.md) |
-|  | [Two-deck TUI layout](termkrush/Two-deck-TUI-layout.md) | 3 | [tui](.am/tags/tui.md) [two-decks](.am/tags/two-decks.md) |
 |  | [Vinyl noise FX](termkrush/Vinyl-noise-FX.md) |  | [fx](.am/tags/fx.md) [icebox](.am/tags/icebox.md) [texture](.am/tags/texture.md) |
 |  | [Visual beat-grid editing](termkrush/Visual-beat-grid-editing.md) |  | [tempo](.am/tags/tempo.md) [icebox](.am/tags/icebox.md) [tui](.am/tags/tui.md) |
 |  | [WAV writer](termkrush/WAV-writer.md) | 2 | [record](.am/tags/record.md) [io](.am/tags/io.md) |
@@ -69,7 +68,7 @@
 |  | [V0.6.0 record](termkrush/v060-record.md) |  |  |
 |  | [Yt-dlp shell-out for media URLs](termkrush/yt-dlp-shell-out-for-media-URLs.md) | 3 | [download](.am/tags/download.md) [yt-dlp](.am/tags/yt-dlp.md) |
 |  | [Property-based testing for DSP code](termkrush/Property-based-testing-for-DSP-code.md) |  | [test](.am/tags/test.md) [dsp](.am/tags/dsp.md) [foundation](.am/tags/foundation.md) |
-| Total Points | | 87 | |
+| Total Points | | 84 | |
 
 ### Started
 | User | Title | Points | Tags |
@@ -108,6 +107,7 @@
 |  | [Local crate view](termkrush/Local-crate-view.md) | 2 | [library](.am/tags/library.md) [tui](.am/tags/tui.md) [one-deck](.am/tags/one-deck.md) |
 |  | [Deck B mirror of Deck A](termkrush/Deck-B-mirror-of-Deck-A.md) | 2 | [deck](.am/tags/deck.md) [two-decks](.am/tags/two-decks.md) |
 |  | [Crossfader audio mix](termkrush/Crossfader-audio-mix.md) | 3 | [mix](.am/tags/mix.md) [two-decks](.am/tags/two-decks.md) |
+|  | [Two-deck TUI layout](termkrush/Two-deck-TUI-layout.md) | 3 | [tui](.am/tags/tui.md) [two-decks](.am/tags/two-decks.md) |
 
 ### Rejected
 | User | Title | Points | Tags |

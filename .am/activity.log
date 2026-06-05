@@ -72,3 +72,7 @@
 2026-06-05T18:43:42Z	Matt Reider	finished	termkrush/Deck-B-mirror-of-Deck-A.md	
 2026-06-05T18:43:43Z	Matt Reider	delivered	termkrush/Deck-B-mirror-of-Deck-A.md	
 2026-06-05T18:43:43Z	Matt Reider	accepted	termkrush/Deck-B-mirror-of-Deck-A.md	Hoisted decks into Mixer ([Deck;2]) + fill_mix sum; App.focus + Tab cycle; transport/load target focused deck; dual stacked deck panels w/ focus marker. Both decks play simultaneously & independently. fmt/clippy/-Dwarnings + 90 tests. No crossfader/headroom yet (next story) — summed decks can exceed 0dBFS if both loud.
+2026-06-05T18:47:13Z	Matt Reider	started	termkrush/Crossfader-audio-mix.md	
+2026-06-05T18:51:37Z	Matt Reider	finished	termkrush/Crossfader-audio-mix.md	
+2026-06-05T18:51:38Z	Matt Reider	delivered	termkrush/Crossfader-audio-mix.md	
+2026-06-05T18:51:38Z	Matt Reider	accepted	termkrush/Crossfader-audio-mix.md	Linear crossfader (-1 A .. +1 B, 0 both unity) folded into fill_mix per-frame with ramped position (de-zipper); keys [ ] slide, \ centers; |───●───| readout. Signal chain deck gain -> xfade -> master, each smoothed. fmt/clippy/-Dwarnings + 98 tests. No clip ceiling on centered sum yet (headroom/limiter is separate).

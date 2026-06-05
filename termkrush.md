@@ -12,7 +12,6 @@
 |  | [Bitcrush FX](termkrush/Bitcrush-FX.md) |  | [fx](.am/tags/fx.md) [icebox](.am/tags/icebox.md) |
 |  | [Cache BPM and analysis per file](termkrush/Cache-BPM-and-analysis-per-file.md) | 2 | [tempo](.am/tags/tempo.md) [cache](.am/tags/cache.md) |
 |  | [Crossfader assignment per deck](termkrush/Crossfader-assignment-per-deck.md) | 3 | [mix](.am/tags/mix.md) [multi-deck](.am/tags/multi-deck.md) |
-|  | [Crossfader audio mix](termkrush/Crossfader-audio-mix.md) | 3 | [mix](.am/tags/mix.md) [two-decks](.am/tags/two-decks.md) |
 |  | [Crossfader curve options](termkrush/Crossfader-curve-options.md) |  | [mix](.am/tags/mix.md) [icebox](.am/tags/icebox.md) |
 |  | [Crossfader cut and momentary kill](termkrush/Crossfader-cut-and-momentary-kill.md) | 2 | [mix](.am/tags/mix.md) [scratch](.am/tags/scratch.md) |
 |  | [Custom color themes](termkrush/Custom-color-themes.md) |  | [tui](.am/tags/tui.md) [icebox](.am/tags/icebox.md) |
@@ -70,7 +69,7 @@
 |  | [V0.6.0 record](termkrush/v060-record.md) |  |  |
 |  | [Yt-dlp shell-out for media URLs](termkrush/yt-dlp-shell-out-for-media-URLs.md) | 3 | [download](.am/tags/download.md) [yt-dlp](.am/tags/yt-dlp.md) |
 |  | [Property-based testing for DSP code](termkrush/Property-based-testing-for-DSP-code.md) |  | [test](.am/tags/test.md) [dsp](.am/tags/dsp.md) [foundation](.am/tags/foundation.md) |
-| Total Points | | 90 | |
+| Total Points | | 87 | |
 
 ### Started
 | User | Title | Points | Tags |
@@ -108,6 +107,7 @@
 |  | [Seek and scrub position](termkrush/Seek-and-scrub-position.md) | 2 | [deck](.am/tags/deck.md) [one-deck](.am/tags/one-deck.md) |
 |  | [Local crate view](termkrush/Local-crate-view.md) | 2 | [library](.am/tags/library.md) [tui](.am/tags/tui.md) [one-deck](.am/tags/one-deck.md) |
 |  | [Deck B mirror of Deck A](termkrush/Deck-B-mirror-of-Deck-A.md) | 2 | [deck](.am/tags/deck.md) [two-decks](.am/tags/two-decks.md) |
+|  | [Crossfader audio mix](termkrush/Crossfader-audio-mix.md) | 3 | [mix](.am/tags/mix.md) [two-decks](.am/tags/two-decks.md) |
 
 ### Rejected
 | User | Title | Points | Tags |

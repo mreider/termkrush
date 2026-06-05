@@ -1,12 +1,17 @@
-//! The mixer: combine decks onto a master bus.
+//! The mixer: owns the decks and combines them onto a master bus.
 //!
 //! Responsibilities as the backlog fills in: crossfader between decks,
 //! per-deck gain, BPM sync and beat-matching, minimal FX (filter, echo,
 //! reverb), and the master tap that feeds the recorder.
 //!
-//! For now it carries the **master gain** applied to the mixed output.
-//! Summing multiple decks and the crossfader arrive with the two-deck
-//! stories; today there is a single deck, so the master simply scales it.
+//! Today it owns the two decks, sums their pull-based output, and applies
+//! the **master gain** to the mix. The crossfader and N-deck generality
+//! arrive with their own stories; the array makes adding those mechanical.
+
+use crate::deck::Deck;
+
+/// Number of decks the mixer drives (two-deck era).
+pub const DECKS: usize = 2;
 
 /// Allowed master gain range: silence up to +3.5 dB of headroom.
 pub const MASTER_MIN: f32 = 0.0;
@@ -16,14 +21,18 @@ pub const MASTER_MAX: f32 = 1.5;
 /// so master moves de-zipper too.
 const MASTER_RAMP_STEP: f32 = 1.0 / 512.0;
 
-/// The master bus. Owns the master gain and applies it (smoothly) to an
-/// interleaved-stereo buffer.
+/// The master bus: owns the decks, sums them, and applies master gain.
 #[derive(Debug)]
 pub struct Mixer {
+    /// The decks, summed into the master mix.
+    decks: [Deck; DECKS],
     /// Target master gain (what the dB readout shows).
     master: f32,
     /// Applied master gain, ramped toward `master` per frame.
     smoothed: f32,
+    /// Reusable per-deck scratch for [`fill_mix`](Self::fill_mix), so the
+    /// mix path does not allocate every block.
+    scratch: Vec<f32>,
 }
 
 impl Default for Mixer {
@@ -33,12 +42,39 @@ impl Default for Mixer {
 }
 
 impl Mixer {
-    /// A master bus at unity gain.
+    /// A master bus at unity gain with empty decks.
     pub fn new() -> Self {
         Mixer {
+            decks: [Deck::new(), Deck::new()],
             master: 1.0,
             smoothed: 1.0,
+            scratch: Vec::new(),
         }
+    }
+
+    /// Shared access to deck `i` (panics out of range — callers use `0..DECKS`).
+    pub fn deck(&self, i: usize) -> &Deck {
+        &self.decks[i]
+    }
+
+    /// Mutable access to deck `i`, for transport and loading.
+    pub fn deck_mut(&mut self, i: usize) -> &mut Deck {
+        &mut self.decks[i]
+    }
+
+    /// Sum every deck's next block into `out` (interleaved stereo) and
+    /// apply the master gain. Decks play independently; a stopped/paused
+    /// deck contributes silence. This is what the audio pump calls.
+    pub fn fill_mix(&mut self, out: &mut [f32]) {
+        out.iter_mut().for_each(|s| *s = 0.0);
+        self.scratch.resize(out.len(), 0.0);
+        for deck in &mut self.decks {
+            deck.fill(&mut self.scratch);
+            for (o, s) in out.iter_mut().zip(self.scratch.iter()) {
+                *o += *s;
+            }
+        }
+        self.apply(out);
     }
 
     /// Set the target master gain, clamped to `[MASTER_MIN, MASTER_MAX]`.
@@ -78,6 +114,68 @@ impl Mixer {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::audio::DecodedAudio;
+
+    /// A constant-level stereo track for summing checks.
+    fn track(frames: usize, level: f32) -> DecodedAudio {
+        DecodedAudio {
+            samples: vec![level; frames * 2],
+            sample_rate: 44_100,
+            channels: 2,
+            source_sample_rate: 44_100,
+            source_channels: 2,
+            duration_secs: frames as f64 / 44_100.0,
+            title: None,
+            artist: None,
+        }
+    }
+
+    #[test]
+    fn fill_mix_sums_playing_decks() {
+        let mut m = Mixer::new();
+        m.deck_mut(0).load(track(1000, 0.2));
+        m.deck_mut(1).load(track(1000, 0.3));
+        m.deck_mut(0).play();
+        m.deck_mut(1).play();
+        let mut buf = vec![0.0f32; 64];
+        m.fill_mix(&mut buf);
+        // 0.2 + 0.3 = 0.5 at unity master.
+        assert!(
+            buf.iter().all(|&s| (s - 0.5).abs() < 1e-4),
+            "decks should sum"
+        );
+    }
+
+    #[test]
+    fn fill_mix_ignores_stopped_deck() {
+        let mut m = Mixer::new();
+        m.deck_mut(0).load(track(1000, 0.4));
+        m.deck_mut(1).load(track(1000, 0.4));
+        m.deck_mut(0).play(); // deck 1 stays loaded (silent)
+        let mut buf = vec![0.0f32; 64];
+        m.fill_mix(&mut buf);
+        assert!(
+            buf.iter().all(|&s| (s - 0.4).abs() < 1e-4),
+            "only the playing deck contributes"
+        );
+    }
+
+    #[test]
+    fn decks_are_independent() {
+        let mut m = Mixer::new();
+        m.deck_mut(0).load(track(1000, 0.5));
+        m.deck_mut(1).load(track(1000, 0.5));
+        m.deck_mut(0).play();
+        // Drain a block; deck 0 advances, deck 1 does not.
+        let mut buf = vec![0.0f32; 64];
+        m.fill_mix(&mut buf);
+        assert!(m.deck(0).position_frames() > 0);
+        assert_eq!(
+            m.deck(1).position_frames(),
+            0,
+            "loading/playing one leaves the other put"
+        );
+    }
 
     #[test]
     fn master_clamps_to_range() {

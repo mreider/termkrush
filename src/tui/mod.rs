@@ -30,7 +30,10 @@ use crate::audio::AudioOutput;
 use crate::config::Config;
 use crate::deck::{Deck, DeckState};
 use crate::library::Crate;
-use crate::mix::Mixer;
+use crate::mix::{Mixer, DECKS};
+
+/// Display labels for the decks, indexed by deck number.
+const DECK_LABELS: [&str; DECKS] = ["A", "B"];
 
 /// Per-keypress gain nudge (linear), for both deck and master.
 const GAIN_NUDGE: f32 = 0.05;
@@ -51,10 +54,10 @@ pub const BG: Color = Color::Rgb(0x06, 0x09, 0x07);
 const FRAME: Duration = Duration::from_millis(33);
 
 /// What an input event asks the app to do. Deck transport is applied to
-/// [`App::deck`] inside `on_key`; the variant is returned so the caller
-/// (and the tests) can observe what happened. `OpenFile` is the exception:
-/// loading a track is I/O, so `on_key` only signals intent and the event
-/// loop performs the decode.
+/// the focused deck inside `on_key`; the variant is returned so the caller
+/// (and the tests) can observe what happened. `OpenFile`/`LoadSelected`
+/// are the exceptions: loading a track is I/O, so `on_key` only signals
+/// intent and the event loop performs the decode.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Action {
     None,
@@ -69,16 +72,18 @@ pub enum Action {
     CrateNav,
     Filter,
     LoadSelected,
+    Focus,
 }
 
-/// UI state for the shell: the single v1 deck, the master bus, and the
-/// browsable local crate.
+/// UI state for the shell: the decks + master bus (owned by [`Mixer`]),
+/// which deck has focus, and the browsable local crate.
 #[derive(Debug, Default)]
 pub struct App {
     pub show_help: bool,
     pub should_quit: bool,
-    pub deck: Deck,
     pub mixer: Mixer,
+    /// Which deck the transport keys target (`Tab` cycles).
+    focus: usize,
     /// Scanned local crate of mp3s.
     crate_lib: Crate,
     /// Selection index into the *filtered* crate view.
@@ -99,6 +104,21 @@ impl App {
     pub fn set_crate(&mut self, crate_lib: Crate) {
         self.crate_lib = crate_lib;
         self.crate_sel = 0;
+    }
+
+    /// The focused deck (transport target), shared.
+    fn focused(&self) -> &Deck {
+        self.mixer.deck(self.focus)
+    }
+
+    /// The focused deck, mutable.
+    fn focused_mut(&mut self) -> &mut Deck {
+        self.mixer.deck_mut(self.focus)
+    }
+
+    /// Which deck currently has focus (`0..DECKS`).
+    pub fn focus(&self) -> usize {
+        self.focus
     }
 
     /// The current filter query (empty string when not filtering).
@@ -169,24 +189,29 @@ impl App {
                 self.show_help = false;
                 Action::ToggleHelp
             }
-            // Deck transport on the (single, v1) focused deck.
+            // Tab cycles which deck the transport keys target.
+            (KeyCode::Tab, _) => {
+                self.focus = (self.focus + 1) % DECKS;
+                Action::Focus
+            }
+            // Deck transport on the focused deck.
             (KeyCode::Char(' '), _) => {
-                self.deck.toggle();
+                self.focused_mut().toggle();
                 Action::PlayPause
             }
             (KeyCode::Char('s'), _) => {
-                self.deck.stop();
+                self.focused_mut().stop();
                 Action::Stop
             }
             // Loading a file is I/O — signal intent, let the event loop decode.
             (KeyCode::Char('o'), _) => Action::OpenFile,
             // Deck volume: `+`/`=` up, `-` down.
             (KeyCode::Char('+' | '='), _) => {
-                self.deck.nudge_gain(GAIN_NUDGE);
+                self.focused_mut().nudge_gain(GAIN_NUDGE);
                 Action::DeckGain
             }
             (KeyCode::Char('-'), _) => {
-                self.deck.nudge_gain(-GAIN_NUDGE);
+                self.focused_mut().nudge_gain(-GAIN_NUDGE);
                 Action::DeckGain
             }
             // Master volume: `>` up, `<` down. (These stand in for the
@@ -201,27 +226,27 @@ impl App {
             }
             // Seek/scrub. Shift+arrow jumps far; `,`/`.` scrub finely.
             (KeyCode::Left, m) if m.contains(KeyModifiers::SHIFT) => {
-                self.deck.seek_by(-SEEK_FAR);
+                self.focused_mut().seek_by(-SEEK_FAR);
                 Action::Seek
             }
             (KeyCode::Right, m) if m.contains(KeyModifiers::SHIFT) => {
-                self.deck.seek_by(SEEK_FAR);
+                self.focused_mut().seek_by(SEEK_FAR);
                 Action::Seek
             }
             (KeyCode::Left, _) => {
-                self.deck.seek_by(-SEEK_JUMP);
+                self.focused_mut().seek_by(-SEEK_JUMP);
                 Action::Seek
             }
             (KeyCode::Right, _) => {
-                self.deck.seek_by(SEEK_JUMP);
+                self.focused_mut().seek_by(SEEK_JUMP);
                 Action::Seek
             }
             (KeyCode::Char(','), _) => {
-                self.deck.seek_by(-SEEK_SCRUB);
+                self.focused_mut().seek_by(-SEEK_SCRUB);
                 Action::Seek
             }
             (KeyCode::Char('.'), _) => {
-                self.deck.seek_by(SEEK_SCRUB);
+                self.focused_mut().seek_by(SEEK_SCRUB);
                 Action::Seek
             }
             // Crate browsing: `/` filter, `j`/`k` navigate, Enter loads.
@@ -326,33 +351,43 @@ pub fn draw(f: &mut Frame, app: &App) {
 
     // Transport hint row — green accent.
     let tagline = Paragraph::new(
-        "/ filter  j/k pick  enter load  space play  ←/→ seek  +/- vol   ? help  q quit",
+        "tab focus  / filter  enter load  space play  ←/→ seek  +/- vol   ? help  q quit",
     )
     .alignment(Alignment::Center)
     .style(Style::default().fg(GREEN).bg(BG));
     f.render_widget(tagline, rows[2]);
 
-    // Body: crate browser on the left, deck + master on the right.
+    // Body: crate browser on the left, both decks stacked + master on the right.
     let body =
         Layout::horizontal([Constraint::Percentage(42), Constraint::Percentage(58)]).split(rows[3]);
     draw_crate_panel(f, body[0], app);
 
-    let panel_area = centered_rect(body[1], 54, 6);
-    draw_deck_panel(f, panel_area, &app.deck);
+    let right = Layout::vertical([
+        Constraint::Length(6), // deck A
+        Constraint::Length(6), // deck B
+        Constraint::Length(1), // master
+        Constraint::Min(0),
+    ])
+    .split(body[1]);
 
-    // Master readout, one line directly below the deck panel.
-    let master_y = panel_area.y + panel_area.height;
-    if master_y < body[1].y + body[1].height {
-        let master_area = Rect::new(panel_area.x, master_y, panel_area.width, 1);
-        let master = Paragraph::new(format!(
-            "master {:.2}  {}   ( < / > )",
-            app.mixer.master_gain(),
-            fmt_db(app.mixer.master_gain()),
-        ))
-        .alignment(Alignment::Center)
-        .style(Style::default().fg(GREEN).bg(BG));
-        f.render_widget(master, master_area);
+    for i in 0..DECKS {
+        draw_deck_panel(
+            f,
+            right[i],
+            DECK_LABELS[i],
+            app.mixer.deck(i),
+            app.focus() == i,
+        );
     }
+
+    let master = Paragraph::new(format!(
+        "master {:.2}  {}   ( < / > )",
+        app.mixer.master_gain(),
+        fmt_db(app.mixer.master_gain()),
+    ))
+    .alignment(Alignment::Center)
+    .style(Style::default().fg(GREEN).bg(BG));
+    f.render_widget(master, right[2]);
 
     if app.show_help {
         draw_help(f, area);
@@ -422,14 +457,22 @@ fn centered_rect(area: Rect, w: u16, h: u16) -> Rect {
     Rect::new(x, y, w, h)
 }
 
-/// The "Deck A" panel: track name, transport glyph + state + gain, a
+/// A deck panel: track name, transport glyph + state + gain, a
 /// proportional position bar, and `elapsed / total`. The border is amber
-/// while the deck is playing, dim otherwise, so the active deck stands out.
-fn draw_deck_panel(f: &mut Frame, area: Rect, deck: &Deck) {
+/// while playing; the `focused` deck is marked (`▸`) and brightened so the
+/// transport target is obvious.
+fn draw_deck_panel(f: &mut Frame, area: Rect, label: &str, deck: &Deck, focused: bool) {
     let border = if deck.is_playing() {
         AMBER
+    } else if focused {
+        GREEN
     } else {
         Color::DarkGray
+    };
+    let title = if focused {
+        format!("▸ Deck {label}")
+    } else {
+        format!("  Deck {label}")
     };
 
     let name = deck.display_name().unwrap_or("— no track —");
@@ -467,7 +510,7 @@ fn draw_deck_panel(f: &mut Frame, area: Rect, deck: &Deck) {
     let panel = Paragraph::new(lines)
         .block(
             Block::bordered()
-                .title("Deck A")
+                .title(title)
                 .style(Style::default().fg(border).bg(BG)),
         )
         .style(Style::default().fg(GREEN).bg(BG));
@@ -509,14 +552,14 @@ fn fmt_clock(secs: f64) -> String {
 /// A centered help overlay (stub: lists the keys it knows so far).
 fn draw_help(f: &mut Frame, area: Rect) {
     let w = 52.min(area.width);
-    let h = 18.min(area.height);
+    let h = 19.min(area.height);
     let x = area.x + (area.width.saturating_sub(w)) / 2;
     let y = area.y + (area.height.saturating_sub(h)) / 2;
     let popup = Rect::new(x, y, w, h);
 
     f.render_widget(Clear, popup);
     let help = Paragraph::new(
-        "Keys\n\n  / filter    j / k  pick    enter  load track\n  o          load demo track\n  space      play / pause\n  s          stop (rewind to 0)\n  ← / →      seek ±5s   (shift: ±30s)\n  , / .      scrub ±0.1s\n  + / -      deck volume\n  < / >      master volume\n  ?          toggle this help\n  q  / C-c   quit",
+        "Keys\n\n  / filter    j / k  pick    enter  load track\n  tab        switch focused deck (A / B)\n  o          load demo track\n  space      play / pause\n  s          stop (rewind to 0)\n  ← / →      seek ±5s   (shift: ±30s)\n  , / .      scrub ±0.1s\n  + / -      deck volume\n  < / >      master volume\n  ?          toggle this help\n  q  / C-c   quit",
     )
     .block(
         Block::bordered()
@@ -612,21 +655,22 @@ fn event_loop(terminal: &mut Term) -> io::Result<()> {
         // Poll up to one frame; redraw at least every FRAME, sooner on input.
         if event::poll(FRAME)? {
             let ev = event::read()?;
+            let focus = app.focus();
             match app.on_event(&ev) {
-                Action::OpenFile => load_demo_track(&mut app.deck, target_rate),
+                Action::OpenFile => load_demo_track(app.mixer.deck_mut(focus), target_rate),
                 Action::LoadSelected => {
                     if let Some(path) = app.take_pending_load() {
-                        load_path(&mut app.deck, &path, target_rate);
+                        load_path(app.mixer.deck_mut(focus), &path, target_rate);
                     }
                 }
                 _ => {}
             }
         }
-        // Top up the output ring from the deck. Done here in the UI loop
-        // (not a separate thread) so the realtime cpal callback stays
-        // lock-free; the 32k-sample ring covers the ~33ms between frames.
+        // Top up the output ring from the mixed decks. Done here in the UI
+        // loop (not a separate thread) so the realtime cpal callback stays
+        // lock-free; the ring covers the ~33ms between frames.
         if let Some(p) = producer.as_mut() {
-            pump(&mut app.deck, &mut app.mixer, p, out_channels, &mut scratch);
+            pump(&mut app.mixer, p, out_channels, &mut scratch);
         }
     }
     tracing::info!("tui event loop exited");
@@ -634,12 +678,12 @@ fn event_loop(terminal: &mut Term) -> io::Result<()> {
     Ok(())
 }
 
-/// Draw stereo frames from the deck and push them into the output ring,
-/// mapping to the device's channel count (L/R, with any extra channels
-/// silent and a mono device taking the left channel). Writes only as many
-/// frames as the ring currently has room for, so it never blocks.
+/// Draw the mixed stereo output (both decks summed + master) and push it
+/// into the output ring, mapping to the device's channel count (L/R, with
+/// any extra channels silent and a mono device taking the left channel).
+/// Writes only as many frames as the ring currently has room for, so it
+/// never blocks.
 fn pump(
-    deck: &mut Deck,
     mixer: &mut Mixer,
     producer: &mut rtrb::Producer<f32>,
     channels: u16,
@@ -651,8 +695,7 @@ fn pump(
         return;
     }
     scratch.resize(frames * 2, 0.0);
-    deck.fill(scratch);
-    mixer.apply(scratch); // master gain on the mixed (single-deck) output
+    mixer.fill_mix(scratch); // both decks summed + master gain
     for f in 0..frames {
         let (l, r) = (scratch[f * 2], scratch[f * 2 + 1]);
         for ch in 0..channels {
@@ -788,7 +831,7 @@ mod tests {
     fn loaded_app() -> App {
         use crate::audio::DecodedAudio;
         let mut app = App::new();
-        app.deck.load(DecodedAudio {
+        app.focused_mut().load(DecodedAudio {
             samples: vec![0.5; 200],
             sample_rate: 44_100,
             channels: 2,
@@ -804,11 +847,11 @@ mod tests {
     #[test]
     fn space_toggles_play_pause() {
         let mut app = loaded_app();
-        assert_eq!(app.deck.state(), DeckState::Loaded);
+        assert_eq!(app.focused_mut().state(), DeckState::Loaded);
         assert_eq!(app.on_key(key(' ')), Action::PlayPause);
-        assert_eq!(app.deck.state(), DeckState::Playing);
+        assert_eq!(app.focused_mut().state(), DeckState::Playing);
         assert_eq!(app.on_key(key(' ')), Action::PlayPause);
-        assert_eq!(app.deck.state(), DeckState::Paused);
+        assert_eq!(app.focused_mut().state(), DeckState::Paused);
     }
 
     #[test]
@@ -816,7 +859,7 @@ mod tests {
         let mut app = loaded_app();
         app.on_key(key(' ')); // play
         assert_eq!(app.on_key(key('s')), Action::Stop);
-        assert_eq!(app.deck.state(), DeckState::Stopped);
+        assert_eq!(app.focused_mut().state(), DeckState::Stopped);
     }
 
     #[test]
@@ -824,7 +867,7 @@ mod tests {
         let mut app = App::new();
         assert_eq!(app.on_key(key('o')), Action::OpenFile);
         // on_key must not load anything itself — that's the event loop's job.
-        assert_eq!(app.deck.state(), DeckState::Empty);
+        assert_eq!(app.focused_mut().state(), DeckState::Empty);
     }
 
     /// An app with a track of `frames` stereo frames at sample rate `rate`
@@ -833,7 +876,7 @@ mod tests {
     fn app_with_track(frames: usize, rate: u32) -> App {
         use crate::audio::DecodedAudio;
         let mut app = App::new();
-        app.deck.load_named(
+        app.focused_mut().load_named(
             DecodedAudio {
                 samples: vec![0.4; frames * 2],
                 sample_rate: rate,
@@ -872,7 +915,7 @@ mod tests {
 
         // Advance 3 seconds (300 frames at rate 100).
         let mut buf = vec![0.0f32; 600];
-        app.deck.fill(&mut buf);
+        app.focused_mut().fill(&mut buf);
         let text = buffer_text(&render(&app, 80, 24));
         assert!(
             text.contains("00:03.0"),
@@ -882,9 +925,13 @@ mod tests {
 
         // Pause: elapsed freezes and the glyph changes.
         app.on_key(key(' '));
-        let before = app.deck.position_secs();
-        app.deck.fill(&mut vec![0.0f32; 600]); // no-op while paused
-        assert_eq!(app.deck.position_secs(), before, "paused elapsed frozen");
+        let before = app.focused_mut().position_secs();
+        app.focused_mut().fill(&mut vec![0.0f32; 600]); // no-op while paused
+        assert_eq!(
+            app.focused_mut().position_secs(),
+            before,
+            "paused elapsed frozen"
+        );
         let text = buffer_text(&render(&app, 80, 24));
         assert!(text.contains('⏸'), "paused glyph missing:\n{text}");
     }
@@ -919,11 +966,11 @@ mod tests {
     fn plus_minus_nudge_deck_gain() {
         let mut app = loaded_app();
         assert_eq!(app.on_key(key('+')), Action::DeckGain);
-        assert!((app.deck.gain() - 1.05).abs() < 1e-6);
+        assert!((app.focused_mut().gain() - 1.05).abs() < 1e-6);
         assert_eq!(app.on_key(key('=')), Action::DeckGain); // '=' is an alias for '+'
-        assert!((app.deck.gain() - 1.10).abs() < 1e-6);
+        assert!((app.focused_mut().gain() - 1.10).abs() < 1e-6);
         assert_eq!(app.on_key(key('-')), Action::DeckGain);
-        assert!((app.deck.gain() - 1.05).abs() < 1e-6);
+        assert!((app.focused_mut().gain() - 1.05).abs() < 1e-6);
     }
 
     #[test]
@@ -934,7 +981,7 @@ mod tests {
         assert_eq!(app.on_key(key('<')), Action::MasterGain);
         assert!((app.mixer.master_gain() - 1.0).abs() < 1e-6);
         // Deck gain is untouched by master keys.
-        assert!((app.deck.gain() - 1.0).abs() < 1e-6);
+        assert!((app.focused_mut().gain() - 1.0).abs() < 1e-6);
     }
 
     #[test]
@@ -963,13 +1010,16 @@ mod tests {
             Action::Seek
         );
         assert!(
-            (app.deck.position_secs() - 5.0).abs() < 1e-9,
+            (app.focused_mut().position_secs() - 5.0).abs() < 1e-9,
             "Right => +5s"
         );
         app.on_key(KeyEvent::new(KeyCode::Left, KeyModifiers::NONE));
-        assert!((app.deck.position_secs() - 0.0).abs() < 1e-9, "Left => -5s");
+        assert!(
+            (app.focused_mut().position_secs() - 0.0).abs() < 1e-9,
+            "Left => -5s"
+        );
         app.on_key(KeyEvent::new(KeyCode::Left, KeyModifiers::NONE));
-        assert_eq!(app.deck.position_frames(), 0, "clamps at start");
+        assert_eq!(app.focused_mut().position_frames(), 0, "clamps at start");
     }
 
     #[test]
@@ -980,8 +1030,8 @@ mod tests {
             app.on_key(KeyEvent::new(KeyCode::Right, KeyModifiers::SHIFT)),
             Action::Seek
         );
-        assert_eq!(app.deck.position_frames(), 2000, "clamped to EOF");
-        assert_eq!(app.deck.state(), DeckState::Stopped);
+        assert_eq!(app.focused_mut().position_frames(), 2000, "clamped to EOF");
+        assert_eq!(app.focused_mut().state(), DeckState::Stopped);
     }
 
     #[test]
@@ -989,9 +1039,9 @@ mod tests {
         let mut app = app_with_track(2000, 100);
         app.on_key(KeyEvent::new(KeyCode::Right, KeyModifiers::NONE)); // 5.0s
         assert_eq!(app.on_key(key('.')), Action::Seek);
-        assert!((app.deck.position_secs() - 5.1).abs() < 1e-9);
+        assert!((app.focused_mut().position_secs() - 5.1).abs() < 1e-9);
         assert_eq!(app.on_key(key(',')), Action::Seek);
-        assert!((app.deck.position_secs() - 5.0).abs() < 1e-9);
+        assert!((app.focused_mut().position_secs() - 5.0).abs() < 1e-9);
     }
 
     /// An app with a crate of the given file names loaded.
@@ -1093,5 +1143,75 @@ mod tests {
         app2.on_key(key('b'));
         let text2 = buffer_text(&render(&app2, 80, 24));
         assert!(text2.contains("/b"), "filter query not in title:\n{text2}");
+    }
+
+    /// A constant-level stereo track of `frames` stereo frames.
+    fn synth_track(frames: usize) -> crate::audio::DecodedAudio {
+        crate::audio::DecodedAudio {
+            samples: vec![0.5; frames * 2],
+            sample_rate: 44_100,
+            channels: 2,
+            source_sample_rate: 44_100,
+            source_channels: 2,
+            duration_secs: frames as f64 / 44_100.0,
+            title: None,
+            artist: None,
+        }
+    }
+
+    #[test]
+    fn tab_cycles_focus() {
+        let mut app = App::new();
+        assert_eq!(app.focus(), 0);
+        assert_eq!(
+            app.on_key(KeyEvent::new(KeyCode::Tab, KeyModifiers::NONE)),
+            Action::Focus
+        );
+        assert_eq!(app.focus(), 1);
+        app.on_key(KeyEvent::new(KeyCode::Tab, KeyModifiers::NONE));
+        assert_eq!(app.focus(), 0, "wraps back around");
+    }
+
+    #[test]
+    fn transport_affects_only_focused_deck_and_decks_play_together() {
+        let mut app = App::new();
+        app.mixer.deck_mut(0).load(synth_track(2000));
+        app.mixer.deck_mut(1).load(synth_track(2000));
+
+        // Focus 0: play hits deck 0 only.
+        app.on_key(key(' '));
+        assert_eq!(app.mixer.deck(0).state(), DeckState::Playing);
+        assert_eq!(app.mixer.deck(1).state(), DeckState::Loaded);
+
+        // Tab to deck 1 and play: both decks play simultaneously.
+        app.on_key(KeyEvent::new(KeyCode::Tab, KeyModifiers::NONE));
+        app.on_key(key(' '));
+        assert_eq!(
+            app.mixer.deck(0).state(),
+            DeckState::Playing,
+            "deck 0 keeps playing"
+        );
+        assert_eq!(app.mixer.deck(1).state(), DeckState::Playing);
+
+        // Stop targets only the focused deck (1); deck 0 is undisturbed.
+        app.on_key(key('s'));
+        assert_eq!(app.mixer.deck(1).state(), DeckState::Stopped);
+        assert_eq!(
+            app.mixer.deck(0).state(),
+            DeckState::Playing,
+            "other deck undisturbed"
+        );
+    }
+
+    #[test]
+    fn renders_both_deck_panels_with_focus_marker() {
+        let app = App::new();
+        let text = buffer_text(&render(&app, 100, 28));
+        assert!(text.contains("Deck A"), "Deck A panel missing:\n{text}");
+        assert!(text.contains("Deck B"), "Deck B panel missing:\n{text}");
+        assert!(
+            text.contains("▸ Deck A"),
+            "focus marker should be on Deck A by default:\n{text}"
+        );
     }
 }

@@ -37,12 +37,25 @@ pub struct Deck {
     /// Playhead in stereo frames into `track.samples`.
     pos: usize,
     state: DeckState,
-    /// Linear output gain applied in [`fill`](Self::fill).
+    /// Target linear output gain (what the dB readout shows). Set by
+    /// [`set_gain`](Self::set_gain); `fill` ramps toward it.
     gain: f32,
+    /// The gain actually applied right now; ramps toward `gain` one step
+    /// per frame so level changes don't click (zipper noise).
+    smoothed_gain: f32,
     /// Source display name (e.g. file name), used when the track carries
     /// no ID3 title. See [`display_name`](Self::display_name).
     name: Option<String>,
 }
+
+/// Allowed gain range: silence up to +3.5 dB of headroom (1.5x linear).
+pub const GAIN_MIN: f32 = 0.0;
+pub const GAIN_MAX: f32 = 1.5;
+
+/// Max change in applied gain per frame, so a jump de-zippers over a few
+/// milliseconds instead of clicking. `1/512` traverses unity in ~12ms at
+/// 44.1 kHz.
+const GAIN_RAMP_STEP: f32 = 1.0 / 512.0;
 
 impl Default for Deck {
     fn default() -> Self {
@@ -58,8 +71,21 @@ impl Deck {
             pos: 0,
             state: DeckState::Empty,
             gain: 1.0,
+            smoothed_gain: 1.0,
             name: None,
         }
+    }
+
+    /// Set the target gain, clamped to `[GAIN_MIN, GAIN_MAX]`. The applied
+    /// gain ramps toward it in [`fill`](Self::fill) to avoid zipper noise;
+    /// the value returned by [`gain`](Self::gain) updates immediately.
+    pub fn set_gain(&mut self, gain: f32) {
+        self.gain = gain.clamp(GAIN_MIN, GAIN_MAX);
+    }
+
+    /// Nudge the target gain by `delta` (clamped). Bound to `+`/`-` in the UI.
+    pub fn nudge_gain(&mut self, delta: f32) {
+        self.set_gain(self.gain + delta);
     }
 
     /// Load a decoded track, rewinding to the start and entering
@@ -137,11 +163,20 @@ impl Deck {
         let avail = total.saturating_sub(self.pos);
         let n = frames_out.min(avail);
 
+        let target = self.gain;
+        let mut g = self.smoothed_gain;
         for i in 0..n {
+            // Ramp the applied gain toward the target by at most one step.
+            if g < target {
+                g = (g + GAIN_RAMP_STEP).min(target);
+            } else if g > target {
+                g = (g - GAIN_RAMP_STEP).max(target);
+            }
             let src = (self.pos + i) * 2;
-            out[i * 2] = track.samples[src] * self.gain;
-            out[i * 2 + 1] = track.samples[src + 1] * self.gain;
+            out[i * 2] = track.samples[src] * g;
+            out[i * 2 + 1] = track.samples[src + 1] * g;
         }
+        self.smoothed_gain = g;
         // Silence the remainder (end-of-track underrun, or an over-long buffer).
         out[n * 2..].iter_mut().for_each(|s| *s = 0.0);
 
@@ -323,5 +358,57 @@ mod tests {
         let mut buf = [0.0f32; 4];
         d.fill(&mut buf);
         assert!(buf.iter().all(|&s| s == 1.0), "unity gain passes through");
+    }
+
+    #[test]
+    fn set_gain_clamps_to_range() {
+        let mut d = Deck::new();
+        d.set_gain(99.0);
+        assert_eq!(d.gain(), GAIN_MAX);
+        d.set_gain(-5.0);
+        assert_eq!(d.gain(), GAIN_MIN);
+    }
+
+    #[test]
+    fn nudge_gain_steps_and_clamps() {
+        let mut d = Deck::new();
+        d.nudge_gain(0.05);
+        assert!((d.gain() - 1.05).abs() < 1e-6);
+        for _ in 0..100 {
+            d.nudge_gain(-0.05);
+        }
+        assert_eq!(d.gain(), GAIN_MIN, "nudging down clamps at min");
+    }
+
+    #[test]
+    fn gain_change_ramps_without_jumping() {
+        let mut d = Deck::new();
+        d.load(track(10_000, 1.0, 44_100));
+        d.play();
+        d.set_gain(0.0); // ask for silence from unity
+        let mut buf = [0.0f32; 4]; // 2 frames
+        d.fill(&mut buf);
+        // First frame dropped by only one ramp step — no click to silence.
+        assert!(
+            buf[0] > 0.99,
+            "instantaneous jump to silence (zipper): {}",
+            buf[0]
+        );
+        assert!(buf[0] < 1.0, "gain should have begun ramping down");
+        // The target value is visible immediately even though audio lags.
+        assert_eq!(d.gain(), 0.0);
+    }
+
+    #[test]
+    fn gain_reaches_target_after_enough_frames() {
+        let mut d = Deck::new();
+        d.load(track(10_000, 1.0, 44_100));
+        d.play();
+        d.set_gain(0.5);
+        let mut buf = vec![0.0f32; 8192]; // 4096 frames >> ramp length
+        d.fill(&mut buf);
+        // Tail has fully ramped to the 0.5 target.
+        let last = buf[buf.len() - 1];
+        assert!((last - 0.5).abs() < 1e-4, "expected ~0.5, got {last}");
     }
 }

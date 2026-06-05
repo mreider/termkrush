@@ -4,11 +4,132 @@
 //! per-deck gain, BPM sync and beat-matching, minimal FX (filter, echo,
 //! reverb), and the master tap that feeds the recorder.
 //!
-//! Placeholder until the two-deck mix and sync stories land.
+//! For now it carries the **master gain** applied to the mixed output.
+//! Summing multiple decks and the crossfader arrive with the two-deck
+//! stories; today there is a single deck, so the master simply scales it.
 
-/// Create the master mixer with no decks attached.
-///
-/// Placeholder: real summing and crossfade arrive with the mix stories.
-pub fn new_mixer() {
-    // intentionally empty for the scaffold
+/// Allowed master gain range: silence up to +3.5 dB of headroom.
+pub const MASTER_MIN: f32 = 0.0;
+pub const MASTER_MAX: f32 = 1.5;
+
+/// Max change in applied master gain per frame, matching the deck's ramp
+/// so master moves de-zipper too.
+const MASTER_RAMP_STEP: f32 = 1.0 / 512.0;
+
+/// The master bus. Owns the master gain and applies it (smoothly) to an
+/// interleaved-stereo buffer.
+#[derive(Debug)]
+pub struct Mixer {
+    /// Target master gain (what the dB readout shows).
+    master: f32,
+    /// Applied master gain, ramped toward `master` per frame.
+    smoothed: f32,
+}
+
+impl Default for Mixer {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl Mixer {
+    /// A master bus at unity gain.
+    pub fn new() -> Self {
+        Mixer {
+            master: 1.0,
+            smoothed: 1.0,
+        }
+    }
+
+    /// Set the target master gain, clamped to `[MASTER_MIN, MASTER_MAX]`.
+    pub fn set_master(&mut self, gain: f32) {
+        self.master = gain.clamp(MASTER_MIN, MASTER_MAX);
+    }
+
+    /// Nudge the master gain by `delta` (clamped). Bound to `<`/`>` in the UI.
+    pub fn nudge_master(&mut self, delta: f32) {
+        self.set_master(self.master + delta);
+    }
+
+    /// Current target master gain (1.0 == unity).
+    pub fn master_gain(&self) -> f32 {
+        self.master
+    }
+
+    /// Apply the master gain to an interleaved-stereo buffer in place,
+    /// ramping toward the target one step per frame so changes don't click.
+    pub fn apply(&mut self, buf: &mut [f32]) {
+        let target = self.master;
+        let mut g = self.smoothed;
+        for frame in buf.chunks_mut(2) {
+            if g < target {
+                g = (g + MASTER_RAMP_STEP).min(target);
+            } else if g > target {
+                g = (g - MASTER_RAMP_STEP).max(target);
+            }
+            for s in frame.iter_mut() {
+                *s *= g;
+            }
+        }
+        self.smoothed = g;
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn master_clamps_to_range() {
+        let mut m = Mixer::new();
+        m.set_master(99.0);
+        assert_eq!(m.master_gain(), MASTER_MAX);
+        m.set_master(-1.0);
+        assert_eq!(m.master_gain(), MASTER_MIN);
+    }
+
+    #[test]
+    fn nudge_moves_and_clamps() {
+        let mut m = Mixer::new();
+        m.nudge_master(0.05);
+        assert!((m.master_gain() - 1.05).abs() < 1e-6);
+        for _ in 0..100 {
+            m.nudge_master(0.05);
+        }
+        assert_eq!(m.master_gain(), MASTER_MAX, "nudging up clamps at max");
+    }
+
+    #[test]
+    fn apply_at_unity_is_transparent() {
+        let mut m = Mixer::new();
+        let mut buf = vec![0.5f32; 16];
+        m.apply(&mut buf);
+        assert!(buf.iter().all(|&s| (s - 0.5).abs() < 1e-6));
+    }
+
+    #[test]
+    fn apply_ramps_without_jumping() {
+        let mut m = Mixer::new();
+        m.set_master(0.0); // target silence from unity
+        let mut buf = vec![1.0f32; 4]; // 2 frames
+        m.apply(&mut buf);
+        // After one frame the gain has only dropped by a step, not to 0.
+        let expected_first = 1.0 - MASTER_RAMP_STEP;
+        assert!(
+            (buf[0] - expected_first).abs() < 1e-4,
+            "first frame should ramp by one step, got {}",
+            buf[0]
+        );
+        assert!(buf[0] > 0.9, "no instantaneous jump to silence");
+    }
+
+    #[test]
+    fn apply_reaches_target_eventually() {
+        let mut m = Mixer::new();
+        m.set_master(0.5);
+        let mut buf = vec![1.0f32; 4096]; // plenty of frames to converge
+        m.apply(&mut buf);
+        // The tail is multiplied by the fully-ramped 0.5.
+        assert!((buf[buf.len() - 1] - 0.5).abs() < 1e-4);
+    }
 }

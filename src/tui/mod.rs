@@ -27,6 +27,10 @@ use ratatui::widgets::{Block, Clear, Paragraph};
 
 use crate::audio::AudioOutput;
 use crate::deck::{Deck, DeckState};
+use crate::mix::Mixer;
+
+/// Per-keypress gain nudge (linear), for both deck and master.
+const GAIN_NUDGE: f32 = 0.05;
 
 /// CRT amber, `#ffb000` — the wordmark and accents.
 pub const AMBER: Color = Color::Rgb(0xff, 0xb0, 0x00);
@@ -51,14 +55,17 @@ pub enum Action {
     PlayPause,
     Stop,
     OpenFile,
+    DeckGain,
+    MasterGain,
 }
 
-/// UI state for the shell, including the single v1 deck.
+/// UI state for the shell: the single v1 deck plus the master bus.
 #[derive(Debug, Default)]
 pub struct App {
     pub show_help: bool,
     pub should_quit: bool,
     pub deck: Deck,
+    pub mixer: Mixer,
 }
 
 impl App {
@@ -108,6 +115,25 @@ impl App {
             }
             // Loading a file is I/O — signal intent, let the event loop decode.
             (KeyCode::Char('o'), _) => Action::OpenFile,
+            // Deck volume: `+`/`=` up, `-` down.
+            (KeyCode::Char('+' | '='), _) => {
+                self.deck.nudge_gain(GAIN_NUDGE);
+                Action::DeckGain
+            }
+            (KeyCode::Char('-'), _) => {
+                self.deck.nudge_gain(-GAIN_NUDGE);
+                Action::DeckGain
+            }
+            // Master volume: `>` up, `<` down. (These stand in for the
+            // spec's "Shift +/-", which terminals encode ambiguously.)
+            (KeyCode::Char('>'), _) => {
+                self.mixer.nudge_master(GAIN_NUDGE);
+                Action::MasterGain
+            }
+            (KeyCode::Char('<'), _) => {
+                self.mixer.nudge_master(-GAIN_NUDGE);
+                Action::MasterGain
+            }
             _ => Action::None,
         }
     }
@@ -143,7 +169,7 @@ pub fn draw(f: &mut Frame, app: &App) {
 
     // Transport hint row — green accent.
     let tagline =
-        Paragraph::new("terminal DJ  —  o load  space play/pause  s stop   ? help  q quit")
+        Paragraph::new("o load  space play/pause  s stop  +/- vol  </> master   ? help  q quit")
             .alignment(Alignment::Center)
             .style(Style::default().fg(GREEN).bg(BG));
     f.render_widget(tagline, rows[2]);
@@ -151,9 +177,32 @@ pub fn draw(f: &mut Frame, app: &App) {
     let panel_area = centered_rect(rows[3], 54, 6);
     draw_deck_panel(f, panel_area, &app.deck);
 
+    // Master readout, one line directly below the deck panel.
+    let master_y = panel_area.y + panel_area.height;
+    if master_y < area.y + area.height {
+        let master_area = Rect::new(panel_area.x, master_y, panel_area.width, 1);
+        let master = Paragraph::new(format!(
+            "master {:.2}  {}   ( < / > )",
+            app.mixer.master_gain(),
+            fmt_db(app.mixer.master_gain()),
+        ))
+        .alignment(Alignment::Center)
+        .style(Style::default().fg(GREEN).bg(BG));
+        f.render_widget(master, master_area);
+    }
+
     if app.show_help {
         draw_help(f, area);
     }
+}
+
+/// Format a linear gain as dBFS-relative decibels: `1.0 -> +0.0 dB`,
+/// `0.5 -> -6.0 dB`, `0.0 -> -inf dB`.
+fn fmt_db(gain: f32) -> String {
+    if gain <= 0.0 {
+        return "-inf dB".to_string();
+    }
+    format!("{:+.1} dB", 20.0 * gain.log10())
 }
 
 /// A `Rect` of size `w`x`h` centered within `area` (clamped to it).
@@ -198,9 +247,10 @@ fn draw_deck_panel(f: &mut Frame, area: Rect, deck: &Deck) {
             Style::default().fg(AMBER).add_modifier(Modifier::BOLD),
         )),
         Line::from(format!(
-            "{} {state_word}    gain {:.2}",
+            "{} {state_word}    gain {:.2}  {}",
             transport_glyph(deck.state()),
-            deck.gain()
+            deck.gain(),
+            fmt_db(deck.gain()),
         )),
         Line::from(progress_bar(frac, bar_w)),
         Line::from(format!("{} / {}", fmt_clock(elapsed), fmt_clock(total))),
@@ -250,15 +300,15 @@ fn fmt_clock(secs: f64) -> String {
 
 /// A centered help overlay (stub: lists the keys it knows so far).
 fn draw_help(f: &mut Frame, area: Rect) {
-    let w = 44.min(area.width);
-    let h = 11.min(area.height);
+    let w = 46.min(area.width);
+    let h = 13.min(area.height);
     let x = area.x + (area.width.saturating_sub(w)) / 2;
     let y = area.y + (area.height.saturating_sub(h)) / 2;
     let popup = Rect::new(x, y, w, h);
 
     f.render_widget(Clear, popup);
     let help = Paragraph::new(
-        "Keys\n\n  o      load demo track\n  space  play / pause\n  s      stop (rewind to 0)\n  ?      toggle this help\n  q      quit\n  C-c    quit",
+        "Keys\n\n  o       load demo track\n  space   play / pause\n  s       stop (rewind to 0)\n  + / -   deck volume\n  < / >   master volume\n  ?       toggle this help\n  q       quit\n  C-c     quit",
     )
     .block(
         Block::bordered()
@@ -356,7 +406,7 @@ fn event_loop(terminal: &mut Term) -> io::Result<()> {
         // (not a separate thread) so the realtime cpal callback stays
         // lock-free; the 32k-sample ring covers the ~33ms between frames.
         if let Some(p) = producer.as_mut() {
-            pump(&mut app.deck, p, out_channels, &mut scratch);
+            pump(&mut app.deck, &mut app.mixer, p, out_channels, &mut scratch);
         }
     }
     tracing::info!("tui event loop exited");
@@ -370,6 +420,7 @@ fn event_loop(terminal: &mut Term) -> io::Result<()> {
 /// frames as the ring currently has room for, so it never blocks.
 fn pump(
     deck: &mut Deck,
+    mixer: &mut Mixer,
     producer: &mut rtrb::Producer<f32>,
     channels: u16,
     scratch: &mut Vec<f32>,
@@ -381,6 +432,7 @@ fn pump(
     }
     scratch.resize(frames * 2, 0.0);
     deck.fill(scratch);
+    mixer.apply(scratch); // master gain on the mixed (single-deck) output
     for f in 0..frames {
         let (l, r) = (scratch[f * 2], scratch[f * 2 + 1]);
         for ch in 0..channels {
@@ -636,5 +688,45 @@ mod tests {
         assert_eq!(fmt_clock(0.0), "00:00.0");
         assert_eq!(fmt_clock(9.25), "00:09.2");
         assert_eq!(fmt_clock(75.0), "01:15.0");
+    }
+
+    #[test]
+    fn plus_minus_nudge_deck_gain() {
+        let mut app = loaded_app();
+        assert_eq!(app.on_key(key('+')), Action::DeckGain);
+        assert!((app.deck.gain() - 1.05).abs() < 1e-6);
+        assert_eq!(app.on_key(key('=')), Action::DeckGain); // '=' is an alias for '+'
+        assert!((app.deck.gain() - 1.10).abs() < 1e-6);
+        assert_eq!(app.on_key(key('-')), Action::DeckGain);
+        assert!((app.deck.gain() - 1.05).abs() < 1e-6);
+    }
+
+    #[test]
+    fn angle_brackets_nudge_master_gain() {
+        let mut app = loaded_app();
+        assert_eq!(app.on_key(key('>')), Action::MasterGain);
+        assert!((app.mixer.master_gain() - 1.05).abs() < 1e-6);
+        assert_eq!(app.on_key(key('<')), Action::MasterGain);
+        assert!((app.mixer.master_gain() - 1.0).abs() < 1e-6);
+        // Deck gain is untouched by master keys.
+        assert!((app.deck.gain() - 1.0).abs() < 1e-6);
+    }
+
+    #[test]
+    fn panel_shows_db_readout_and_master() {
+        let app = app_with_track(1000, 100); // gain 1.0, master 1.0
+        let text = buffer_text(&render(&app, 80, 24));
+        assert!(
+            text.contains("+0.0 dB"),
+            "unity dB readout missing:\n{text}"
+        );
+        assert!(text.contains("master"), "master readout missing:\n{text}");
+    }
+
+    #[test]
+    fn fmt_db_values() {
+        assert_eq!(fmt_db(1.0), "+0.0 dB");
+        assert_eq!(fmt_db(0.5), "-6.0 dB");
+        assert_eq!(fmt_db(0.0), "-inf dB");
     }
 }

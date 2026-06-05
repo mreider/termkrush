@@ -55,3 +55,36 @@ golden_snapshot("crossfade_equal_power", &output);
 
 Review the resulting `tests/golden/` diff before committing — a changed
 snapshot is a changed sound.
+
+## Property tests (`tests/dsp_props.rs`)
+
+DSP code is a good fit for property-based testing: instead of one hand-picked
+input, [`proptest`](https://docs.rs/proptest) generates many and checks an
+*invariant* holds for all of them, then shrinks any failure to a minimal
+counterexample.
+
+```rust
+use proptest::prelude::*;
+
+proptest! {
+    #[test]
+    fn silence_in_silence_out(frames in 1usize..2000) {
+        // ... build a silent track, run it through the mixer ...
+        prop_assert!(out.iter().all(|&s| s == 0.0));
+    }
+}
+```
+
+**Reach for a property test when** the correctness rule is universal over a
+range of inputs — "never emits NaN", "silence in ⇒ silence out", "unity gain
+is identity", "output magnitude is bounded by the input", "resampling at
+ratio 1.0 is a no-op". The generator explores edge cases (empty buffers,
+extreme gains, boundary positions) you would not think to enumerate.
+
+**Stick with an example test when** you are pinning one specific, meaningful
+case — a known fixture's RMS, the exact duration of the 10s file, a
+particular key mapping. Those read clearly as `assert_eq!` and double as
+documentation; a property test would obscure the intent.
+
+Rule of thumb: example tests for *known answers*, property tests for
+*invariants*. The DSP path (`deck`, `mix`) carries both.

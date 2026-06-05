@@ -1,3 +1,4 @@
+mode: autonomous
 new_story:
     priority_position: bottom
     icebox_position: bottom

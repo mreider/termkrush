@@ -57,7 +57,6 @@
 |  | [Smart crates](termkrush/Smart-crates.md) |  | [library](.am/tags/library.md) [icebox](.am/tags/icebox.md) |
 |  | [Spectrum analyzer](termkrush/Spectrum-analyzer.md) |  | [tui](.am/tags/tui.md) [icebox](.am/tags/icebox.md) [viz](.am/tags/viz.md) |
 |  | [Sync deck BPM to reference deck](termkrush/Sync-deck-BPM-to-reference-deck.md) | 3 | [tempo](.am/tags/tempo.md) [sync](.am/tags/sync.md) |
-|  | [TUI deck panel](termkrush/TUI-deck-panel.md) | 2 | [tui](.am/tags/tui.md) [one-deck](.am/tags/one-deck.md) |
 |  | [Tap tempo](termkrush/Tap-tempo.md) |  | [tempo](.am/tags/tempo.md) [icebox](.am/tags/icebox.md) |
 |  | [Tempo nudge controls](termkrush/Tempo-nudge-controls.md) | 2 | [tempo](.am/tags/tempo.md) [tui](.am/tags/tui.md) |
 |  | [Tempo ramping curves](termkrush/Tempo-ramping-curves.md) |  | [tempo](.am/tags/tempo.md) [icebox](.am/tags/icebox.md) |
@@ -75,7 +74,7 @@
 |  | [V0.6.0 record](termkrush/v060-record.md) |  |  |
 |  | [Yt-dlp shell-out for media URLs](termkrush/yt-dlp-shell-out-for-media-URLs.md) | 3 | [download](.am/tags/download.md) [yt-dlp](.am/tags/yt-dlp.md) |
 |  | [Property-based testing for DSP code](termkrush/Property-based-testing-for-DSP-code.md) |  | [test](.am/tags/test.md) [dsp](.am/tags/dsp.md) [foundation](.am/tags/foundation.md) |
-| Total Points | | 100 | |
+| Total Points | | 98 | |
 
 ### Started
 | User | Title | Points | Tags |
@@ -108,6 +107,7 @@
 |  | [Symphonia mp3 decode pipeline](termkrush/Symphonia-mp3-decode-pipeline.md) | 3 | [audio](.am/tags/audio.md) [one-deck](.am/tags/one-deck.md) |
 |  | [Mp3 test fixture: encode a synthesized WAV to mp3](termkrush/mp3-test-fixture-encode-a-synthesized-WAV-to-mp3.md) |  |  |
 |  | [Deck A: load file, play, pause, stop](termkrush/Deck-A-load-file-play-pause-stop.md) | 3 | [deck](.am/tags/deck.md) [one-deck](.am/tags/one-deck.md) |
+|  | [TUI deck panel](termkrush/TUI-deck-panel.md) | 2 | [tui](.am/tags/tui.md) [one-deck](.am/tags/one-deck.md) |
 
 ### Rejected
 | User | Title | Points | Tags |

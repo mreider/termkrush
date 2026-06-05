@@ -52,3 +52,7 @@
 2026-06-05T17:14:14Z	Matt Reider	finished	termkrush/Deck-A-load-file-play-pause-stop.md	
 2026-06-05T17:14:14Z	Matt Reider	delivered	termkrush/Deck-A-load-file-play-pause-stop.md	
 2026-06-05T17:19:06Z	Matt Reider	accepted	termkrush/Deck-A-load-file-play-pause-stop.md	
+2026-06-05T17:30:11Z	Matt Reider	mode		autonomous
+2026-06-05T17:34:43Z	Matt Reider	finished	termkrush/TUI-deck-panel.md	
+2026-06-05T17:34:43Z	Matt Reider	delivered	termkrush/TUI-deck-panel.md	
+2026-06-05T17:34:43Z	Matt Reider	accepted	termkrush/TUI-deck-panel.md	All 4 criteria met by automated tests (TestBackend render + pure helper unit tests); fmt/clippy/-Dwarnings + full suite green (44 tests). Bordered panel: title w/ filename fallback, transport glyph, gain, proportional bar, elapsed/total; amber when playing.

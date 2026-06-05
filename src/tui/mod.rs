@@ -576,19 +576,30 @@ fn draw_deck_panel(f: &mut Frame, area: Rect, label: &str, deck: &Deck, focused:
         .saturating_sub(2)
         .min(48);
 
+    // The spinning platter sits on the left; the readout reads off to its
+    // right, three rows tall, with the position bar beneath.
+    let p = platter_rows(platter_bucket(elapsed));
     let lines = vec![
-        Line::from(Span::styled(
-            name.to_string(),
-            Style::default().fg(AMBER).add_modifier(Modifier::BOLD),
-        )),
+        Line::from(vec![
+            Span::raw(format!("{}  ", p[0])),
+            Span::styled(
+                name.to_string(),
+                Style::default().fg(AMBER).add_modifier(Modifier::BOLD),
+            ),
+        ]),
         Line::from(format!(
-            "{} {state_word}    gain {:.2}  {}",
+            "{}  {} {state_word}   {:.2}",
+            p[1],
             transport_glyph(deck.state()),
             deck.gain(),
-            fmt_db(deck.gain()),
+        )),
+        Line::from(format!(
+            "{}  {} / {}",
+            p[2],
+            fmt_clock(elapsed),
+            fmt_clock(total)
         )),
         Line::from(progress_bar(frac, bar_w)),
-        Line::from(format!("{} / {}", fmt_clock(elapsed), fmt_clock(total))),
     ];
 
     let panel = Paragraph::new(lines)
@@ -623,6 +634,46 @@ fn progress_bar(frac: f64, width: usize) -> String {
     }
     s.push(']');
     s
+}
+
+/// Seconds for one platter revolution (a 33⅓-rpm nod: ~1.8s/rev).
+const SECS_PER_REV: f64 = 1.8;
+
+/// Which of the 8 rim positions the platter marker sits at for a given
+/// playhead position. Advances only while the playhead does (i.e. while
+/// playing), so the platter spins during play and is still when stopped.
+fn platter_bucket(position_secs: f64) -> usize {
+    let rev = (position_secs / SECS_PER_REV).rem_euclid(1.0); // 0..1 of a turn
+    ((rev * 8.0) as usize) % 8
+}
+
+/// A tiny 3-row turntable: a record outline with a `◆` marker placed at the
+/// rim position for `bucket` (0 = north, clockwise). As `bucket` cycles the
+/// marker walks around the rim — a spinning platter.
+fn platter_rows(bucket: usize) -> [String; 3] {
+    let mut g = [
+        ['╭', '─', '─', '─', '╮'],
+        ['│', ' ', '·', ' ', '│'],
+        ['╰', '─', '─', '─', '╯'],
+    ];
+    // Rim cells clockwise from north (N, NE, E, SE, S, SW, W, NW).
+    let rim = [
+        (0, 2),
+        (0, 3),
+        (1, 4),
+        (2, 3),
+        (2, 2),
+        (2, 1),
+        (1, 0),
+        (0, 1),
+    ];
+    let (r, c) = rim[bucket % 8];
+    g[r][c] = '◆';
+    [
+        g[0].iter().collect(),
+        g[1].iter().collect(),
+        g[2].iter().collect(),
+    ]
 }
 
 /// A `|───●───|` crossfader slider `width` cells wide between the bars,
@@ -1034,8 +1085,9 @@ mod tests {
     #[test]
     fn panel_shows_title_and_total_time_on_load() {
         // Loading updates the title (filename fallback) and total time.
+        // Rendered at 100x30 (the design size) so the platter + readout fit.
         let app = app_with_track(1000, 100); // 10.0s
-        let text = buffer_text(&render(&app, 80, 24));
+        let text = buffer_text(&render(&app, 100, 30));
         assert!(text.contains("sine_a440_10s.wav"), "title missing:\n{text}");
         assert!(text.contains("00:10.0"), "total time missing:\n{text}");
     }
@@ -1375,6 +1427,28 @@ mod tests {
         // Acceptance: focus border colors match the design.
         assert_eq!(deck_border(true), AMBER);
         assert_eq!(deck_border(false), Color::DarkGray);
+    }
+
+    #[test]
+    fn platter_marker_walks_around_the_rim_with_the_playhead() {
+        // Still at the start, advances a step every 1/8 revolution, wraps.
+        assert_eq!(platter_bucket(0.0), 0);
+        assert_eq!(platter_bucket(SECS_PER_REV * 3.0 / 8.0), 3);
+        assert_eq!(platter_bucket(SECS_PER_REV), 0, "one revolution wraps");
+        // The marker sits north at bucket 0, south at bucket 4.
+        assert!(platter_rows(0)[0].contains('◆'), "north marker on top row");
+        assert!(
+            platter_rows(4)[2].contains('◆'),
+            "south marker on bottom row"
+        );
+    }
+
+    #[test]
+    fn deck_panel_renders_the_platter() {
+        let app = app_with_track(1000, 100);
+        let text = buffer_text(&render(&app, 100, 30));
+        assert!(text.contains('◆'), "platter marker missing:\n{text}");
+        assert!(text.contains('╭'), "platter ring missing:\n{text}");
     }
 
     #[test]

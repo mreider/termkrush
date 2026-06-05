@@ -476,8 +476,13 @@ pub fn draw(f: &mut Frame, app: &App) {
 /// The mixer row: a bordered panel with the crossfader fader graphic over
 /// the master readout, sitting beneath the two decks.
 fn draw_mixer_panel(f: &mut Frame, area: Rect, app: &App) {
+    // Stretch the fader across the whole width so its travel maps visually
+    // from deck A (left) to deck B (right) — the crossfader sits *between*
+    // the two turntables. Reserve a few cells for the "A " / " B" ends.
+    let inner = area.width.saturating_sub(2) as usize; // minus the borders
+    let bar_w = inner.saturating_sub(6).clamp(5, 60); // minus "A " + " B" + pad
     let lines = vec![
-        Line::from(format!("A {} B", crossfader_bar(app.mixer.xfade(), 21)))
+        Line::from(format!("A {} B", crossfader_bar(app.mixer.xfade(), bar_w)))
             .style(Style::default().fg(AMBER).add_modifier(Modifier::BOLD)),
         Line::from(format!(
             "master {:.2}  {}",
@@ -489,7 +494,7 @@ fn draw_mixer_panel(f: &mut Frame, area: Rect, app: &App) {
         .alignment(Alignment::Center)
         .block(
             Block::bordered()
-                .title("Mixer")
+                .title("Mixer  ·  crossfader")
                 .style(Style::default().fg(GREEN).bg(BG)),
         )
         .style(Style::default().fg(GREEN).bg(BG));
@@ -1554,6 +1559,26 @@ mod tests {
         let app = App::new();
         let text = buffer_text(&render(&app, 100, 28));
         assert!(text.contains('●'), "crossfader handle missing:\n{text}");
+    }
+
+    #[test]
+    fn crossfader_stretches_across_between_the_decks() {
+        // The fader spans the mixer width: A on the left (under deck A), B
+        // on the right (under deck B), with a long rail between them.
+        let text = buffer_text(&render(&App::new(), 100, 30));
+        let bar_line = text
+            .lines()
+            .find(|l| l.contains('●'))
+            .expect("a crossfader line");
+        assert!(
+            bar_line.contains('A') && bar_line.contains('B'),
+            "A/B ends missing: {bar_line}"
+        );
+        let rail = bar_line.chars().filter(|&c| c == '─').count();
+        assert!(
+            rail >= 30,
+            "fader should stretch across the decks, rail={rail}: {bar_line}"
+        );
     }
 
     #[test]

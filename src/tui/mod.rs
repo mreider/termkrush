@@ -25,6 +25,9 @@ use ratatui::crossterm::terminal::{
 use ratatui::prelude::*;
 use ratatui::widgets::{Block, Clear, Paragraph};
 
+use crate::audio::AudioOutput;
+use crate::deck::{Deck, DeckState};
+
 /// CRT amber, `#ffb000` — the wordmark and accents.
 pub const AMBER: Color = Color::Rgb(0xff, 0xb0, 0x00);
 /// CRT green, `#45f07d` — secondary text.
@@ -35,19 +38,27 @@ pub const BG: Color = Color::Rgb(0x06, 0x09, 0x07);
 /// Redraw cap: poll for input up to this long, giving ~30 Hz when idle.
 const FRAME: Duration = Duration::from_millis(33);
 
-/// What an input event asks the app to do.
+/// What an input event asks the app to do. Deck transport is applied to
+/// [`App::deck`] inside `on_key`; the variant is returned so the caller
+/// (and the tests) can observe what happened. `OpenFile` is the exception:
+/// loading a track is I/O, so `on_key` only signals intent and the event
+/// loop performs the decode.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Action {
     None,
     Quit,
     ToggleHelp,
+    PlayPause,
+    Stop,
+    OpenFile,
 }
 
-/// UI state for the shell.
+/// UI state for the shell, including the single v1 deck.
 #[derive(Debug, Default)]
 pub struct App {
     pub show_help: bool,
     pub should_quit: bool,
+    pub deck: Deck,
 }
 
 impl App {
@@ -86,6 +97,17 @@ impl App {
                 self.show_help = false;
                 Action::ToggleHelp
             }
+            // Deck transport on the (single, v1) focused deck.
+            (KeyCode::Char(' '), _) => {
+                self.deck.toggle();
+                Action::PlayPause
+            }
+            (KeyCode::Char('s'), _) => {
+                self.deck.stop();
+                Action::Stop
+            }
+            // Loading a file is I/O — signal intent, let the event loop decode.
+            (KeyCode::Char('o'), _) => Action::OpenFile,
             _ => Action::None,
         }
     }
@@ -100,10 +122,11 @@ pub fn draw(f: &mut Frame, app: &App) {
     // Paint the whole screen with the CRT background.
     f.render_widget(Block::new().style(Style::default().bg(BG)), area);
 
-    // Center a 2-line block (wordmark + tagline) vertically.
-    let mid = area.height.saturating_sub(2) / 2;
+    // Center a 3-line block (wordmark + tagline + deck status) vertically.
+    let mid = area.height.saturating_sub(3) / 2;
     let rows = Layout::vertical([
         Constraint::Length(mid),
+        Constraint::Length(1),
         Constraint::Length(1),
         Constraint::Length(1),
         Constraint::Min(0),
@@ -120,32 +143,69 @@ pub fn draw(f: &mut Frame, app: &App) {
         );
     f.render_widget(wordmark, rows[1]);
 
-    let tagline = Paragraph::new("terminal DJ  —  ? help   q quit")
-        .alignment(Alignment::Center)
-        .style(Style::default().fg(GREEN).bg(BG));
+    let tagline =
+        Paragraph::new("terminal DJ  —  o load  space play/pause  s stop   ? help  q quit")
+            .alignment(Alignment::Center)
+            .style(Style::default().fg(GREEN).bg(BG));
     f.render_widget(tagline, rows[2]);
+
+    let status = Paragraph::new(deck_status_line(&app.deck))
+        .alignment(Alignment::Center)
+        .style(Style::default().fg(AMBER).bg(BG));
+    f.render_widget(status, rows[3]);
 
     if app.show_help {
         draw_help(f, area);
     }
 }
 
+/// One-line "Deck A" transport readout: state plus `mm:ss.s` position over
+/// duration, and the track title when known.
+fn deck_status_line(deck: &Deck) -> String {
+    let state = match deck.state() {
+        DeckState::Empty => "empty",
+        DeckState::Loaded => "loaded",
+        DeckState::Playing => "playing",
+        DeckState::Paused => "paused",
+        DeckState::Stopped => "stopped",
+    };
+    if deck.state() == DeckState::Empty {
+        return "Deck A: empty  —  press o to load a track".to_string();
+    }
+    let title = deck.title().unwrap_or("track");
+    format!(
+        "Deck A: {state}  {}  /  {}   {title}",
+        fmt_clock(deck.position_secs()),
+        fmt_clock(deck.duration_secs()),
+    )
+}
+
+/// Format seconds as `mm:ss.s`.
+fn fmt_clock(secs: f64) -> String {
+    let secs = secs.max(0.0);
+    let mins = (secs / 60.0).floor() as u64;
+    let rem = secs - (mins as f64) * 60.0;
+    format!("{mins:02}:{rem:04.1}")
+}
+
 /// A centered help overlay (stub: lists the keys it knows so far).
 fn draw_help(f: &mut Frame, area: Rect) {
-    let w = 40.min(area.width);
-    let h = 7.min(area.height);
+    let w = 44.min(area.width);
+    let h = 11.min(area.height);
     let x = area.x + (area.width.saturating_sub(w)) / 2;
     let y = area.y + (area.height.saturating_sub(h)) / 2;
     let popup = Rect::new(x, y, w, h);
 
     f.render_widget(Clear, popup);
-    let help = Paragraph::new("Keys\n\n  ?   toggle this help\n  q   quit\n  C-c quit")
-        .block(
-            Block::bordered()
-                .title("Help")
-                .style(Style::default().fg(AMBER).bg(BG)),
-        )
-        .style(Style::default().fg(GREEN).bg(BG));
+    let help = Paragraph::new(
+        "Keys\n\n  o      load demo track\n  space  play / pause\n  s      stop (rewind to 0)\n  ?      toggle this help\n  q      quit\n  C-c    quit",
+    )
+    .block(
+        Block::bordered()
+            .title("Help")
+            .style(Style::default().fg(AMBER).bg(BG)),
+    )
+    .style(Style::default().fg(GREEN).bg(BG));
     f.render_widget(help, popup);
 }
 
@@ -204,17 +264,89 @@ pub fn run() -> io::Result<()> {
 
 fn event_loop(terminal: &mut Term) -> io::Result<()> {
     let mut app = App::new();
+
+    // Bring up the output device; degrade gracefully to a silent UI if it
+    // is unavailable (headless CI, no device), exactly like `--test-tone`.
+    // The ring (~93ms at 44.1k stereo) is kept topped by `pump` each frame,
+    // so it also bounds transport latency — small enough that play/pause
+    // feels responsive, large enough to ride out the ~33ms poll. A
+    // dedicated audio thread for tighter latency is a later refinement.
+    let (audio_out, mut producer) = match AudioOutput::start(1 << 13) {
+        Ok((out, prod)) => (Some(out), Some(prod)),
+        Err(e) => {
+            tracing::warn!(error = %e, "audio output unavailable; running without sound");
+            (None, None)
+        }
+    };
+    let out_channels = audio_out.as_ref().map(|o| o.channels).unwrap_or(2);
+    let target_rate = audio_out.as_ref().map(|o| o.sample_rate).unwrap_or(44_100);
+    let mut scratch: Vec<f32> = Vec::new();
+
     tracing::info!("tui event loop started");
     while !app.should_quit {
         terminal.draw(|f| draw(f, &app))?;
         // Poll up to one frame; redraw at least every FRAME, sooner on input.
         if event::poll(FRAME)? {
             let ev = event::read()?;
-            app.on_event(&ev);
+            if app.on_event(&ev) == Action::OpenFile {
+                load_demo_track(&mut app.deck, target_rate);
+            }
+        }
+        // Top up the output ring from the deck. Done here in the UI loop
+        // (not a separate thread) so the realtime cpal callback stays
+        // lock-free; the 32k-sample ring covers the ~33ms between frames.
+        if let Some(p) = producer.as_mut() {
+            pump(&mut app.deck, p, out_channels, &mut scratch);
         }
     }
     tracing::info!("tui event loop exited");
+    drop(audio_out); // stop the stream before the terminal is restored
     Ok(())
+}
+
+/// Draw stereo frames from the deck and push them into the output ring,
+/// mapping to the device's channel count (L/R, with any extra channels
+/// silent and a mono device taking the left channel). Writes only as many
+/// frames as the ring currently has room for, so it never blocks.
+fn pump(
+    deck: &mut Deck,
+    producer: &mut rtrb::Producer<f32>,
+    channels: u16,
+    scratch: &mut Vec<f32>,
+) {
+    let channels = channels.max(1) as usize;
+    let frames = producer.slots() / channels;
+    if frames == 0 {
+        return;
+    }
+    scratch.resize(frames * 2, 0.0);
+    deck.fill(scratch);
+    for f in 0..frames {
+        let (l, r) = (scratch[f * 2], scratch[f * 2 + 1]);
+        for ch in 0..channels {
+            let s = match ch {
+                0 => l,
+                1 => r,
+                _ => 0.0,
+            };
+            let _ = producer.push(s); // room was reserved above
+        }
+    }
+}
+
+/// Decode and load the demo track. Until the library view lands, the path
+/// is hard-coded (overridable with `TERMKRUSH_DEMO_TRACK`); a decode
+/// failure is logged, not fatal, so the UI keeps running.
+fn load_demo_track(deck: &mut Deck, target_rate: u32) {
+    let path = std::env::var("TERMKRUSH_DEMO_TRACK")
+        .unwrap_or_else(|_| "tests/fixtures/sine_a440_10s.wav".to_string());
+    match crate::audio::decode_file(&path, target_rate) {
+        Ok(track) => {
+            tracing::info!(path, frames = track.frames(), "deck: loaded demo track");
+            deck.load(track);
+        }
+        Err(e) => tracing::error!(error = %e, path, "deck: failed to load demo track"),
+    }
 }
 
 #[cfg(test)]
@@ -307,5 +439,72 @@ mod tests {
         let mut app = App::new();
         assert_eq!(app.on_key(key('x')), Action::None);
         assert!(!app.should_quit);
+    }
+
+    /// An app whose deck has a short synthetic track loaded.
+    fn loaded_app() -> App {
+        use crate::audio::DecodedAudio;
+        let mut app = App::new();
+        app.deck.load(DecodedAudio {
+            samples: vec![0.5; 200],
+            sample_rate: 44_100,
+            channels: 2,
+            source_sample_rate: 44_100,
+            source_channels: 2,
+            duration_secs: 100.0 / 44_100.0,
+            title: Some("demo".into()),
+            artist: None,
+        });
+        app
+    }
+
+    #[test]
+    fn space_toggles_play_pause() {
+        let mut app = loaded_app();
+        assert_eq!(app.deck.state(), DeckState::Loaded);
+        assert_eq!(app.on_key(key(' ')), Action::PlayPause);
+        assert_eq!(app.deck.state(), DeckState::Playing);
+        assert_eq!(app.on_key(key(' ')), Action::PlayPause);
+        assert_eq!(app.deck.state(), DeckState::Paused);
+    }
+
+    #[test]
+    fn s_stops_the_deck() {
+        let mut app = loaded_app();
+        app.on_key(key(' ')); // play
+        assert_eq!(app.on_key(key('s')), Action::Stop);
+        assert_eq!(app.deck.state(), DeckState::Stopped);
+    }
+
+    #[test]
+    fn o_signals_open_without_doing_io() {
+        let mut app = App::new();
+        assert_eq!(app.on_key(key('o')), Action::OpenFile);
+        // on_key must not load anything itself — that's the event loop's job.
+        assert_eq!(app.deck.state(), DeckState::Empty);
+    }
+
+    #[test]
+    fn status_line_reflects_deck_state() {
+        let buf = render(&App::new(), 80, 24);
+        assert!(
+            buffer_text(&buf).contains("press o to load"),
+            "empty deck prompt missing"
+        );
+
+        let mut app = loaded_app();
+        app.on_key(key(' ')); // play
+        let buf = render(&app, 80, 24);
+        assert!(
+            buffer_text(&buf).contains("playing"),
+            "playing state missing from status line"
+        );
+    }
+
+    #[test]
+    fn clock_formats_mm_ss() {
+        assert_eq!(fmt_clock(0.0), "00:00.0");
+        assert_eq!(fmt_clock(9.25), "00:09.2");
+        assert_eq!(fmt_clock(75.0), "01:15.0");
     }
 }

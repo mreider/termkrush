@@ -114,3 +114,7 @@
 2026-06-05T21:39:33Z	Matt Reider	finished	termkrush/Per-deck-track-switching-from-the-loaded-list.md	
 2026-06-05T21:39:33Z	Matt Reider	delivered	termkrush/Per-deck-track-switching-from-the-loaded-list.md	
 2026-06-05T21:39:33Z	Matt Reider	accepted	termkrush/Per-deck-track-switching-from-the-loaded-list.md	Session 'Loaded' shortlist (App.recent, dedup, cap 6, most-recent-first) shown in a panel under the crate; populated on successful load (load_into now returns bool). Toggle (tab) + crate-enter-into-focused + deck independence were already in place from keymap/crate/Deck-B — this adds the loaded list + verifies the switch flow. fmt/clippy/-Dwarnings + tests green.
+2026-06-05T21:40:11Z	Matt Reider	started	termkrush/Crossfader-between-the-turntables.md	
+2026-06-05T21:41:27Z	Matt Reider	finished	termkrush/Crossfader-between-the-turntables.md	
+2026-06-05T21:41:27Z	Matt Reider	delivered	termkrush/Crossfader-between-the-turntables.md	
+2026-06-05T21:41:27Z	Matt Reider	accepted	termkrush/Crossfader-between-the-turntables.md	Full-width crossfader in the Mixer row beneath the decks: A ───●─── B stretches across so travel maps A(left)→B(right). g/h slide + space center (keymap) and the Mixer::xfade audio (crossfader-audio story) unchanged. fmt/clippy/-Dwarnings + tests green.

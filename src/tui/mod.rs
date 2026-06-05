@@ -102,7 +102,13 @@ pub struct App {
     pending_load: Option<PathBuf>,
     /// When true the crate browser is hidden, giving the decks full width.
     crate_collapsed: bool,
+    /// Recently loaded tracks (most-recent first), shown as the "Loaded"
+    /// shortlist for quick re-assignment to a deck.
+    recent: Vec<PathBuf>,
 }
+
+/// How many recently-loaded tracks the "Loaded" shortlist keeps.
+const RECENT_CAP: usize = 6;
 
 impl App {
     pub fn new() -> Self {
@@ -149,6 +155,20 @@ impl App {
     /// event loop calls this and performs the decode.
     pub fn take_pending_load(&mut self) -> Option<PathBuf> {
         self.pending_load.take()
+    }
+
+    /// Record a track as freshly loaded — front of the "Loaded" shortlist,
+    /// de-duplicated, capped at [`RECENT_CAP`]. Called by the event loop
+    /// after a successful load.
+    pub fn note_loaded(&mut self, path: PathBuf) {
+        self.recent.retain(|p| p != &path);
+        self.recent.insert(0, path);
+        self.recent.truncate(RECENT_CAP);
+    }
+
+    /// The "Loaded" shortlist, most-recent first.
+    pub fn recent(&self) -> &[PathBuf] {
+        &self.recent
     }
 
     fn sel_down(&mut self) {
@@ -419,7 +439,10 @@ pub fn draw(f: &mut Frame, app: &App) {
         rows[3]
     } else {
         let body = Layout::horizontal([Constraint::Length(32), Constraint::Min(0)]).split(rows[3]);
-        draw_crate_panel(f, body[0], app);
+        // Left column: the crate browser, with the "Loaded" shortlist beneath.
+        let left = Layout::vertical([Constraint::Min(0), Constraint::Length(8)]).split(body[0]);
+        draw_crate_panel(f, left[0], app);
+        draw_loaded_panel(f, left[1], app);
         body[1]
     };
 
@@ -516,6 +539,31 @@ fn draw_crate_panel(f: &mut Frame, area: Rect, app: &App) {
         state.select(Some(app.crate_sel.min(visible.len().saturating_sub(1))));
     }
     f.render_stateful_widget(list, area, &mut state);
+}
+
+/// The "Loaded" shortlist: tracks pulled into the session this run, most
+/// recent first. A quick reference for what's available to drop onto a
+/// deck (focus with `tab`, then load from the crate / re-pick here).
+fn draw_loaded_panel(f: &mut Frame, area: Rect, app: &App) {
+    let lines: Vec<Line> = if app.recent().is_empty() {
+        vec![Line::from("  (none yet)")]
+    } else {
+        app.recent()
+            .iter()
+            .map(|p| {
+                let name = p.file_name().and_then(|n| n.to_str()).unwrap_or("track");
+                Line::from(format!("• {name}"))
+            })
+            .collect()
+    };
+    let panel = Paragraph::new(lines)
+        .block(
+            Block::bordered()
+                .title("Loaded")
+                .style(Style::default().fg(GREEN).bg(BG)),
+        )
+        .style(Style::default().fg(GREEN).bg(BG));
+    f.render_widget(panel, area);
 }
 
 /// Format a linear gain as dBFS-relative decibels: `1.0 -> +0.0 dB`,
@@ -815,11 +863,15 @@ fn event_loop(terminal: &mut Term) -> io::Result<()> {
             match app.on_event(&ev) {
                 Action::OpenFile => {
                     let path = demo_track_path();
-                    load_into(&mut app.mixer, focus, &path, target_rate, &bpm_tx);
+                    if load_into(&mut app.mixer, focus, &path, target_rate, &bpm_tx) {
+                        app.note_loaded(path);
+                    }
                 }
                 Action::LoadSelected => {
                     if let Some(path) = app.take_pending_load() {
-                        load_into(&mut app.mixer, focus, &path, target_rate, &bpm_tx);
+                        if load_into(&mut app.mixer, focus, &path, target_rate, &bpm_tx) {
+                            app.note_loaded(path);
+                        }
                     }
                 }
                 _ => {}
@@ -873,15 +925,16 @@ fn pump(
 }
 
 /// Decode `path` at the output rate, load it into deck `idx`, and kick off
-/// background BPM detection that posts its result back via `bpm_tx`. A
-/// decode failure is logged, not fatal, so the UI keeps running.
+/// background BPM detection that posts its result back via `bpm_tx`.
+/// Returns `true` on a successful load. A decode failure is logged, not
+/// fatal, so the UI keeps running.
 fn load_into(
     mixer: &mut Mixer,
     idx: usize,
     path: &Path,
     target_rate: u32,
     bpm_tx: &std::sync::mpsc::Sender<(usize, f32)>,
-) {
+) -> bool {
     match crate::audio::decode_file(path, target_rate) {
         Ok(track) => {
             tracing::info!(path = %path.display(), frames = track.frames(), "deck: loaded track");
@@ -905,8 +958,12 @@ fn load_into(
                 .unwrap_or("track")
                 .to_string();
             mixer.deck_mut(idx).load_named(track, name);
+            true
         }
-        Err(e) => tracing::error!(error = %e, path = %path.display(), "deck: failed to load track"),
+        Err(e) => {
+            tracing::error!(error = %e, path = %path.display(), "deck: failed to load track");
+            false
+        }
     }
 }
 
@@ -1497,5 +1554,39 @@ mod tests {
         let app = App::new();
         let text = buffer_text(&render(&app, 100, 28));
         assert!(text.contains('●'), "crossfader handle missing:\n{text}");
+    }
+
+    #[test]
+    fn note_loaded_dedups_caps_and_orders() {
+        let mut app = App::new();
+        for i in 0..8 {
+            app.note_loaded(PathBuf::from(format!("/m/{i}.mp3")));
+        }
+        assert_eq!(app.recent().len(), RECENT_CAP, "capped at {RECENT_CAP}");
+        assert_eq!(
+            app.recent()[0],
+            PathBuf::from("/m/7.mp3"),
+            "most recent first"
+        );
+        // Re-loading an existing track moves it to the front, no growth/dupes.
+        let again = PathBuf::from("/m/5.mp3");
+        app.note_loaded(again.clone());
+        assert_eq!(app.recent()[0], again);
+        assert_eq!(app.recent().len(), RECENT_CAP);
+        let dupes = app.recent().iter().filter(|p| **p == again).count();
+        assert_eq!(dupes, 1, "no duplicates in the shortlist");
+    }
+
+    #[test]
+    fn loaded_panel_lists_recent_tracks() {
+        let mut app = app_with_crate(&["x.mp3"]);
+        assert!(buffer_text(&render(&app, 100, 30)).contains("(none yet)"));
+        app.note_loaded(PathBuf::from("/music/banger.mp3"));
+        let text = buffer_text(&render(&app, 100, 30));
+        assert!(
+            text.contains("Loaded"),
+            "loaded panel title missing:\n{text}"
+        );
+        assert!(text.contains("banger.mp3"), "recent track missing:\n{text}");
     }
 }

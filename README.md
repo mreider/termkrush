@@ -39,13 +39,38 @@ Rust 1.75+ (MSRV). The toolchain pin lives in `rust-toolchain.toml`.
 
 ## Keyboard cheatsheet
 
-_Placeholder — fills in as transport, crossfade, scratch, and FX land._
+_Fills in further as crossfade, scratch, and FX land._
 
-| Key        | Action            |
-|------------|-------------------|
-| `?`        | help (planned)    |
-| `space`    | play/pause deck   |
-| `q`        | quit              |
+| Key            | Action                                  |
+|----------------|-----------------------------------------|
+| `/`            | filter the crate; `Esc` clears          |
+| `j` / `k`      | move the crate selection                |
+| `enter`        | load the highlighted track              |
+| `o`            | load the demo track (or `$TERMKRUSH_DEMO_TRACK`) |
+| `space`        | play / pause                            |
+| `s`            | stop (rewind to 0)                      |
+| `←` / `→`      | seek ±5s (`shift` ±30s)                  |
+| `,` / `.`      | scrub ±0.1s                             |
+| `+` / `-`      | deck volume                             |
+| `<` / `>`      | master volume                           |
+| `?`            | toggle help                             |
+| `q` / `C-c`    | quit                                    |
+
+## Configuration
+
+TermKrush reads an optional config file at
+`~/.config/termkrush/config.toml` (or `$XDG_CONFIG_HOME/termkrush/config.toml`).
+Every key is optional; missing keys fall back to defaults.
+
+```toml
+# Root directory scanned (recursively) for the local crate of mp3s.
+# Default: ~/Music/termkrush
+crate_root = "~/Music/termkrush"
+```
+
+The crate browser lists every `*.mp3` under `crate_root` at launch; press
+`enter` to load the highlighted track into the deck. A leading `~/` in
+`crate_root` expands to your home directory.
 
 ## Layout
 

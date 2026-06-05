@@ -15,6 +15,7 @@
 //! tagline, near-black background.
 
 use std::io::{self, Stdout};
+use std::path::{Path, PathBuf};
 use std::time::Duration;
 
 use ratatui::crossterm::event::{self, Event, KeyCode, KeyEvent, KeyEventKind, KeyModifiers};
@@ -23,10 +24,12 @@ use ratatui::crossterm::terminal::{
     disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen,
 };
 use ratatui::prelude::*;
-use ratatui::widgets::{Block, Clear, Paragraph};
+use ratatui::widgets::{Block, Clear, List, ListItem, ListState, Paragraph};
 
 use crate::audio::AudioOutput;
+use crate::config::Config;
 use crate::deck::{Deck, DeckState};
+use crate::library::Crate;
 use crate::mix::Mixer;
 
 /// Per-keypress gain nudge (linear), for both deck and master.
@@ -63,20 +66,71 @@ pub enum Action {
     DeckGain,
     MasterGain,
     Seek,
+    CrateNav,
+    Filter,
+    LoadSelected,
 }
 
-/// UI state for the shell: the single v1 deck plus the master bus.
+/// UI state for the shell: the single v1 deck, the master bus, and the
+/// browsable local crate.
 #[derive(Debug, Default)]
 pub struct App {
     pub show_help: bool,
     pub should_quit: bool,
     pub deck: Deck,
     pub mixer: Mixer,
+    /// Scanned local crate of mp3s.
+    crate_lib: Crate,
+    /// Selection index into the *filtered* crate view.
+    crate_sel: usize,
+    /// `Some(query)` while the `/` filter is active; `None` otherwise.
+    filter: Option<String>,
+    /// Set when the user picks a track to load; the event loop performs the
+    /// decode (I/O) and clears it.
+    pending_load: Option<PathBuf>,
 }
 
 impl App {
     pub fn new() -> Self {
         App::default()
+    }
+
+    /// Install a freshly-scanned crate, resetting the selection.
+    pub fn set_crate(&mut self, crate_lib: Crate) {
+        self.crate_lib = crate_lib;
+        self.crate_sel = 0;
+    }
+
+    /// The current filter query (empty string when not filtering).
+    fn filter_query(&self) -> &str {
+        self.filter.as_deref().unwrap_or("")
+    }
+
+    /// The crate entries currently visible (after the filter).
+    fn visible(&self) -> Vec<&crate::library::CrateEntry> {
+        self.crate_lib.filtered(self.filter_query())
+    }
+
+    /// Path of the highlighted crate entry, if any.
+    fn selected_path(&self) -> Option<PathBuf> {
+        self.visible().get(self.crate_sel).map(|e| e.path.clone())
+    }
+
+    /// Take the pending load request (set when a track is chosen). The
+    /// event loop calls this and performs the decode.
+    pub fn take_pending_load(&mut self) -> Option<PathBuf> {
+        self.pending_load.take()
+    }
+
+    fn sel_down(&mut self) {
+        let n = self.visible().len();
+        if n > 0 {
+            self.crate_sel = (self.crate_sel + 1).min(n - 1);
+        }
+    }
+
+    fn sel_up(&mut self) {
+        self.crate_sel = self.crate_sel.saturating_sub(1);
     }
 
     /// Map a terminal event to an [`Action`], mutating state as needed.
@@ -92,6 +146,11 @@ impl App {
     pub fn on_key(&mut self, key: KeyEvent) -> Action {
         if key.kind == KeyEventKind::Release {
             return Action::None;
+        }
+        // While the filter is open, keystrokes edit the query / navigate the
+        // list rather than driving transport.
+        if self.filter.is_some() {
+            return self.on_key_filter(key);
         }
         match (key.code, key.modifiers) {
             (KeyCode::Char('q'), _) => {
@@ -165,6 +224,73 @@ impl App {
                 self.deck.seek_by(SEEK_SCRUB);
                 Action::Seek
             }
+            // Crate browsing: `/` filter, `j`/`k` navigate, Enter loads.
+            (KeyCode::Char('/'), _) => {
+                self.filter = Some(String::new());
+                self.crate_sel = 0;
+                Action::Filter
+            }
+            (KeyCode::Char('j'), _) => {
+                self.sel_down();
+                Action::CrateNav
+            }
+            (KeyCode::Char('k'), _) => {
+                self.sel_up();
+                Action::CrateNav
+            }
+            (KeyCode::Enter, _) => {
+                self.pending_load = self.selected_path();
+                if self.pending_load.is_some() {
+                    Action::LoadSelected
+                } else {
+                    Action::None
+                }
+            }
+            _ => Action::None,
+        }
+    }
+
+    /// Key handling while the `/` filter is open: type to narrow, arrows
+    /// (or while empty, nothing) navigate, Enter loads the highlight and
+    /// closes the filter, Esc clears and closes it.
+    fn on_key_filter(&mut self, key: KeyEvent) -> Action {
+        match key.code {
+            KeyCode::Esc => {
+                self.filter = None;
+                self.crate_sel = 0;
+                Action::Filter
+            }
+            KeyCode::Enter => {
+                self.pending_load = self.selected_path();
+                self.filter = None;
+                if self.pending_load.is_some() {
+                    Action::LoadSelected
+                } else {
+                    Action::None
+                }
+            }
+            KeyCode::Backspace => {
+                if let Some(q) = self.filter.as_mut() {
+                    q.pop();
+                }
+                self.crate_sel = 0;
+                Action::Filter
+            }
+            KeyCode::Up => {
+                self.sel_up();
+                Action::CrateNav
+            }
+            KeyCode::Down => {
+                self.sel_down();
+                Action::CrateNav
+            }
+            KeyCode::Char(c) => {
+                if let Some(q) = self.filter.as_mut() {
+                    q.push(c);
+                }
+                self.crate_sel = 0;
+                Action::Filter
+            }
             _ => Action::None,
         }
     }
@@ -200,18 +326,23 @@ pub fn draw(f: &mut Frame, app: &App) {
 
     // Transport hint row — green accent.
     let tagline = Paragraph::new(
-        "o load  space play  s stop  ←/→ seek  +/- vol  </> master   ? help  q quit",
+        "/ filter  j/k pick  enter load  space play  ←/→ seek  +/- vol   ? help  q quit",
     )
     .alignment(Alignment::Center)
     .style(Style::default().fg(GREEN).bg(BG));
     f.render_widget(tagline, rows[2]);
 
-    let panel_area = centered_rect(rows[3], 54, 6);
+    // Body: crate browser on the left, deck + master on the right.
+    let body =
+        Layout::horizontal([Constraint::Percentage(42), Constraint::Percentage(58)]).split(rows[3]);
+    draw_crate_panel(f, body[0], app);
+
+    let panel_area = centered_rect(body[1], 54, 6);
     draw_deck_panel(f, panel_area, &app.deck);
 
     // Master readout, one line directly below the deck panel.
     let master_y = panel_area.y + panel_area.height;
-    if master_y < area.y + area.height {
+    if master_y < body[1].y + body[1].height {
         let master_area = Rect::new(panel_area.x, master_y, panel_area.width, 1);
         let master = Paragraph::new(format!(
             "master {:.2}  {}   ( < / > )",
@@ -226,6 +357,51 @@ pub fn draw(f: &mut Frame, app: &App) {
     if app.show_help {
         draw_help(f, area);
     }
+}
+
+/// Render the crate browser: a bordered, scrollable list of tracks with
+/// the highlight at the current selection. The block title shows the
+/// track count, or the live filter query while `/` is open.
+fn draw_crate_panel(f: &mut Frame, area: Rect, app: &App) {
+    let visible = app.visible();
+    let title = match &app.filter {
+        Some(q) => format!("Crate  /{q}_  ({} match)", visible.len()),
+        None => format!("Crate  ({} tracks)", app.crate_lib.len()),
+    };
+
+    let items: Vec<ListItem> = if visible.is_empty() {
+        vec![ListItem::new(if app.crate_lib.is_empty() {
+            "  (no mp3s — set crate_root, see README)"
+        } else {
+            "  (no matches)"
+        })]
+    } else {
+        visible
+            .iter()
+            .map(|e| ListItem::new(e.name.clone()))
+            .collect()
+    };
+
+    let list = List::new(items)
+        .block(
+            Block::bordered()
+                .title(title)
+                .style(Style::default().fg(GREEN).bg(BG)),
+        )
+        .highlight_style(
+            Style::default()
+                .fg(AMBER)
+                .add_modifier(Modifier::BOLD | Modifier::REVERSED),
+        )
+        .highlight_symbol("▶ ");
+
+    // A local ListState carries the selection so the widget scrolls to keep
+    // it visible; nothing to persist between frames for a single deck.
+    let mut state = ListState::default();
+    if !visible.is_empty() {
+        state.select(Some(app.crate_sel.min(visible.len().saturating_sub(1))));
+    }
+    f.render_stateful_widget(list, area, &mut state);
 }
 
 /// Format a linear gain as dBFS-relative decibels: `1.0 -> +0.0 dB`,
@@ -332,15 +508,15 @@ fn fmt_clock(secs: f64) -> String {
 
 /// A centered help overlay (stub: lists the keys it knows so far).
 fn draw_help(f: &mut Frame, area: Rect) {
-    let w = 50.min(area.width);
-    let h = 16.min(area.height);
+    let w = 52.min(area.width);
+    let h = 18.min(area.height);
     let x = area.x + (area.width.saturating_sub(w)) / 2;
     let y = area.y + (area.height.saturating_sub(h)) / 2;
     let popup = Rect::new(x, y, w, h);
 
     f.render_widget(Clear, popup);
     let help = Paragraph::new(
-        "Keys\n\n  o          load demo track\n  space      play / pause\n  s          stop (rewind to 0)\n  ← / →      seek ±5s   (shift: ±30s)\n  , / .      scrub ±0.1s\n  + / -      deck volume\n  < / >      master volume\n  ?          toggle this help\n  q  / C-c   quit",
+        "Keys\n\n  / filter    j / k  pick    enter  load track\n  o          load demo track\n  space      play / pause\n  s          stop (rewind to 0)\n  ← / →      seek ±5s   (shift: ±30s)\n  , / .      scrub ±0.1s\n  + / -      deck volume\n  < / >      master volume\n  ?          toggle this help\n  q  / C-c   quit",
     )
     .block(
         Block::bordered()
@@ -407,6 +583,12 @@ pub fn run() -> io::Result<()> {
 fn event_loop(terminal: &mut Term) -> io::Result<()> {
     let mut app = App::new();
 
+    // Scan the configured crate root so the browser is populated at launch.
+    let cfg = Config::load();
+    let crate_lib = Crate::scan(&cfg.crate_root);
+    tracing::info!(root = %cfg.crate_root.display(), tracks = crate_lib.len(), "crate scanned");
+    app.set_crate(crate_lib);
+
     // Bring up the output device; degrade gracefully to a silent UI if it
     // is unavailable (headless CI, no device), exactly like `--test-tone`.
     // The ring (~93ms at 44.1k stereo) is kept topped by `pump` each frame,
@@ -430,8 +612,14 @@ fn event_loop(terminal: &mut Term) -> io::Result<()> {
         // Poll up to one frame; redraw at least every FRAME, sooner on input.
         if event::poll(FRAME)? {
             let ev = event::read()?;
-            if app.on_event(&ev) == Action::OpenFile {
-                load_demo_track(&mut app.deck, target_rate);
+            match app.on_event(&ev) {
+                Action::OpenFile => load_demo_track(&mut app.deck, target_rate),
+                Action::LoadSelected => {
+                    if let Some(path) = app.take_pending_load() {
+                        load_path(&mut app.deck, &path, target_rate);
+                    }
+                }
+                _ => {}
             }
         }
         // Top up the output ring from the deck. Done here in the UI loop
@@ -478,25 +666,30 @@ fn pump(
     }
 }
 
-/// Decode and load the demo track. Until the library view lands, the path
-/// is hard-coded (overridable with `TERMKRUSH_DEMO_TRACK`); a decode
-/// failure is logged, not fatal, so the UI keeps running.
-fn load_demo_track(deck: &mut Deck, target_rate: u32) {
-    let path = std::env::var("TERMKRUSH_DEMO_TRACK")
-        .unwrap_or_else(|_| "tests/fixtures/sine_a440_10s.wav".to_string());
-    match crate::audio::decode_file(&path, target_rate) {
+/// Decode `path` at the output rate and load it into the deck, using the
+/// file name as the panel's title fallback. A decode failure is logged,
+/// not fatal, so the UI keeps running.
+fn load_path(deck: &mut Deck, path: &Path, target_rate: u32) {
+    match crate::audio::decode_file(path, target_rate) {
         Ok(track) => {
-            tracing::info!(path, frames = track.frames(), "deck: loaded demo track");
-            // File name (without directory) is the panel's title fallback.
-            let name = std::path::Path::new(&path)
+            tracing::info!(path = %path.display(), frames = track.frames(), "deck: loaded track");
+            let name = path
                 .file_name()
                 .and_then(|n| n.to_str())
-                .unwrap_or(&path)
+                .unwrap_or("track")
                 .to_string();
             deck.load_named(track, name);
         }
-        Err(e) => tracing::error!(error = %e, path, "deck: failed to load demo track"),
+        Err(e) => tracing::error!(error = %e, path = %path.display(), "deck: failed to load track"),
     }
+}
+
+/// Load the `o` quick-demo track: `TERMKRUSH_DEMO_TRACK` if set, else the
+/// bundled fixture. Handy when the crate is empty.
+fn load_demo_track(deck: &mut Deck, target_rate: u32) {
+    let path = std::env::var("TERMKRUSH_DEMO_TRACK")
+        .unwrap_or_else(|_| "tests/fixtures/sine_a440_10s.wav".to_string());
+    load_path(deck, Path::new(&path), target_rate);
 }
 
 #[cfg(test)]
@@ -799,5 +992,106 @@ mod tests {
         assert!((app.deck.position_secs() - 5.1).abs() < 1e-9);
         assert_eq!(app.on_key(key(',')), Action::Seek);
         assert!((app.deck.position_secs() - 5.0).abs() < 1e-9);
+    }
+
+    /// An app with a crate of the given file names loaded.
+    fn app_with_crate(names: &[&str]) -> App {
+        use crate::library::{Crate, CrateEntry};
+        let entries = names
+            .iter()
+            .map(|n| CrateEntry {
+                path: PathBuf::from(format!("/music/{n}")),
+                name: n.to_string(),
+            })
+            .collect();
+        let mut app = App::new();
+        app.set_crate(Crate::from_entries(entries));
+        app
+    }
+
+    #[test]
+    fn slash_opens_filter_and_typing_narrows() {
+        let mut app = app_with_crate(&["alpha.mp3", "beta.mp3", "gamma.mp3"]);
+        assert_eq!(app.on_key(key('/')), Action::Filter);
+        assert_eq!(app.on_key(key('b')), Action::Filter);
+        let vis = app.visible();
+        assert_eq!(vis.len(), 1);
+        assert_eq!(vis[0].name, "beta.mp3");
+        // Esc clears the filter and closes it.
+        assert_eq!(
+            app.on_key(KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE)),
+            Action::Filter
+        );
+        assert!(app.filter.is_none());
+        assert_eq!(app.visible().len(), 3);
+    }
+
+    #[test]
+    fn jk_navigate_and_enter_loads_selected() {
+        let mut app = app_with_crate(&["alpha.mp3", "beta.mp3", "gamma.mp3"]);
+        assert_eq!(app.on_key(key('j')), Action::CrateNav); // -> beta
+        assert_eq!(app.on_key(key('j')), Action::CrateNav); // -> gamma
+        assert_eq!(app.on_key(key('k')), Action::CrateNav); // -> beta
+        assert_eq!(
+            app.on_key(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE)),
+            Action::LoadSelected
+        );
+        assert_eq!(
+            app.take_pending_load(),
+            Some(PathBuf::from("/music/beta.mp3"))
+        );
+    }
+
+    #[test]
+    fn jk_navigation_clamps_at_ends() {
+        let mut app = app_with_crate(&["a.mp3", "b.mp3"]);
+        app.on_key(key('k')); // already at top, stays 0
+        assert_eq!(app.crate_sel, 0);
+        app.on_key(key('j'));
+        app.on_key(key('j'));
+        app.on_key(key('j')); // past the end, clamps to last
+        assert_eq!(app.crate_sel, 1);
+    }
+
+    #[test]
+    fn enter_on_empty_crate_is_noop() {
+        let mut app = App::new(); // empty crate
+        assert_eq!(
+            app.on_key(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE)),
+            Action::None
+        );
+        assert!(app.take_pending_load().is_none());
+    }
+
+    #[test]
+    fn filter_enter_loads_highlight_and_closes() {
+        let mut app = app_with_crate(&["alpha.mp3", "beta.mp3"]);
+        app.on_key(key('/'));
+        app.on_key(key('a'));
+        app.on_key(key('l')); // "al" subsequence -> only alpha
+        assert_eq!(app.visible().len(), 1);
+        assert_eq!(
+            app.on_key(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE)),
+            Action::LoadSelected
+        );
+        assert!(app.filter.is_none(), "filter closes after load");
+        assert_eq!(
+            app.take_pending_load(),
+            Some(PathBuf::from("/music/alpha.mp3"))
+        );
+    }
+
+    #[test]
+    fn crate_panel_renders_names_and_filter_title() {
+        let app = app_with_crate(&["alpha.mp3", "beta.mp3"]);
+        let text = buffer_text(&render(&app, 80, 24));
+        assert!(text.contains("alpha.mp3"), "track name missing:\n{text}");
+        assert!(text.contains("Crate"), "crate title missing:\n{text}");
+
+        let mut app2 = app_with_crate(&["alpha.mp3", "beta.mp3"]);
+        app2.on_key(key('/'));
+        app2.on_key(key('b'));
+        let text2 = buffer_text(&render(&app2, 80, 24));
+        assert!(text2.contains("/b"), "filter query not in title:\n{text2}");
     }
 }

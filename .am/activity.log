@@ -80,3 +80,6 @@
 2026-06-05T18:55:59Z	Matt Reider	finished	termkrush/Two-deck-TUI-layout.md	
 2026-06-05T18:55:59Z	Matt Reider	delivered	termkrush/Two-deck-TUI-layout.md	
 2026-06-05T18:55:59Z	Matt Reider	accepted	termkrush/Two-deck-TUI-layout.md	Decks A|B side-by-side over a bordered Mixer row (crossfader fader graphic + master); collapsible crate (c); focus border amber/dim via testable deck_border(). Both panels+bars visible at 100x30. fmt/clippy/-Dwarnings + 100 tests. Completes two-decks epic (3/3). Visual proportions best confirmed by running it.
+2026-06-05T18:57:17Z	Matt Reider	started	termkrush/Property-based-testing-for-DSP-code.md	
+2026-06-05T18:58:59Z	Matt Reider	accepted	termkrush/Property-based-testing-for-DSP-code.md	
+2026-06-05T18:58:59Z	Matt Reider	accepted	termkrush/Property-based-testing-for-DSP-code.md	

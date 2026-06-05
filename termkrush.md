@@ -67,7 +67,6 @@
 |  | [V0.5.0 more decks](termkrush/v050-more-decks.md) |  |  |
 |  | [V0.6.0 record](termkrush/v060-record.md) |  |  |
 |  | [Yt-dlp shell-out for media URLs](termkrush/yt-dlp-shell-out-for-media-URLs.md) | 3 | [download](.am/tags/download.md) [yt-dlp](.am/tags/yt-dlp.md) |
-|  | [Property-based testing for DSP code](termkrush/Property-based-testing-for-DSP-code.md) |  | [test](.am/tags/test.md) [dsp](.am/tags/dsp.md) [foundation](.am/tags/foundation.md) |
 | Total Points | | 84 | |
 
 ### Started
@@ -108,6 +107,7 @@
 |  | [Deck B mirror of Deck A](termkrush/Deck-B-mirror-of-Deck-A.md) | 2 | [deck](.am/tags/deck.md) [two-decks](.am/tags/two-decks.md) |
 |  | [Crossfader audio mix](termkrush/Crossfader-audio-mix.md) | 3 | [mix](.am/tags/mix.md) [two-decks](.am/tags/two-decks.md) |
 |  | [Two-deck TUI layout](termkrush/Two-deck-TUI-layout.md) | 3 | [tui](.am/tags/tui.md) [two-decks](.am/tags/two-decks.md) |
+|  | [Property-based testing for DSP code](termkrush/Property-based-testing-for-DSP-code.md) |  | [test](.am/tags/test.md) [dsp](.am/tags/dsp.md) [foundation](.am/tags/foundation.md) |
 
 ### Rejected
 | User | Title | Points | Tags |

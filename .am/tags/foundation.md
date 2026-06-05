@@ -2,15 +2,10 @@
 
 [home](../../index.md) • [tag list](../tags.md) • [velocity](../velocity.md) • [timeline](../timeline.md) • [users](../users.md)
 
-## Unstarted
-| User | Project | Title | Points | Tags |
-|---|---|---|:---:|---|
-|  | [termkrush](../../termkrush.md) | [Property-based testing for DSP code](../../termkrush/Property-based-testing-for-DSP-code.md) |  | [test](test.md) [dsp](dsp.md) [foundation](foundation.md) |
-| Total Points | | | 0 | |
-
 ## Accepted
 | User | Project | Title | Points | Tags |
 |---|---|---|:---:|---|
+|  | [termkrush](../../termkrush.md) | [Property-based testing for DSP code](../../termkrush/Property-based-testing-for-DSP-code.md) |  | [test](test.md) [dsp](dsp.md) [foundation](foundation.md) |
 |  | [termkrush](../../termkrush.md) | [Tag-triggered release pipeline](../../termkrush/Tag-triggered-release-pipeline.md) | 3 | [foundation](foundation.md) [ci](ci.md) [release](release.md) |
 |  | [termkrush](../../termkrush.md) | [Coverage reporting in CI](../../termkrush/Coverage-reporting-in-CI.md) |  | [test](test.md) [ci](ci.md) [foundation](foundation.md) |
 |  | [termkrush](../../termkrush.md) | [CI build matrix on every PR](../../termkrush/CI-build-matrix-on-every-PR.md) | 3 | [foundation](foundation.md) [ci](ci.md) |

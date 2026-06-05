@@ -68,3 +68,7 @@
 2026-06-05T17:53:41Z	Matt Reider	finished	termkrush/Local-crate-view.md	
 2026-06-05T17:53:41Z	Matt Reider	delivered	termkrush/Local-crate-view.md	
 2026-06-05T17:53:41Z	Matt Reider	accepted	termkrush/Local-crate-view.md	Config (toml, ~/.config/termkrush/config.toml, crate_root) + recursive mp3 Crate::scan + fuzzy / filter + j/k nav + enter-load crate panel; README documents config+keys. j/k chosen over arrows (arrows=seek). Per-row duration/BPM deferred to the analysis-cache story ('if cached'). fmt/clippy/-Dwarnings + 84 tests green. Completes the one-deck epic (7/7).
+2026-06-05T18:37:44Z	Matt Reider	started	termkrush/Deck-B-mirror-of-Deck-A.md	
+2026-06-05T18:43:42Z	Matt Reider	finished	termkrush/Deck-B-mirror-of-Deck-A.md	
+2026-06-05T18:43:43Z	Matt Reider	delivered	termkrush/Deck-B-mirror-of-Deck-A.md	
+2026-06-05T18:43:43Z	Matt Reider	accepted	termkrush/Deck-B-mirror-of-Deck-A.md	Hoisted decks into Mixer ([Deck;2]) + fill_mix sum; App.focus + Tab cycle; transport/load target focused deck; dual stacked deck panels w/ focus marker. Both decks play simultaneously & independently. fmt/clippy/-Dwarnings + 90 tests. No crossfader/headroom yet (next story) — summed decks can exceed 0dBFS if both loud.

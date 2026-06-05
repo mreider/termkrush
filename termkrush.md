@@ -17,7 +17,6 @@
 |  | [Crossfader cut and momentary kill](termkrush/Crossfader-cut-and-momentary-kill.md) | 2 | [mix](.am/tags/mix.md) [scratch](.am/tags/scratch.md) |
 |  | [Custom color themes](termkrush/Custom-color-themes.md) |  | [tui](.am/tags/tui.md) [icebox](.am/tags/icebox.md) |
 |  | [DJ stabs sampler bank](termkrush/DJ-stabs-sampler-bank.md) |  | [sampler](.am/tags/sampler.md) [fx](.am/tags/fx.md) [icebox](.am/tags/icebox.md) |
-|  | [Deck B mirror of Deck A](termkrush/Deck-B-mirror-of-Deck-A.md) | 2 | [deck](.am/tags/deck.md) [two-decks](.am/tags/two-decks.md) |
 |  | [Direct URL mp3 download](termkrush/Direct-URL-mp3-download.md) | 3 | [download](.am/tags/download.md) [net](.am/tags/net.md) |
 |  | [Display BPM per deck](termkrush/Display-BPM-per-deck.md) | 1 | [tempo](.am/tags/tempo.md) [tui](.am/tags/tui.md) |
 |  | [Download TUI panel](termkrush/Download-TUI-panel.md) | 3 | [download](.am/tags/download.md) [tui](.am/tags/tui.md) |
@@ -71,7 +70,7 @@
 |  | [V0.6.0 record](termkrush/v060-record.md) |  |  |
 |  | [Yt-dlp shell-out for media URLs](termkrush/yt-dlp-shell-out-for-media-URLs.md) | 3 | [download](.am/tags/download.md) [yt-dlp](.am/tags/yt-dlp.md) |
 |  | [Property-based testing for DSP code](termkrush/Property-based-testing-for-DSP-code.md) |  | [test](.am/tags/test.md) [dsp](.am/tags/dsp.md) [foundation](.am/tags/foundation.md) |
-| Total Points | | 92 | |
+| Total Points | | 90 | |
 
 ### Started
 | User | Title | Points | Tags |
@@ -108,6 +107,7 @@
 |  | [Per-deck and master volume](termkrush/Per-deck-and-master-volume.md) | 2 | [deck](.am/tags/deck.md) [mix](.am/tags/mix.md) [one-deck](.am/tags/one-deck.md) |
 |  | [Seek and scrub position](termkrush/Seek-and-scrub-position.md) | 2 | [deck](.am/tags/deck.md) [one-deck](.am/tags/one-deck.md) |
 |  | [Local crate view](termkrush/Local-crate-view.md) | 2 | [library](.am/tags/library.md) [tui](.am/tags/tui.md) [one-deck](.am/tags/one-deck.md) |
+|  | [Deck B mirror of Deck A](termkrush/Deck-B-mirror-of-Deck-A.md) | 2 | [deck](.am/tags/deck.md) [two-decks](.am/tags/two-decks.md) |
 
 ### Rejected
 | User | Title | Points | Tags |

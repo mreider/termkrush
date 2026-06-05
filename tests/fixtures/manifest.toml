@@ -63,3 +63,14 @@ channels = 1
 format = "wav"
 source = "synthesized: seeded LCG white noise, amplitude 0.4"
 license = "CC0-1.0"
+
+[[fixture]]
+name = "sine_a440_mp3"
+file = "sine_a440_10s.mp3"
+key = "A"                     # 440 Hz == A4 (same source as sine_a440)
+duration_secs = 10.0
+sample_rate = 44100
+channels = 1
+format = "mp3"
+source = "synthesized 440 Hz sine, encoded to mp3 by lame (CBR 192 kbps, -m m -q 2)"
+license = "CC0-1.0"

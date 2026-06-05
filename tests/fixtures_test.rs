@@ -114,3 +114,25 @@ fn click_tracks_carry_known_bpm() {
     assert_eq!(fixtures::SINE_A440.bpm, None);
     assert_eq!(fixtures::NOISE_WHITE.bpm, None);
 }
+
+#[test]
+fn mp3_fixture_present_and_framed() {
+    // The mp3 fixture lives outside the WAV sweep (no RIFF header to
+    // parse). Here we only prove it is present and begins with valid mp3
+    // framing — an optional ID3v2 tag ("ID3") or an MPEG audio frame sync
+    // (11 set bits: 0xFF then the top 3 bits of the next byte). Actually
+    // *decoding* it is the symphonia decode-pipeline story's job.
+    let path = fixtures::SINE_A440_MP3.path();
+    let bytes = fs::read(&path)
+        .unwrap_or_else(|e| panic!("mp3 fixture missing at {}: {e}", path.display()));
+    assert!(bytes.len() > 1024, "mp3 fixture suspiciously small");
+
+    let has_id3 = bytes.len() >= 3 && &bytes[0..3] == b"ID3";
+    let has_frame_sync = bytes.len() >= 2 && bytes[0] == 0xFF && (bytes[1] & 0xE0) == 0xE0;
+    assert!(
+        has_id3 || has_frame_sync,
+        "mp3 fixture does not start with an ID3 tag or MPEG frame sync (got {:02X} {:02X})",
+        bytes[0],
+        bytes[1]
+    );
+}

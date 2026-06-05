@@ -79,7 +79,20 @@ pub const NOISE_WHITE: Fixture = Fixture {
     duration_secs: 5.0,
 };
 
-/// Every fixture, for suites that want to sweep the whole set.
+/// The same synthesized 440 Hz sine as [`SINE_A440`], encoded to mp3 by
+/// `lame` (CBR 192 kbps, mono). The decode-pipeline story asserts against
+/// this for real mp3 frames; it is intentionally NOT in [`ALL`], which is
+/// the WAV-header presence sweep.
+pub const SINE_A440_MP3: Fixture = Fixture {
+    name: "sine_a440_mp3",
+    file: "sine_a440_10s.mp3",
+    bpm: None,
+    sample_rate: 44100,
+    duration_secs: 10.0,
+};
+
+/// Every WAV fixture, for suites that want to sweep the whole set. The mp3
+/// fixture is excluded on purpose — the sweep parses WAV headers.
 pub const ALL: &[&Fixture] = &[
     &SINE_A440,
     &SWEEP_20_20K,

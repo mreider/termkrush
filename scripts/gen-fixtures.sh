@@ -9,11 +9,16 @@
 # always match.
 #
 # The committed WAVs are what `cargo test` uses; this script exists only
-# so they can be reproduced or extended. WAV (not mp3) because the project
-# has no mp3 encoder yet and symphonia decodes WAV natively; the manifest
-# records the format per file.
+# so they can be reproduced or extended. WAV is the synthesized source
+# format; the manifest records the format per file. One mp3 fixture is also
+# produced (by encoding a synthesized WAV with `lame`) so the symphonia
+# decode pipeline can assert against a real mp3. mp3 encoders are not
+# guaranteed byte-identical across `lame` versions, so the committed
+# `.mp3` is the source of truth and this step is best-effort regenerate;
+# the synthesized source is CC0, so the mp3 is CC0 too (mp3 patents expired
+# in 2017).
 #
-# Usage: bash scripts/gen-fixtures.sh
+# Usage: bash scripts/gen-fixtures.sh   (mp3 step needs `lame` on PATH)
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -91,3 +96,19 @@ write_wav("noise_white_5s.wav", white_noise(5.0))
 PY
 
 echo "fixtures regenerated in ${OUT}"
+
+# --- mp3 fixture -----------------------------------------------------------
+# Encode the synthesized mono 440 Hz sine to a real mp3 so the symphonia
+# decode pipeline can assert against actual mp3 frames (duration, RMS,
+# mono->stereo upmix). CBR 192 kbps, high-quality mode, mono preserved
+# (-m m) so the decoder's mono->stereo path is exercised. The committed
+# .mp3 is the source of truth; lame versions may differ byte-for-byte.
+if command -v lame >/dev/null 2>&1; then
+  lame --quiet -m m -b 192 -q 2 \
+    "${OUT}/sine_a440_10s.wav" "${OUT}/sine_a440_10s.mp3"
+  echo "  encoded sine_a440_10s.mp3 (lame: $(lame --version 2>&1 | head -1))"
+else
+  echo "  SKIP mp3: 'lame' not on PATH. Install it (brew install lame) to" >&2
+  echo "       regenerate tests/fixtures/sine_a440_10s.mp3; the committed" >&2
+  echo "       file remains the source of truth." >&2
+fi

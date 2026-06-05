@@ -122,14 +122,12 @@ pub fn draw(f: &mut Frame, app: &App) {
     // Paint the whole screen with the CRT background.
     f.render_widget(Block::new().style(Style::default().bg(BG)), area);
 
-    // Center a 3-line block (wordmark + tagline + deck status) vertically.
-    let mid = area.height.saturating_sub(3) / 2;
+    // Wordmark and the key hint near the top, the deck panel centered below.
     let rows = Layout::vertical([
-        Constraint::Length(mid),
-        Constraint::Length(1),
-        Constraint::Length(1),
-        Constraint::Length(1),
-        Constraint::Min(0),
+        Constraint::Length(1), // top padding
+        Constraint::Length(1), // wordmark
+        Constraint::Length(1), // hint row
+        Constraint::Min(0),    // body
     ])
     .split(area);
 
@@ -143,41 +141,103 @@ pub fn draw(f: &mut Frame, app: &App) {
         );
     f.render_widget(wordmark, rows[1]);
 
+    // Transport hint row — green accent.
     let tagline =
         Paragraph::new("terminal DJ  —  o load  space play/pause  s stop   ? help  q quit")
             .alignment(Alignment::Center)
             .style(Style::default().fg(GREEN).bg(BG));
     f.render_widget(tagline, rows[2]);
 
-    let status = Paragraph::new(deck_status_line(&app.deck))
-        .alignment(Alignment::Center)
-        .style(Style::default().fg(AMBER).bg(BG));
-    f.render_widget(status, rows[3]);
+    let panel_area = centered_rect(rows[3], 54, 6);
+    draw_deck_panel(f, panel_area, &app.deck);
 
     if app.show_help {
         draw_help(f, area);
     }
 }
 
-/// One-line "Deck A" transport readout: state plus `mm:ss.s` position over
-/// duration, and the track title when known.
-fn deck_status_line(deck: &Deck) -> String {
-    let state = match deck.state() {
+/// A `Rect` of size `w`x`h` centered within `area` (clamped to it).
+fn centered_rect(area: Rect, w: u16, h: u16) -> Rect {
+    let w = w.min(area.width);
+    let h = h.min(area.height);
+    let x = area.x + (area.width.saturating_sub(w)) / 2;
+    let y = area.y + (area.height.saturating_sub(h)) / 2;
+    Rect::new(x, y, w, h)
+}
+
+/// The "Deck A" panel: track name, transport glyph + state + gain, a
+/// proportional position bar, and `elapsed / total`. The border is amber
+/// while the deck is playing, dim otherwise, so the active deck stands out.
+fn draw_deck_panel(f: &mut Frame, area: Rect, deck: &Deck) {
+    let border = if deck.is_playing() {
+        AMBER
+    } else {
+        Color::DarkGray
+    };
+
+    let name = deck.display_name().unwrap_or("— no track —");
+    let state_word = match deck.state() {
         DeckState::Empty => "empty",
         DeckState::Loaded => "loaded",
         DeckState::Playing => "playing",
         DeckState::Paused => "paused",
         DeckState::Stopped => "stopped",
     };
-    if deck.state() == DeckState::Empty {
-        return "Deck A: empty  —  press o to load a track".to_string();
+    let elapsed = deck.position_secs();
+    let total = deck.duration_secs();
+    let frac = if total > 0.0 { elapsed / total } else { 0.0 };
+
+    // Bar width = inner width minus the two brackets, capped for tidiness.
+    let bar_w = (area.width.saturating_sub(2) as usize)
+        .saturating_sub(2)
+        .min(48);
+
+    let lines = vec![
+        Line::from(Span::styled(
+            name.to_string(),
+            Style::default().fg(AMBER).add_modifier(Modifier::BOLD),
+        )),
+        Line::from(format!(
+            "{} {state_word}    gain {:.2}",
+            transport_glyph(deck.state()),
+            deck.gain()
+        )),
+        Line::from(progress_bar(frac, bar_w)),
+        Line::from(format!("{} / {}", fmt_clock(elapsed), fmt_clock(total))),
+    ];
+
+    let panel = Paragraph::new(lines)
+        .block(
+            Block::bordered()
+                .title("Deck A")
+                .style(Style::default().fg(border).bg(BG)),
+        )
+        .style(Style::default().fg(GREEN).bg(BG));
+    f.render_widget(panel, area);
+}
+
+/// Transport indicator glyph for a deck state.
+fn transport_glyph(state: DeckState) -> &'static str {
+    match state {
+        DeckState::Playing => "▶",
+        DeckState::Paused => "⏸",
+        DeckState::Stopped => "■",
+        DeckState::Loaded => "⏏",
+        DeckState::Empty => "·",
     }
-    let title = deck.title().unwrap_or("track");
-    format!(
-        "Deck A: {state}  {}  /  {}   {title}",
-        fmt_clock(deck.position_secs()),
-        fmt_clock(deck.duration_secs()),
-    )
+}
+
+/// A `[████░░░░]` progress bar `width` cells wide between the brackets,
+/// filled proportionally to `frac` (clamped to `[0, 1]`).
+fn progress_bar(frac: f64, width: usize) -> String {
+    let filled = (frac.clamp(0.0, 1.0) * width as f64).round() as usize;
+    let mut s = String::with_capacity(width + 2);
+    s.push('[');
+    for i in 0..width {
+        s.push(if i < filled { '█' } else { '░' });
+    }
+    s.push(']');
+    s
 }
 
 /// Format seconds as `mm:ss.s`.
@@ -343,7 +403,13 @@ fn load_demo_track(deck: &mut Deck, target_rate: u32) {
     match crate::audio::decode_file(&path, target_rate) {
         Ok(track) => {
             tracing::info!(path, frames = track.frames(), "deck: loaded demo track");
-            deck.load(track);
+            // File name (without directory) is the panel's title fallback.
+            let name = std::path::Path::new(&path)
+                .file_name()
+                .and_then(|n| n.to_str())
+                .unwrap_or(&path)
+                .to_string();
+            deck.load_named(track, name);
         }
         Err(e) => tracing::error!(error = %e, path, "deck: failed to load demo track"),
     }
@@ -484,21 +550,85 @@ mod tests {
         assert_eq!(app.deck.state(), DeckState::Empty);
     }
 
-    #[test]
-    fn status_line_reflects_deck_state() {
-        let buf = render(&App::new(), 80, 24);
-        assert!(
-            buffer_text(&buf).contains("press o to load"),
-            "empty deck prompt missing"
+    /// An app with a track of `frames` stereo frames at sample rate `rate`
+    /// loaded (no ID3 title, so the file-name fallback is exercised). A low
+    /// `rate` lets a few frames stand for whole seconds in the clock.
+    fn app_with_track(frames: usize, rate: u32) -> App {
+        use crate::audio::DecodedAudio;
+        let mut app = App::new();
+        app.deck.load_named(
+            DecodedAudio {
+                samples: vec![0.4; frames * 2],
+                sample_rate: rate,
+                channels: 2,
+                source_sample_rate: rate,
+                source_channels: 2,
+                duration_secs: frames as f64 / rate as f64,
+                title: None,
+                artist: None,
+            },
+            "sine_a440_10s.wav",
         );
+        app
+    }
 
-        let mut app = loaded_app();
+    #[test]
+    fn empty_deck_panel_shows_no_track() {
+        let text = buffer_text(&render(&App::new(), 80, 24));
+        assert!(text.contains("Deck A"), "panel title missing:\n{text}");
+        assert!(text.contains("no track"), "empty prompt missing:\n{text}");
+    }
+
+    #[test]
+    fn panel_shows_title_and_total_time_on_load() {
+        // Loading updates the title (filename fallback) and total time.
+        let app = app_with_track(1000, 100); // 10.0s
+        let text = buffer_text(&render(&app, 80, 24));
+        assert!(text.contains("sine_a440_10s.wav"), "title missing:\n{text}");
+        assert!(text.contains("00:10.0"), "total time missing:\n{text}");
+    }
+
+    #[test]
+    fn panel_elapsed_advances_then_freezes_and_glyph_changes() {
+        let mut app = app_with_track(1000, 100); // 10.0s, rate 100
         app.on_key(key(' ')); // play
-        let buf = render(&app, 80, 24);
+
+        // Advance 3 seconds (300 frames at rate 100).
+        let mut buf = vec![0.0f32; 600];
+        app.deck.fill(&mut buf);
+        let text = buffer_text(&render(&app, 80, 24));
         assert!(
-            buffer_text(&buf).contains("playing"),
-            "playing state missing from status line"
+            text.contains("00:03.0"),
+            "elapsed should tick to 3s:\n{text}"
         );
+        assert!(text.contains('▶'), "playing glyph missing:\n{text}");
+
+        // Pause: elapsed freezes and the glyph changes.
+        app.on_key(key(' '));
+        let before = app.deck.position_secs();
+        app.deck.fill(&mut vec![0.0f32; 600]); // no-op while paused
+        assert_eq!(app.deck.position_secs(), before, "paused elapsed frozen");
+        let text = buffer_text(&render(&app, 80, 24));
+        assert!(text.contains('⏸'), "paused glyph missing:\n{text}");
+    }
+
+    #[test]
+    fn progress_bar_fills_proportionally() {
+        assert_eq!(progress_bar(0.0, 10), "[░░░░░░░░░░]");
+        assert_eq!(progress_bar(1.0, 10), "[██████████]");
+        assert_eq!(progress_bar(0.5, 10), "[█████░░░░░]");
+        // Out-of-range input is clamped.
+        assert_eq!(progress_bar(2.0, 4), "[████]");
+        assert_eq!(progress_bar(-1.0, 4), "[░░░░]");
+    }
+
+    #[test]
+    fn transport_glyph_per_state() {
+        assert_eq!(transport_glyph(DeckState::Playing), "▶");
+        assert_eq!(transport_glyph(DeckState::Paused), "⏸");
+        assert_eq!(transport_glyph(DeckState::Stopped), "■");
+        assert_eq!(transport_glyph(DeckState::Loaded), "⏏");
+        assert_eq!(transport_glyph(DeckState::Empty), "·");
     }
 
     #[test]

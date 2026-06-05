@@ -39,6 +39,9 @@ pub struct Deck {
     state: DeckState,
     /// Linear output gain applied in [`fill`](Self::fill).
     gain: f32,
+    /// Source display name (e.g. file name), used when the track carries
+    /// no ID3 title. See [`display_name`](Self::display_name).
+    name: Option<String>,
 }
 
 impl Default for Deck {
@@ -55,6 +58,7 @@ impl Deck {
             pos: 0,
             state: DeckState::Empty,
             gain: 1.0,
+            name: None,
         }
     }
 
@@ -64,6 +68,15 @@ impl Deck {
         self.track = Some(track);
         self.pos = 0;
         self.state = DeckState::Loaded;
+        self.name = None;
+    }
+
+    /// Like [`load`](Self::load), but also records a display name (the
+    /// source file name) for the panel to fall back to when the track has
+    /// no ID3 title.
+    pub fn load_named(&mut self, track: DecodedAudio, name: impl Into<String>) {
+        self.load(track);
+        self.name = Some(name.into());
     }
 
     /// Start (or resume) playback. No-op with no track. From `Loaded` or
@@ -169,9 +182,20 @@ impl Deck {
         self.track.as_ref().map(|t| t.duration_secs).unwrap_or(0.0)
     }
 
-    /// Title of the loaded track, if any.
+    /// Title of the loaded track, if any (ID3/metadata only).
     pub fn title(&self) -> Option<&str> {
         self.track.as_ref().and_then(|t| t.title.as_deref())
+    }
+
+    /// What to show for the track: the ID3 title if present, else the
+    /// source file name, else `None` when nothing is loaded.
+    pub fn display_name(&self) -> Option<&str> {
+        self.title().or(self.name.as_deref())
+    }
+
+    /// Current linear output gain (1.0 == unity).
+    pub fn gain(&self) -> f32 {
+        self.gain
     }
 }
 

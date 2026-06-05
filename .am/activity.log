@@ -60,3 +60,7 @@
 2026-06-05T17:40:16Z	Matt Reider	finished	termkrush/Per-deck-and-master-volume.md	
 2026-06-05T17:40:16Z	Matt Reider	delivered	termkrush/Per-deck-and-master-volume.md	
 2026-06-05T17:40:16Z	Matt Reider	accepted	termkrush/Per-deck-and-master-volume.md	Per-deck + master gain with per-frame ramp smoothing (de-zipper), 0..1.5 range, dB readout in panel + master line. Keys +/- (deck), </> (master; stand-in for ambiguous Shift+/-). fmt/clippy/-Dwarnings + 62 tests green. Master scales single deck today; multi-deck sum is the later mixer refactor.
+2026-06-05T17:41:15Z	Matt Reider	started	termkrush/Seek-and-scrub-position.md	
+2026-06-05T17:44:03Z	Matt Reider	finished	termkrush/Seek-and-scrub-position.md	
+2026-06-05T17:44:03Z	Matt Reider	delivered	termkrush/Seek-and-scrub-position.md	
+2026-06-05T17:44:03Z	Matt Reider	accepted	termkrush/Seek-and-scrub-position.md	Deck::seek/seek_by (absolute+relative, clamp, EOF->stop), keys ←/→ ±5s, Shift ±30s, ,/. ±0.1s. Declick via gain fade-in on seek (pull-model equivalent of muting one buffer; verified structurally not by ear). fmt/clippy/-Dwarnings + 70 tests green.

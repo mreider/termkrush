@@ -80,6 +80,7 @@
 | User | Title | Points | Tags |
 |---|---|:---:|---|
 |  | [Bug: logging crash-line test asserts unix path separator, fails on Windows CI](termkrush/Bug-logging-crash-line-test-asserts-unix-path-separator-fails-on-Windows-CI.md) |  |  |
+|  | [Bug: crate panel text truncated (empty-state message and long track names cut off at panel width)](termkrush/Bug-crate-panel-text-truncated-empty-state-message-and-long-track-names-cut-off-at-panel-width.md) |  |  |
 
 ### Delivered
 | User | Title | Points | Tags |

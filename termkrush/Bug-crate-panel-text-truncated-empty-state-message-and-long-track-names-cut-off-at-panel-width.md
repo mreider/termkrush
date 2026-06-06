@@ -7,6 +7,7 @@ author: Matt Reider
 status: finished
 started: "2026-06-06T08:53:39Z"
 finished: "2026-06-06T08:56:41Z"
+project: termkrush
 ---
 
 ## Symptom

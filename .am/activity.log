@@ -121,3 +121,4 @@
 2026-06-06T08:53:29Z	Matt Reider	bug	termkrush/Bug-crate-panel-text-truncated-empty-state-message-and-long-track-names-cut-off-at-panel-width.md	target=priority position=top
 2026-06-06T08:53:39Z	Matt Reider	started	termkrush/Bug-crate-panel-text-truncated-empty-state-message-and-long-track-names-cut-off-at-panel-width.md	
 2026-06-06T08:56:41Z	Matt Reider	finished	termkrush/Bug-crate-panel-text-truncated-empty-state-message-and-long-track-names-cut-off-at-panel-width.md	
+2026-06-06T08:56:59Z	Matt Reider	accepted	termkrush/Bug-crate-panel-text-truncated-empty-state-message-and-long-track-names-cut-off-at-panel-width.md	Crate empty-state now a wrapped Paragraph (fits 32-col panel); long track names ellipsized via ellipsize(). Verified: wrapped help keeps crate_root/config.toml intact, long names show …, unit test. fmt/clippy/-Dwarnings + 93 lib tests green. Defect against accepted Local crate view.

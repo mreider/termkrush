@@ -66,6 +66,7 @@ jog/scratch the focused deck · `Start` quit · `Back` help.
 | `r`            | resample the live mix (arm/disarm) → a clip on the focused pad, else the recordings stash |
 | `b`            | beat-match — on a **deck**: sync its tempo (varispeed) to the other deck's BPM; on a **pad**: toggle auto-BPM (clip stretches to the active deck) |
 | `,` / `.`      | tempo: varispeed the focused **deck** ∓1% (`shift` = ∓0.1%) — pitch rides with speed, effective BPM = base × speed; on a **pad**, nudge its stored BPM |
+| `c` / `v`      | set / jump to the focused deck's hot cue |
 | `[` / `]`      | master volume down / up                 |
 | `/`            | filter the crate; `↑`/`↓` pick; `enter` load |
 | `\`            | load the demo track (or `$TERMKRUSH_DEMO_TRACK`) |

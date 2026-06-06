@@ -54,6 +54,8 @@ pub struct Deck {
     /// load. The effective tempo reported by [`bpm`](Self::bpm) is this times
     /// the varispeed `speed`.
     bpm: Option<f32>,
+    /// A manually-set hot cue (playhead frame), if any. Set/jumped by the UI.
+    cue: Option<usize>,
 }
 
 /// Varispeed range: half to double speed (±1 octave of pitch).
@@ -87,7 +89,30 @@ impl Deck {
             smoothed_gain: 1.0,
             name: None,
             bpm: None,
+            cue: None,
         }
+    }
+
+    /// Set a hot cue at the current playhead. No-op with no track.
+    pub fn set_cue(&mut self) {
+        if self.track.is_some() {
+            self.cue = Some(self.pos as usize);
+        }
+    }
+
+    /// The hot cue position (frames), if set.
+    pub fn cue(&self) -> Option<usize> {
+        self.cue
+    }
+
+    /// Jump the playhead to the hot cue (if set), preserving transport state
+    /// (declicks like any seek).
+    pub fn jump_to_cue(&mut self) {
+        let Some(c) = self.cue else { return };
+        let Some(rate) = self.track.as_ref().map(|t| t.sample_rate.max(1) as f64) else {
+            return;
+        };
+        self.seek(c as f64 / rate);
     }
 
     /// Set the target gain, clamped to `[GAIN_MIN, GAIN_MAX]`. The applied
@@ -111,6 +136,7 @@ impl Deck {
         self.state = DeckState::Loaded;
         self.name = None;
         self.bpm = None;
+        self.cue = None;
     }
 
     /// Record the detected *base* tempo (BPM), set asynchronously once
@@ -474,6 +500,21 @@ mod tests {
             buf.iter().all(|s| s.is_finite()),
             "varispeed output is finite"
         );
+    }
+
+    #[test]
+    fn hot_cue_set_jump_and_clear_on_reload() {
+        let mut d = Deck::new();
+        d.load(track(2000, 0.3, 1000)); // 2000 frames @ 1000 Hz
+        d.seek(0.5); // frame 500
+        assert_eq!(d.cue(), None);
+        d.set_cue();
+        assert_eq!(d.cue(), Some(500));
+        d.seek(1.5); // frame 1500
+        d.jump_to_cue();
+        assert_eq!(d.position_frames(), 500, "jumped back to the cue");
+        d.load(track(100, 0.1, 1000)); // a fresh track clears the cue
+        assert_eq!(d.cue(), None);
     }
 
     #[test]

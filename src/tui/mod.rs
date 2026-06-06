@@ -140,6 +140,7 @@ pub enum Action {
     Bpm,
     Mark,
     Record,
+    Cue,
 }
 
 /// A focusable cell of the control surface (plus the crate browser on the
@@ -590,6 +591,20 @@ impl App {
         Action::TriggerPad
     }
 
+    /// `c` set / `v` jump — the focused deck's hot cue.
+    fn cue(&mut self, set: bool) -> Action {
+        if let Focus::Deck(i) = self.focus {
+            if set {
+                self.mixer.deck_mut(i).set_cue();
+            } else {
+                self.mixer.deck_mut(i).jump_to_cue();
+            }
+            Action::Cue
+        } else {
+            Action::None
+        }
+    }
+
     /// `b` — beat-match. On a pad: toggle auto-BPM. On a deck: sync its
     /// tempo (varispeed) to the *other* deck's current effective BPM.
     fn beat_match(&mut self) -> Action {
@@ -941,6 +956,8 @@ impl App {
             (KeyCode::Char('\\'), _) => Action::OpenFile, // load demo into focused deck
             (KeyCode::Char('r'), _) => self.toggle_record(), // resample the live mix
             (KeyCode::Char('b'), _) => self.beat_match(), // deck: sync to other · pad: auto-BPM
+            (KeyCode::Char('c'), _) => self.cue(true),    // set hot cue (focused deck)
+            (KeyCode::Char('v'), _) => self.cue(false),   // jump to hot cue
 
             // ---- direct clip triggers (quick, always live) ----
             (KeyCode::Char(c @ '1'..='7'), _) => {
@@ -1312,6 +1329,7 @@ fn draw_deck_cell(
     let frac = if total > 0.0 { elapsed / total } else { 0.0 };
     let bar_w = inner.saturating_sub(24).clamp(3, 16); // leave room for the clock
     let rec = if recording { "  ●REC" } else { "" };
+    let cue = if deck.cue().is_some() { " ⚑" } else { "" };
     let spd = if (deck.speed() - 1.0).abs() > 1e-3 {
         format!("  {:+.0}%", (deck.speed() - 1.0) * 100.0)
     } else {
@@ -1320,7 +1338,7 @@ fn draw_deck_cell(
     let body = vec![
         Line::from(Span::styled(
             format!(
-                "  {} {}  {state_word}{rec}{spd}",
+                "  {} {}  {state_word}{cue}{rec}{spd}",
                 transport_glyph(deck.state()),
                 name
             ),
@@ -1511,7 +1529,7 @@ fn draw_help(f: &mut Frame, area: Rect) {
     f.render_widget(Clear, popup);
     // Keys are by finger position: left hand = deck A, right hand = deck B.
     let help = Paragraph::new(
-        "Keys  —  focus a target, then act\n\n  focus       tab + arrows  (every cell; crate is left)\n  act  j play/trig  k cue/assign-rec  l mark-in/assign  ; mark-out/pattern\n  value       w / s     (deck volume · pad trim out)\n  jog         a / d     (deck scrub · pad trim in; shift = fine)\n\n  transition  g/h cut A/B   G/H auto-fade   space dur\n  master      [ / ]      tempo , / . (deck varispeed)\n  clips  1-7 trig  r record mix  b sync deck / beat-match pad\n\n  crate   / filter   ↑/↓ pick   enter load\n          \\ load demo   z hide crate\n  ?  help   esc/q quit   C-c force",
+        "Keys  —  focus a target, then act\n\n  focus       tab + arrows  (every cell; crate is left)\n  act  j play/trig  k cue/assign-rec  l mark-in/assign  ; mark-out/pattern\n  value       w / s     (deck volume · pad trim out)\n  jog         a / d     (deck scrub · pad trim in; shift = fine)\n\n  transition  g/h cut A/B   G/H auto-fade   space dur\n  master  [ / ]   tempo , / .   cue  c set  v jump\n  clips  1-7 trig  r record mix  b sync deck / beat-match pad\n\n  crate   / filter   ↑/↓ pick   enter load\n          \\ load demo   z hide crate\n  ?  help   esc/q quit   C-c force",
     )
     .block(
         Block::bordered()
@@ -2883,6 +2901,21 @@ mod tests {
         // Arrow right moves to Pad 1 (the other column).
         app.on_key(KeyEvent::new(KeyCode::Right, KeyModifiers::NONE));
         assert_eq!(app.focus_cell(), Focus::Pad(1));
+    }
+
+    #[test]
+    fn c_sets_and_v_jumps_the_hot_cue() {
+        let mut app = app_with_track(2000, 100); // deck A focused, rate 100
+        app.mixer.deck_mut(0).seek(0.1); // frame 10
+        assert_eq!(app.on_key(key('c')), Action::Cue);
+        assert_eq!(app.mixer.deck(0).cue(), Some(10));
+        app.mixer.deck_mut(0).seek(0.5); // frame 50
+        assert_eq!(app.on_key(key('v')), Action::Cue);
+        assert_eq!(
+            app.mixer.deck(0).position_frames(),
+            10,
+            "v jumps to the cue"
+        );
     }
 
     #[test]

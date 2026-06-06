@@ -2,13 +2,17 @@
 title: Manual cue points per deck
 type: feature
 created: "2026-06-04T09:15:06Z"
-modified: "2026-06-04T09:15:06Z"
+modified: "2026-06-06T20:05:19Z"
 author: Matt Reider
-status: unstarted
+status: accepted
 estimate: "3"
 epic: sync-and-fade
 tags: [deck, cue]
 project: termkrush
+started: "2026-06-06T20:02:30Z"
+finished: "2026-06-06T20:05:19Z"
+delivered: "2026-06-06T20:05:19Z"
+accepted: "2026-06-06T20:05:19Z"
 ---
 
 ## Problem statement

@@ -196,3 +196,9 @@
 2026-06-06T14:45:11Z	Matt Reider	finished	termkrush/Auto-fade-and-hard-cut-between-decks-replacing-the-manual-crossfader.md	
 2026-06-06T14:45:11Z	Matt Reider	delivered	termkrush/Auto-fade-and-hard-cut-between-decks-replacing-the-manual-crossfader.md	
 2026-06-06T14:45:11Z	Matt Reider	accepted	termkrush/Auto-fade-and-hard-cut-between-decks-replacing-the-manual-crossfader.md	Retired the manual crossfader. Mixer now exposes cut_to (instant hard-cut) + autofade_to (timed, lands in N seconds via a per-frame step keyed off the sample rate). Keys: g/h hard-cut to A/B, G/H auto-fade to A/B, space cycles 1/2/4/8s. Mixer panel shows blend + fade state + duration (no fader bar). Underlying A*gainA+B*gainB mix unchanged. README + help updated; crossfader_bar + manual-nudge API removed. 110 lib tests + property tests green.
+2026-06-06T14:49:48Z	Matt Reider	created	termkrush/Refactor-controls-into-a-minimal-select-then-act-model.md	target=priority position=bottom
+2026-06-06T14:49:48Z	Matt Reider	created	termkrush/Xbox-controller-support-as-the-primary-input-mapped-down-to-keyboard.md	target=priority position=bottom
+2026-06-06T14:49:48Z	Matt Reider	set-type	termkrush/Refactor-controls-into-a-minimal-select-then-act-model.md	feature
+2026-06-06T14:49:48Z	Matt Reider	estimate	termkrush/Refactor-controls-into-a-minimal-select-then-act-model.md	5
+2026-06-06T14:49:48Z	Matt Reider	set-type	termkrush/Xbox-controller-support-as-the-primary-input-mapped-down-to-keyboard.md	feature
+2026-06-06T14:49:48Z	Matt Reider	estimate	termkrush/Xbox-controller-support-as-the-primary-input-mapped-down-to-keyboard.md	5

@@ -32,6 +32,8 @@ Stack-rank order. Top is the highest priority. Edit by hand or via `am rank` / `
 - [Property-based testing for DSP code](Property-based-testing-for-DSP-code.md)
 - [ESC opens a quit confirmation modal](ESC-opens-a-quit-confirmation-modal.md)
 - [Auto fade and hard cut between decks replacing the manual crossfader](Auto-fade-and-hard-cut-between-decks-replacing-the-manual-crossfader.md)
+- [Refactor controls into a minimal select then act model](Refactor-controls-into-a-minimal-select-then-act-model.md)
+- [Xbox controller support as the primary input mapped down to keyboard](Xbox-controller-support-as-the-primary-input-mapped-down-to-keyboard.md)
 - [Offline BPM detection on load](Offline-BPM-detection-on-load.md)
 - [Clip engine test harness for record trim patterns and stretch](Clip-engine-test-harness-for-record-trim-patterns-and-stretch.md)
 - [Record a clip from a deck by marking in and out](Record-a-clip-from-a-deck-by-marking-in-and-out.md)

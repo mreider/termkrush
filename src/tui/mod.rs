@@ -476,11 +476,14 @@ pub fn draw(f: &mut Frame, app: &App) {
 /// The mixer row: a bordered panel with the crossfader fader graphic over
 /// the master readout, sitting beneath the two decks.
 fn draw_mixer_panel(f: &mut Frame, area: Rect, app: &App) {
-    // Stretch the fader across the whole width so its travel maps visually
-    // from deck A (left) to deck B (right) — the crossfader sits *between*
-    // the two turntables. Reserve a few cells for the "A " / " B" ends.
+    // A real crossfader has a short, centered throw — not a console-wide
+    // rail. Size it to a tidy fixed width (odd, so the center detent lands
+    // on a cell), centered in the mixer row between the two decks.
     let inner = area.width.saturating_sub(2) as usize; // minus the borders
-    let bar_w = inner.saturating_sub(6).clamp(5, 60); // minus "A " + " B" + pad
+    let mut bar_w = inner.saturating_sub(8).clamp(5, 25); // leave margin + "A "/" B"
+    if bar_w % 2 == 0 {
+        bar_w -= 1;
+    }
     let lines = vec![
         Line::from(format!("A {} B", crossfader_bar(app.mixer.xfade(), bar_w)))
             .style(Style::default().fg(AMBER).add_modifier(Modifier::BOLD)),
@@ -643,7 +646,10 @@ fn draw_deck_panel(f: &mut Frame, area: Rect, label: &str, deck: &Deck, focused:
     };
     let title = format!("{marker}Deck {label}{bpm}");
 
-    let name = deck.display_name().unwrap_or("— no track —");
+    // The name sits to the right of the 5-wide platter (+2 spaces); ellipsize
+    // it to what's left so long track titles don't get hard-truncated.
+    let name_w = (area.width.saturating_sub(2) as usize).saturating_sub(7);
+    let name = ellipsize(deck.display_name().unwrap_or("— no track —"), name_w);
     let state_word = match deck.state() {
         DeckState::Empty => "empty",
         DeckState::Loaded => "loaded",
@@ -667,7 +673,7 @@ fn draw_deck_panel(f: &mut Frame, area: Rect, label: &str, deck: &Deck, focused:
         Line::from(vec![
             Span::raw(format!("{}  ", p[0])),
             Span::styled(
-                name.to_string(),
+                name,
                 Style::default().fg(AMBER).add_modifier(Modifier::BOLD),
             ),
         ]),
@@ -768,10 +774,17 @@ fn crossfader_bar(pos: f32, width: usize) -> String {
     let last = width.saturating_sub(1);
     // Map [-1, 1] -> [0, width-1].
     let handle = (((pos + 1.0) / 2.0) * last as f32).round() as usize;
+    let center = last / 2;
     let mut s = String::with_capacity(width + 2);
     s.push('|');
     for i in 0..width {
-        s.push(if i == handle { '●' } else { '─' });
+        s.push(if i == handle {
+            '●' // the handle
+        } else if i == center {
+            '┼' // center detent
+        } else {
+            '─'
+        });
     }
     s.push('|');
     s
@@ -1632,6 +1645,31 @@ mod tests {
     }
 
     #[test]
+    fn long_deck_track_name_is_ellipsized() {
+        use crate::audio::DecodedAudio;
+        let mut app = App::new();
+        app.mixer.deck_mut(0).load_named(
+            DecodedAudio {
+                samples: vec![0.1; 4],
+                sample_rate: 44_100,
+                channels: 2,
+                source_sample_rate: 44_100,
+                source_channels: 2,
+                duration_secs: 0.0,
+                title: None,
+                artist: None,
+            },
+            "An Absurdly Long Track Title That Will Not Fit In The Deck Panel.mp3",
+        );
+        let text = buffer_text(&render(&app, 100, 30));
+        assert!(text.contains('…'), "deck name should ellipsize:\n{text}");
+        assert!(
+            !text.contains("Not Fit In The Deck"),
+            "the full long name should not render:\n{text}"
+        );
+    }
+
+    #[test]
     fn crossfader_renders_in_panel() {
         let app = App::new();
         let text = buffer_text(&render(&app, 100, 28));
@@ -1639,10 +1677,14 @@ mod tests {
     }
 
     #[test]
-    fn crossfader_stretches_across_between_the_decks() {
-        // The fader spans the mixer width: A on the left (under deck A), B
-        // on the right (under deck B), with a long rail between them.
-        let text = buffer_text(&render(&App::new(), 100, 30));
+    fn crossfader_is_right_sized_and_centered() {
+        // A tidy, centered throw (not a console-wide rail), flanked by A/B,
+        // with a visible center detent. Nudge off-center so the handle
+        // doesn't sit on (and hide) the detent.
+        let mut app = App::new();
+        app.on_key(key('h'));
+        app.on_key(key('h'));
+        let text = buffer_text(&render(&app, 100, 30));
         let bar_line = text
             .lines()
             .find(|l| l.contains('●'))
@@ -1651,10 +1693,11 @@ mod tests {
             bar_line.contains('A') && bar_line.contains('B'),
             "A/B ends missing: {bar_line}"
         );
+        assert!(bar_line.contains('┼'), "center detent missing: {bar_line}");
         let rail = bar_line.chars().filter(|&c| c == '─').count();
         assert!(
-            rail >= 30,
-            "fader should stretch across the decks, rail={rail}: {bar_line}"
+            (10..=26).contains(&rail),
+            "fader should be a tidy width, not full-span; rail={rail}: {bar_line}"
         );
     }
 

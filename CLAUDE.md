@@ -91,6 +91,18 @@ Tests for new behavior live with the feature story that adds the behavior — th
 
 `.claude/hooks/coach-gate.sh` runs as a PreToolUse hook on the gated MCP tools (`mcp__agilemarkdown__set_status` and `mcp__agilemarkdown__set_estimate`); it enforces the hard rules at state-change time.
 
+**Global (cwd-independent) gate.** `started-story-gate.sh` only fires when the
+session is launched *from this repo*. Agents often run from a parent directory
+(editing files here by absolute path), so the per-repo hook never triggers and
+the rule goes unenforced. `.claude/hooks/am-work-gate.sh` closes that gap: it is
+installed into the user's **global** `~/.claude/settings.json` (copied to
+`~/.claude/hooks/`) and keys off the *edited file's* path — it walks up to the
+file's `.am/` repo and applies the same "no edits without a started story" rule
+to **any** am-managed backlog, regardless of where the session launched.
+Non-am projects and repos with a bare `.am/` (no `_priority.md` backlog yet) are
+never gated. (Productizing this into `am init` so the binary ships + installs it
+is a future item.)
+
 The `SessionStart` hook prints the backlog state into context at session start.
 
 ## The coach stance

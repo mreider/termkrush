@@ -69,7 +69,6 @@
 |  | [Lower-corner 8-bit DJ cat that bobs to the BPM](termkrush/Lower-corner-8-bit-DJ-cat-that-bobs-to-the-BPM.md) | 3 |  |
 |  | [Beat synced clip patterns cut and baby scratch](termkrush/Beat-synced-clip-patterns-cut-and-baby-scratch.md) | 5 |  |
 |  | [Clip buttons assign clips and trigger straight playback](termkrush/Clip-buttons-assign-clips-and-trigger-straight-playback.md) | 5 |  |
-|  | [Clip engine test harness for record trim patterns and stretch](termkrush/Clip-engine-test-harness-for-record-trim-patterns-and-stretch.md) |  |  |
 |  | [Clip timeline view with precise non destructive trim](termkrush/Clip-timeline-view-with-precise-non-destructive-trim.md) | 5 |  |
 |  | [More clip patterns transformer stutter warble and reverse](termkrush/More-clip-patterns-transformer-stutter-warble-and-reverse.md) | 5 |  |
 |  | [Optional auto BPM on clip playback via time stretch](termkrush/Optional-auto-BPM-on-clip-playback-via-time-stretch.md) | 5 |  |
@@ -137,6 +136,7 @@
 |  | [Xbox controller support as the primary input mapped down to keyboard](termkrush/Xbox-controller-support-as-the-primary-input-mapped-down-to-keyboard.md) | 5 |  |
 |  | [Offline BPM detection on load](termkrush/Offline-BPM-detection-on-load.md) | 5 | [tempo](.am/tags/tempo.md) [analysis](.am/tags/analysis.md) |
 |  | [Varispeed nudge deck playback speed pitch rides along driven by the BPM keys](termkrush/Varispeed-nudge-deck-playback-speed-pitch-rides-along-driven-by-the-BPM-keys.md) | 3 |  |
+|  | [Clip engine test harness for record trim patterns and stretch](termkrush/Clip-engine-test-harness-for-record-trim-patterns-and-stretch.md) |  |  |
 
 ### Rejected
 | User | Title | Points | Tags |

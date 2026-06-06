@@ -77,7 +77,6 @@
 ### Finished
 | User | Title | Points | Tags |
 |---|---|:---:|---|
-|  | [Bug: logging crash-line test asserts unix path separator, fails on Windows CI](termkrush/Bug-logging-crash-line-test-asserts-unix-path-separator-fails-on-Windows-CI.md) |  |  |
 
 ### Delivered
 | User | Title | Points | Tags |
@@ -121,6 +120,7 @@
 |  | [Bug: pressing enter freezes the UI — track decode and resample run synchronously on the event-loop thread](termkrush/Bug-pressing-enter-freezes-the-UI-track-decode-and-resample-run-synchronously-on-the-event-loop-thread.md) |  |  |
 |  | [Bug: loading a full track takes ~60s in dev builds — DSP dependencies (symphonia, rubato/rustfft) compiled unoptimized](termkrush/Bug-loading-a-full-track-takes-60s-in-dev-builds-DSP-dependencies-symphonia-rubato-rustfft-compiled-unoptimized.md) |  |  |
 |  | [Global backlog work-gate: block edits in any am repo when no story is started (cwd-independent hook)](termkrush/Global-backlog-work-gate-block-edits-in-any-am-repo-when-no-story-is-started-cwd-independent-hook.md) |  |  |
+|  | [Bug: logging crash-line test asserts unix path separator, fails on Windows CI](termkrush/Bug-logging-crash-line-test-asserts-unix-path-separator-fails-on-Windows-CI.md) |  |  |
 
 ### Rejected
 | User | Title | Points | Tags |

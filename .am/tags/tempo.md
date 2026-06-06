@@ -11,12 +11,12 @@
 |  | [termkrush](../../termkrush.md) | [Harmonic key detection Camelot](../../termkrush/Harmonic-key-detection-Camelot.md) |  | [tempo](tempo.md) [key](key.md) [icebox](icebox.md) |
 |  | [termkrush](../../termkrush.md) | [Visual beat-grid editing](../../termkrush/Visual-beat-grid-editing.md) |  | [tempo](tempo.md) [icebox](icebox.md) [tui](tui.md) |
 |  | [termkrush](../../termkrush.md) | [Auto-analyze on download finish](../../termkrush/Auto-analyze-on-download-finish.md) | 2 | [download](download.md) [tempo](tempo.md) |
-|  | [termkrush](../../termkrush.md) | [Sync deck BPM to reference deck](../../termkrush/Sync-deck-BPM-to-reference-deck.md) | 3 | [tempo](tempo.md) [sync](sync.md) |
-| Total Points | | | 5 | |
+| Total Points | | | 2 | |
 
 ## Accepted
 | User | Project | Title | Points | Tags |
 |---|---|---|:---:|---|
+|  | [termkrush](../../termkrush.md) | [Sync deck BPM to reference deck](../../termkrush/Sync-deck-BPM-to-reference-deck.md) | 3 | [tempo](tempo.md) [sync](sync.md) |
 |  | [termkrush](../../termkrush.md) | [Display BPM per deck](../../termkrush/Display-BPM-per-deck.md) | 1 | [tempo](tempo.md) [tui](tui.md) |
 |  | [termkrush](../../termkrush.md) | [Tempo nudge controls](../../termkrush/Tempo-nudge-controls.md) | 2 | [tempo](tempo.md) [tui](tui.md) |
 |  | [termkrush](../../termkrush.md) | [Cache BPM and analysis per file](../../termkrush/Cache-BPM-and-analysis-per-file.md) | 2 | [tempo](tempo.md) [cache](cache.md) |

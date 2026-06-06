@@ -47,7 +47,6 @@
 |  | [Sampler pads](termkrush/Sampler-pads.md) |  | [sampler](.am/tags/sampler.md) [icebox](.am/tags/icebox.md) [fx](.am/tags/fx.md) |
 |  | [Smart crates](termkrush/Smart-crates.md) |  | [library](.am/tags/library.md) [icebox](.am/tags/icebox.md) |
 |  | [Spectrum analyzer](termkrush/Spectrum-analyzer.md) |  | [tui](.am/tags/tui.md) [icebox](.am/tags/icebox.md) [viz](.am/tags/viz.md) |
-|  | [Sync deck BPM to reference deck](termkrush/Sync-deck-BPM-to-reference-deck.md) | 3 | [tempo](.am/tags/tempo.md) [sync](.am/tags/sync.md) |
 |  | [Tap tempo](termkrush/Tap-tempo.md) |  | [tempo](.am/tags/tempo.md) [icebox](.am/tags/icebox.md) |
 |  | [Tempo ramping curves](termkrush/Tempo-ramping-curves.md) |  | [tempo](.am/tags/tempo.md) [icebox](.am/tags/icebox.md) |
 |  | [Track metadata ID3 editor](termkrush/Track-metadata-ID3-editor.md) |  | [metadata](.am/tags/metadata.md) [icebox](.am/tags/icebox.md) |
@@ -62,7 +61,7 @@
 |  | [V0.5.0 more decks](termkrush/v050-more-decks.md) |  |  |
 |  | [V0.6.0 record](termkrush/v060-record.md) |  |  |
 |  | [Yt-dlp shell-out for media URLs](termkrush/yt-dlp-shell-out-for-media-URLs.md) | 3 | [download](.am/tags/download.md) [yt-dlp](.am/tags/yt-dlp.md) |
-| Total Points | | 69 | |
+| Total Points | | 66 | |
 
 ### Started
 | User | Title | Points | Tags |
@@ -137,6 +136,7 @@
 |  | [Cache BPM and analysis per file](termkrush/Cache-BPM-and-analysis-per-file.md) | 2 | [tempo](.am/tags/tempo.md) [cache](.am/tags/cache.md) |
 |  | [Display BPM per deck](termkrush/Display-BPM-per-deck.md) | 1 | [tempo](.am/tags/tempo.md) [tui](.am/tags/tui.md) |
 |  | [Tempo nudge controls](termkrush/Tempo-nudge-controls.md) | 2 | [tempo](.am/tags/tempo.md) [tui](.am/tags/tui.md) |
+|  | [Sync deck BPM to reference deck](termkrush/Sync-deck-BPM-to-reference-deck.md) | 3 | [tempo](.am/tags/tempo.md) [sync](.am/tags/sync.md) |
 
 ### Rejected
 | User | Title | Points | Tags |

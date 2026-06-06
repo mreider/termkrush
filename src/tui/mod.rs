@@ -545,7 +545,7 @@ impl App {
             (KeyCode::Char('\\'), _) => Action::OpenFile, // load demo into focused deck
 
             // ---- direct clip triggers (quick, always live) ----
-            (KeyCode::Char(c @ '1'..='4'), _) => {
+            (KeyCode::Char(c @ '1'..='7'), _) => {
                 let pad = c.to_digit(10).unwrap() as usize - 1;
                 self.mixer.trigger_pad(pad);
                 Action::TriggerPad
@@ -656,28 +656,66 @@ pub fn draw(f: &mut Frame, app: &App) {
         body[1]
     };
 
-    // Mixer area: decks A | B side by side on top, the mixer row beneath.
-    let stack = Layout::vertical([
-        Constraint::Length(8), // decks row
-        Constraint::Length(5), // mixer row (crossfader + master + pads)
-        Constraint::Min(0),
-    ])
-    .split(mixer_area);
+    // Control surface: a 2-column grid of equal cells —
+    //   [Deck A | Deck B] [Mix·soft | Mix·hard] [Pad1|Pad2] … [Pad7 | DJ].
+    let grid_rows = Layout::vertical([Constraint::Ratio(1, 6); 6]).split(mixer_area);
+    let split2 = |r: Rect| {
+        Layout::horizontal([Constraint::Percentage(50), Constraint::Percentage(50)]).split(r)
+    };
 
-    let deck_cols = Layout::horizontal([Constraint::Percentage(50), Constraint::Percentage(50)])
-        .split(stack[0]);
+    // Row 0 — the two decks.
+    let r = split2(grid_rows[0]);
     for i in 0..DECKS {
-        draw_deck_panel(
+        let focused = app.focus() == i && !app.clips_focused();
+        draw_deck_cell(
             f,
-            deck_cols[i],
+            r[i],
             DECK_LABELS[i],
             app.mixer.deck(i),
-            app.focus() == i && !app.clips_focused(),
+            focused,
             app.is_loading(i),
         );
     }
 
-    draw_mixer_panel(f, stack[1], app);
+    // Row 1 — mixer: soft (auto-fade) | hard (cut + master).
+    let r = split2(grid_rows[1]);
+    let m = app.mixer.master_gain();
+    draw_cell(
+        f,
+        r[0],
+        "Mix · soft",
+        vec![
+            Line::from(blend_state(app)),
+            Line::from(format!("auto-fade {:.0}s", app.fade_secs())),
+        ],
+        false,
+    );
+    draw_cell(
+        f,
+        r[1],
+        "Mix · hard",
+        vec![
+            Line::from(blend_state(app)),
+            Line::from(format!("master {m:.2}  {}", fmt_db(m))),
+        ],
+        false,
+    );
+
+    // Rows 2-4 — pads 1-6; row 5 — pad 7 + the DJ placeholder.
+    for (row, base) in [(2usize, 0usize), (3, 2), (4, 4)] {
+        let r = split2(grid_rows[row]);
+        draw_pad_cell(f, r[0], app, base);
+        draw_pad_cell(f, r[1], app, base + 1);
+    }
+    let r = split2(grid_rows[5]);
+    draw_pad_cell(f, r[0], app, 6); // pad 7
+    draw_cell(
+        f,
+        r[1],
+        "DJ",
+        vec![Line::from(""), Line::from("  ♪ (soon)")],
+        false,
+    );
 
     if app.show_help {
         draw_help(f, area);
@@ -708,81 +746,113 @@ fn draw_quit_modal(f: &mut Frame, area: Rect) {
 
 /// The mixer row: a bordered panel with the crossfader fader graphic over
 /// the master readout, sitting beneath the two decks.
-/// `1● 2· 3· 4·` — each pad's number with `●` (clip assigned) or `·` (empty).
-/// When the Clip bank is focused, the selected slot is bracketed: `[2·]`.
-fn pads_readout(app: &App) -> String {
-    (0..PADS)
-        .map(|i| {
-            let glyph = if app.mixer.pad_loaded(i) { '●' } else { '·' };
-            if app.clips_focused() && i == app.clip_sel() {
-                format!("[{}{}]", i + 1, glyph)
-            } else {
-                format!(" {}{} ", i + 1, glyph)
-            }
-        })
-        .collect::<String>()
-        .trim()
-        .to_string()
-}
-
-/// Read-only deck-blend + auto-fade state: which deck is live (or the fade
-/// in progress) and the selected auto-fade duration.
-fn transition_readout(app: &App) -> String {
-    let x = app.mixer.xfade_applied();
-    let state = if app.mixer.is_fading() {
-        if app.mixer.xfade() >= x {
-            "A → B".to_string()
-        } else {
-            "B → A".to_string()
-        }
-    } else if x <= -0.5 {
-        "▶ A".to_string()
-    } else if x >= 0.5 {
-        "▶ B".to_string()
-    } else {
-        "A + B".to_string()
-    };
-    format!("mix {state}     auto-fade {:.0}s", app.fade_secs())
-}
-
-fn draw_mixer_panel(f: &mut Frame, area: Rect, app: &App) {
-    let lines = vec![
-        Line::from(transition_readout(app))
-            .style(Style::default().fg(AMBER).add_modifier(Modifier::BOLD)),
-        Line::from(format!(
-            "master {:.2}  {}",
-            app.mixer.master_gain(),
-            fmt_db(app.mixer.master_gain()),
-        )),
-        Line::from(if app.clips_focused() {
-            let bpm = app
-                .mixer
-                .pad_bpm(app.clip_sel())
-                .map(|b| format!("{b:.0}"))
-                .unwrap_or_else(|| "--".into());
-            format!(
-                "pads {}   slot {} · {} bpm",
-                pads_readout(app),
-                app.clip_sel() + 1,
-                bpm
-            )
-        } else {
-            format!(
-                "pads {}    voices {}",
-                pads_readout(app),
-                app.mixer.active_voices()
-            )
-        }),
-    ];
-    let panel = Paragraph::new(lines)
-        .alignment(Alignment::Center)
+/// A bordered grid cell with `title` and `body` lines; amber border when
+/// focused, dim otherwise. The shared building block of the control grid.
+fn draw_cell(f: &mut Frame, area: Rect, title: &str, body: Vec<Line>, focused: bool) {
+    let border = deck_border(focused);
+    let panel = Paragraph::new(body)
         .block(
             Block::bordered()
-                .title("Mixer  ·  transitions")
-                .style(Style::default().fg(GREEN).bg(BG)),
+                .title(title.to_string())
+                .style(Style::default().fg(border).bg(BG)),
         )
         .style(Style::default().fg(GREEN).bg(BG));
     f.render_widget(panel, area);
+}
+
+/// The deck-blend state shown in the mixer cells: which deck is live, or
+/// the fade in progress.
+fn blend_state(app: &App) -> String {
+    let x = app.mixer.xfade_applied();
+    if app.mixer.is_fading() {
+        if app.mixer.xfade() >= x {
+            "A → B".into()
+        } else {
+            "B → A".into()
+        }
+    } else if x <= -0.5 {
+        "▶ A".into()
+    } else if x >= 0.5 {
+        "▶ B".into()
+    } else {
+        "A + B".into()
+    }
+}
+
+/// One sampler-pad cell: number + assigned/empty glyph + its BPM. Focused
+/// (amber) when the Clip bank is focused and this is the selected slot.
+fn draw_pad_cell(f: &mut Frame, area: Rect, app: &App, pad: usize) {
+    let focused = app.clips_focused() && app.clip_sel() == pad;
+    let glyph = if app.mixer.pad_loaded(pad) {
+        '●'
+    } else {
+        '·'
+    };
+    let bpm = app
+        .mixer
+        .pad_bpm(pad)
+        .map(|b| format!("{b:.0} bpm"))
+        .unwrap_or_else(|| "-- bpm".into());
+    draw_cell(
+        f,
+        area,
+        &format!("Pad {}", pad + 1),
+        vec![
+            Line::from(format!("  {glyph}")),
+            Line::from(format!("  {bpm}")),
+        ],
+        focused,
+    );
+}
+
+/// One deck cell: title (with BPM), name + state, and a position bar / clock.
+fn draw_deck_cell(
+    f: &mut Frame,
+    area: Rect,
+    label: &str,
+    deck: &Deck,
+    focused: bool,
+    loading: bool,
+) {
+    let marker = if focused { "▸ " } else { "" };
+    let bpm = match deck.bpm() {
+        Some(b) => format!("  {b:.0} BPM"),
+        None => String::new(),
+    };
+    let title = format!("{marker}Deck {label}{bpm}");
+    let inner = area.width.saturating_sub(2) as usize;
+    let name = if loading {
+        "⏳ loading…".to_string()
+    } else {
+        ellipsize(
+            deck.display_name().unwrap_or("— no track —"),
+            inner.saturating_sub(4),
+        )
+    };
+    let state_word = match deck.state() {
+        DeckState::Empty => "empty",
+        DeckState::Loaded => "loaded",
+        DeckState::Playing => "playing",
+        DeckState::Paused => "paused",
+        DeckState::Stopped => "stopped",
+    };
+    let elapsed = deck.position_secs();
+    let total = deck.duration_secs();
+    let frac = if total > 0.0 { elapsed / total } else { 0.0 };
+    let bar_w = inner.saturating_sub(24).clamp(3, 16); // leave room for the clock
+    let body = vec![
+        Line::from(Span::styled(
+            format!("  {} {}  {state_word}", transport_glyph(deck.state()), name),
+            Style::default().fg(AMBER),
+        )),
+        Line::from(format!(
+            "  {}  {} / {}",
+            progress_bar(frac, bar_w),
+            fmt_clock(elapsed),
+            fmt_clock(total)
+        )),
+    ];
+    draw_cell(f, area, &title, body, focused);
 }
 
 /// Render the crate browser: a bordered, scrollable list of tracks with
@@ -914,86 +984,6 @@ fn deck_border(focused: bool) -> Color {
     }
 }
 
-/// A deck panel: track name, transport glyph + state + gain, a
-/// proportional position bar, and `elapsed / total`. The focused deck has
-/// an amber border and a `▸` marker; unfocused decks are dim.
-fn draw_deck_panel(
-    f: &mut Frame,
-    area: Rect,
-    label: &str,
-    deck: &Deck,
-    focused: bool,
-    loading: bool,
-) {
-    let border = deck_border(focused);
-    let marker = if focused { "▸ " } else { "  " };
-    // Show the detected tempo in the title once analysis completes.
-    let bpm = match deck.bpm() {
-        Some(b) => format!("  {b:.0} BPM"),
-        None => String::new(),
-    };
-    let title = format!("{marker}Deck {label}{bpm}");
-
-    // The name sits to the right of the 5-wide platter (+2 spaces); ellipsize
-    // it to what's left so long track titles don't get hard-truncated.
-    let name_w = (area.width.saturating_sub(2) as usize).saturating_sub(7);
-    let name = if loading {
-        "⏳ loading…".to_string()
-    } else {
-        ellipsize(deck.display_name().unwrap_or("— no track —"), name_w)
-    };
-    let state_word = match deck.state() {
-        DeckState::Empty => "empty",
-        DeckState::Loaded => "loaded",
-        DeckState::Playing => "playing",
-        DeckState::Paused => "paused",
-        DeckState::Stopped => "stopped",
-    };
-    let elapsed = deck.position_secs();
-    let total = deck.duration_secs();
-    let frac = if total > 0.0 { elapsed / total } else { 0.0 };
-
-    // Bar width = inner width minus the two brackets, capped for tidiness.
-    let bar_w = (area.width.saturating_sub(2) as usize)
-        .saturating_sub(2)
-        .min(48);
-
-    // The spinning platter sits on the left; the readout reads off to its
-    // right, three rows tall, with the position bar beneath.
-    let p = platter_rows(platter_bucket(elapsed));
-    let lines = vec![
-        Line::from(vec![
-            Span::raw(format!("{}  ", p[0])),
-            Span::styled(
-                name,
-                Style::default().fg(AMBER).add_modifier(Modifier::BOLD),
-            ),
-        ]),
-        Line::from(format!(
-            "{}  {} {state_word}   {:.2}",
-            p[1],
-            transport_glyph(deck.state()),
-            deck.gain(),
-        )),
-        Line::from(format!(
-            "{}  {} / {}",
-            p[2],
-            fmt_clock(elapsed),
-            fmt_clock(total)
-        )),
-        Line::from(progress_bar(frac, bar_w)),
-    ];
-
-    let panel = Paragraph::new(lines)
-        .block(
-            Block::bordered()
-                .title(title)
-                .style(Style::default().fg(border).bg(BG)),
-        )
-        .style(Style::default().fg(GREEN).bg(BG));
-    f.render_widget(panel, area);
-}
-
 /// Transport indicator glyph for a deck state.
 fn transport_glyph(state: DeckState) -> &'static str {
     match state {
@@ -1016,46 +1006,6 @@ fn progress_bar(frac: f64, width: usize) -> String {
     }
     s.push(']');
     s
-}
-
-/// Seconds for one platter revolution (a 33⅓-rpm nod: ~1.8s/rev).
-const SECS_PER_REV: f64 = 1.8;
-
-/// Which of the 8 rim positions the platter marker sits at for a given
-/// playhead position. Advances only while the playhead does (i.e. while
-/// playing), so the platter spins during play and is still when stopped.
-fn platter_bucket(position_secs: f64) -> usize {
-    let rev = (position_secs / SECS_PER_REV).rem_euclid(1.0); // 0..1 of a turn
-    ((rev * 8.0) as usize) % 8
-}
-
-/// A tiny 3-row turntable: a record outline with a `◆` marker placed at the
-/// rim position for `bucket` (0 = north, clockwise). As `bucket` cycles the
-/// marker walks around the rim — a spinning platter.
-fn platter_rows(bucket: usize) -> [String; 3] {
-    let mut g = [
-        ['╭', '─', '─', '─', '╮'],
-        ['│', ' ', '·', ' ', '│'],
-        ['╰', '─', '─', '─', '╯'],
-    ];
-    // Rim cells clockwise from north (N, NE, E, SE, S, SW, W, NW).
-    let rim = [
-        (0, 2),
-        (0, 3),
-        (1, 4),
-        (2, 3),
-        (2, 2),
-        (2, 1),
-        (1, 0),
-        (0, 1),
-    ];
-    let (r, c) = rim[bucket % 8];
-    g[r][c] = '◆';
-    [
-        g[0].iter().collect(),
-        g[1].iter().collect(),
-        g[2].iter().collect(),
-    ]
 }
 
 /// Format seconds as `mm:ss.s`.
@@ -1615,7 +1565,7 @@ mod tests {
     #[test]
     fn panel_shows_db_readout_and_master() {
         let app = app_with_track(1000, 100); // gain 1.0, master 1.0
-        let text = buffer_text(&render(&app, 80, 24));
+        let text = buffer_text(&render(&app, 100, 36));
         assert!(
             text.contains("+0.0 dB"),
             "unity dB readout missing:\n{text}"
@@ -1883,25 +1833,23 @@ mod tests {
     }
 
     #[test]
-    fn platter_marker_walks_around_the_rim_with_the_playhead() {
-        // Still at the start, advances a step every 1/8 revolution, wraps.
-        assert_eq!(platter_bucket(0.0), 0);
-        assert_eq!(platter_bucket(SECS_PER_REV * 3.0 / 8.0), 3);
-        assert_eq!(platter_bucket(SECS_PER_REV), 0, "one revolution wraps");
-        // The marker sits north at bucket 0, south at bucket 4.
-        assert!(platter_rows(0)[0].contains('◆'), "north marker on top row");
-        assert!(
-            platter_rows(4)[2].contains('◆'),
-            "south marker on bottom row"
-        );
-    }
-
-    #[test]
-    fn deck_panel_renders_the_platter() {
-        let app = app_with_track(1000, 100);
-        let text = buffer_text(&render(&app, 100, 30));
-        assert!(text.contains('◆'), "platter marker missing:\n{text}");
-        assert!(text.contains('╭'), "platter ring missing:\n{text}");
+    fn grid_renders_all_cells() {
+        // The control grid shows decks, both mixer cells, all 7 pads, and DJ.
+        let text = buffer_text(&render(&App::new(), 100, 36));
+        for needle in [
+            "Deck A",
+            "Deck B",
+            "Mix · soft",
+            "Mix · hard",
+            "Pad 1",
+            "Pad 7",
+            "DJ",
+        ] {
+            assert!(
+                text.contains(needle),
+                "grid cell {needle:?} missing:\n{text}"
+            );
+        }
     }
 
     #[test]
@@ -2248,16 +2196,13 @@ mod tests {
     }
 
     #[test]
-    fn pads_readout_reflects_assignment() {
+    fn pad_cell_reflects_assignment() {
         let mut app = App::new();
-        let text = buffer_text(&render(&app, 100, 30));
-        assert!(text.contains("pads"), "pads readout missing:\n{text}");
-        assert!(text.contains("1·"), "empty pad 1 marker missing:\n{text}");
+        let text = buffer_text(&render(&app, 100, 36));
+        assert!(text.contains("Pad 1"), "pad 1 cell missing:\n{text}");
+        assert!(text.contains('·'), "empty pad marker missing:\n{text}");
         app.mixer.assign_pad(0, vec![0.5; 8]);
-        let text = buffer_text(&render(&app, 100, 30));
-        assert!(
-            text.contains("1●"),
-            "assigned pad 1 marker missing:\n{text}"
-        );
+        let text = buffer_text(&render(&app, 100, 36));
+        assert!(text.contains('●'), "assigned pad marker missing:\n{text}");
     }
 }

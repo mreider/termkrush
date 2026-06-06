@@ -2,13 +2,16 @@
 title: Uniform grid layout with equal sized boxes for decks clips and DJ
 type: feature
 created: "2026-06-06T14:19:27Z"
-modified: "2026-06-06T17:37:27Z"
+modified: "2026-06-06T17:45:43Z"
 author: Matt Reider
-status: started
+status: accepted
 estimate: "5"
 epic: ux
 project: termkrush
 started: "2026-06-06T17:37:27Z"
+finished: "2026-06-06T17:45:43Z"
+delivered: "2026-06-06T17:45:43Z"
+accepted: "2026-06-06T17:45:43Z"
 ---
 
 ## Intent (render half)

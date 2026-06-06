@@ -16,7 +16,7 @@ use crate::deck::Deck;
 pub const DECKS: usize = 2;
 
 /// Number of sampler pads (clip triggers).
-pub const PADS: usize = 4;
+pub const PADS: usize = 7;
 
 /// One playing sampler voice: a shared clip and a position into it.
 #[derive(Debug)]

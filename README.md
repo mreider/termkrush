@@ -55,7 +55,7 @@ in the in-app `?` help; an Xbox controller is the preferred input.)
 | `g` / `h`      | hard-cut the mix to deck A / deck B (instant) |
 | `G` / `H`      | auto-fade to deck A / deck B over the set duration |
 | `space`        | cycle the auto-fade duration (1 / 2 / 4 / 8 s) |
-| `1`–`4`        | trigger clip pads directly              |
+| `1`–`7`        | trigger clip pads directly              |
 | `,` / `.`      | nudge BPM of the focused deck/pad ∓1 (`shift` = ∓0.1) — display/correct only, no speed change yet |
 | `[` / `]`      | master volume down / up                 |
 | `/`            | filter the crate; `↑`/`↓` pick; `enter` load |

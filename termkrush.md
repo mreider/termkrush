@@ -66,9 +66,8 @@
 |  | [V0.5.0 more decks](termkrush/v050-more-decks.md) |  |  |
 |  | [V0.6.0 record](termkrush/v060-record.md) |  |  |
 |  | [Yt-dlp shell-out for media URLs](termkrush/yt-dlp-shell-out-for-media-URLs.md) | 3 | [download](.am/tags/download.md) [yt-dlp](.am/tags/yt-dlp.md) |
-|  | [Clip pads trigger samples over the mix](termkrush/Clip-pads-trigger-samples-over-the-mix.md) | 5 |  |
 |  | [Lower-corner 8-bit DJ cat that bobs to the BPM](termkrush/Lower-corner-8-bit-DJ-cat-that-bobs-to-the-BPM.md) | 3 |  |
-| Total Points | | 87 | |
+| Total Points | | 82 | |
 
 ### Started
 | User | Title | Points | Tags |
@@ -119,6 +118,7 @@
 |  | [Bug: crate panel text truncated (empty-state message and long track names cut off at panel width)](termkrush/Bug-crate-panel-text-truncated-empty-state-message-and-long-track-names-cut-off-at-panel-width.md) |  |  |
 |  | [Bug: pressing enter does not load a track (load path untested, empty crate is a silent no-op)](termkrush/Bug-pressing-enter-does-not-load-a-track-load-path-untested-empty-crate-is-a-silent-no-op.md) |  |  |
 |  | [Integration tests for every keyboard command end-to-end](termkrush/Integration-tests-for-every-keyboard-command-end-to-end.md) |  |  |
+|  | [Clip pads trigger samples over the mix](termkrush/Clip-pads-trigger-samples-over-the-mix.md) | 5 |  |
 
 ### Rejected
 | User | Title | Points | Tags |

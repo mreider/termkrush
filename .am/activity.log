@@ -138,3 +138,7 @@
 2026-06-06T09:12:40Z	Matt Reider	started	termkrush/Awesome-UX-revamp-functional-great-looking-turntable-interface.md	
 2026-06-06T09:18:07Z	Matt Reider	finished	termkrush/Awesome-UX-revamp-functional-great-looking-turntable-interface.md	
 2026-06-06T09:18:07Z	Matt Reider	delivered	termkrush/Awesome-UX-revamp-functional-great-looking-turntable-interface.md	
+2026-06-06T09:19:06Z	Matt Reider	started	termkrush/Clip-pads-trigger-samples-over-the-mix.md	
+2026-06-06T09:25:28Z	Matt Reider	finished	termkrush/Clip-pads-trigger-samples-over-the-mix.md	
+2026-06-06T09:25:28Z	Matt Reider	delivered	termkrush/Clip-pads-trigger-samples-over-the-mix.md	
+2026-06-06T09:25:28Z	Matt Reider	accepted	termkrush/Clip-pads-trigger-samples-over-the-mix.md	4 sampler pads: 1-4 trigger one-shot voices summed atop the deck mix (after crossfade, before master) — polyphonic, free on end; !@#$ assign the highlighted crate clip (decoded via testable apply_pad_assign). Mixer panel shows pads + voice count. fmt/clippy/-Dwarnings + 104 lib tests. No per-pad gain/choke yet.

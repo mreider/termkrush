@@ -303,3 +303,7 @@
 2026-06-06T20:05:19Z	Matt Reider	finished	termkrush/Manual-cue-points-per-deck.md	
 2026-06-06T20:05:19Z	Matt Reider	delivered	termkrush/Manual-cue-points-per-deck.md	
 2026-06-06T20:05:19Z	Matt Reider	accepted	termkrush/Manual-cue-points-per-deck.md	Hot cue per deck. Deck gained a cue (frame): set_cue (at the playhead), jump_to_cue (seek back, declicks), cleared on load. Focused deck: c sets, v jumps; deck cell shows ⚑ when a cue is set. Tests: deck set/jump/clear-on-reload; app c sets + v jumps the playhead back. README/help updated. 146 lib + all suites green; fmt/clippy clean. (One cue per deck; multiple hot cues is the icebox item.)
+2026-06-06T20:05:57Z	Matt Reider	started	termkrush/Auto-fade-transition-over-N-bars.md	
+2026-06-06T20:08:06Z	Matt Reider	finished	termkrush/Auto-fade-transition-over-N-bars.md	
+2026-06-06T20:08:06Z	Matt Reider	delivered	termkrush/Auto-fade-transition-over-N-bars.md	
+2026-06-06T20:08:06Z	Matt Reider	accepted	termkrush/Auto-fade-transition-over-N-bars.md	Auto-fade duration can now be musical (bars), not just seconds. FadeAmount enum {Secs, Bars}; space cycles 8 amounts (1/2/4/8 s, then 2/4/8/16 bars). Bars convert to seconds via the active deck's tempo (4 beats/bar; 120 BPM fallback), so G/H fades land on the bar. Mixer panel shows the label ('2s' / '4 bar'). Tests: space wraps after 8; 2 bars @120 BPM = 4s. Builds on the seconds auto-fade. README/help updated. 147 lib + all suites green; fmt/clippy clean.

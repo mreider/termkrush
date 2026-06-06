@@ -7,7 +7,6 @@
 |---|---|:---:|---|
 |  | [ASCII waveform per deck](termkrush/ASCII-waveform-per-deck.md) |  | [tui](.am/tags/tui.md) [icebox](.am/tags/icebox.md) [viz](.am/tags/viz.md) |
 |  | [Auto-analyze on download finish](termkrush/Auto-analyze-on-download-finish.md) | 2 | [download](.am/tags/download.md) [tempo](.am/tags/tempo.md) |
-|  | [Auto-fade transition over N bars](termkrush/Auto-fade-transition-over-N-bars.md) | 3 | [mix](.am/tags/mix.md) [sync](.am/tags/sync.md) |
 |  | [Auto-mix playlist queue](termkrush/Auto-mix-playlist-queue.md) |  | [automix](.am/tags/automix.md) [icebox](.am/tags/icebox.md) |
 |  | [Bitcrush FX](termkrush/Bitcrush-FX.md) |  | [fx](.am/tags/fx.md) [icebox](.am/tags/icebox.md) |
 |  | [Crossfader assignment per deck](termkrush/Crossfader-assignment-per-deck.md) | 3 | [mix](.am/tags/mix.md) [multi-deck](.am/tags/multi-deck.md) |
@@ -60,7 +59,7 @@
 |  | [V0.5.0 more decks](termkrush/v050-more-decks.md) |  |  |
 |  | [V0.6.0 record](termkrush/v060-record.md) |  |  |
 |  | [Yt-dlp shell-out for media URLs](termkrush/yt-dlp-shell-out-for-media-URLs.md) | 3 | [download](.am/tags/download.md) [yt-dlp](.am/tags/yt-dlp.md) |
-| Total Points | | 63 | |
+| Total Points | | 60 | |
 
 ### Started
 | User | Title | Points | Tags |
@@ -137,6 +136,7 @@
 |  | [Tempo nudge controls](termkrush/Tempo-nudge-controls.md) | 2 | [tempo](.am/tags/tempo.md) [tui](.am/tags/tui.md) |
 |  | [Sync deck BPM to reference deck](termkrush/Sync-deck-BPM-to-reference-deck.md) | 3 | [tempo](.am/tags/tempo.md) [sync](.am/tags/sync.md) |
 |  | [Manual cue points per deck](termkrush/Manual-cue-points-per-deck.md) | 3 | [deck](.am/tags/deck.md) [cue](.am/tags/cue.md) |
+|  | [Auto-fade transition over N bars](termkrush/Auto-fade-transition-over-N-bars.md) | 3 | [mix](.am/tags/mix.md) [sync](.am/tags/sync.md) |
 
 ### Rejected
 | User | Title | Points | Tags |

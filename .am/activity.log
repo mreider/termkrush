@@ -122,3 +122,9 @@
 2026-06-06T08:53:39Z	Matt Reider	started	termkrush/Bug-crate-panel-text-truncated-empty-state-message-and-long-track-names-cut-off-at-panel-width.md	
 2026-06-06T08:56:41Z	Matt Reider	finished	termkrush/Bug-crate-panel-text-truncated-empty-state-message-and-long-track-names-cut-off-at-panel-width.md	
 2026-06-06T08:56:59Z	Matt Reider	accepted	termkrush/Bug-crate-panel-text-truncated-empty-state-message-and-long-track-names-cut-off-at-panel-width.md	Crate empty-state now a wrapped Paragraph (fits 32-col panel); long track names ellipsized via ellipsize(). Verified: wrapped help keeps crate_root/config.toml intact, long names show …, unit test. fmt/clippy/-Dwarnings + 93 lib tests green. Defect against accepted Local crate view.
+2026-06-06T09:06:02Z	Matt Reider	created	termkrush/Integration-tests-for-every-keyboard-command-end-to-end.md	target=priority position=bottom
+2026-06-06T09:06:02Z	Matt Reider	created	termkrush/Awesome-UX-revamp-functional-great-looking-turntable-interface.md	target=priority position=bottom
+2026-06-06T09:06:02Z	Matt Reider	bug	termkrush/Bug-pressing-enter-does-not-load-a-track-load-path-untested-empty-crate-is-a-silent-no-op.md	target=priority position=top
+2026-06-06T09:06:35Z	Matt Reider	set-type	termkrush/Integration-tests-for-every-keyboard-command-end-to-end.md	chore
+2026-06-06T09:06:35Z	Matt Reider	set-type	termkrush/Awesome-UX-revamp-functional-great-looking-turntable-interface.md	feature
+2026-06-06T09:06:36Z	Matt Reider	estimate	termkrush/Awesome-UX-revamp-functional-great-looking-turntable-interface.md	8

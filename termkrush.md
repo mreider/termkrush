@@ -120,6 +120,7 @@
 |  | [Integration tests for every keyboard command end-to-end](termkrush/Integration-tests-for-every-keyboard-command-end-to-end.md) |  |  |
 |  | [Clip pads trigger samples over the mix](termkrush/Clip-pads-trigger-samples-over-the-mix.md) | 5 |  |
 |  | [Bug: pressing enter freezes the UI — track decode and resample run synchronously on the event-loop thread](termkrush/Bug-pressing-enter-freezes-the-UI-track-decode-and-resample-run-synchronously-on-the-event-loop-thread.md) |  |  |
+|  | [Bug: loading a full track takes ~60s in dev builds — DSP dependencies (symphonia, rubato/rustfft) compiled unoptimized](termkrush/Bug-loading-a-full-track-takes-60s-in-dev-builds-DSP-dependencies-symphonia-rubato-rustfft-compiled-unoptimized.md) |  |  |
 
 ### Rejected
 | User | Title | Points | Tags |

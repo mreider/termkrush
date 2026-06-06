@@ -10,7 +10,6 @@
 |  | [Auto-fade transition over N bars](termkrush/Auto-fade-transition-over-N-bars.md) | 3 | [mix](.am/tags/mix.md) [sync](.am/tags/sync.md) |
 |  | [Auto-mix playlist queue](termkrush/Auto-mix-playlist-queue.md) |  | [automix](.am/tags/automix.md) [icebox](.am/tags/icebox.md) |
 |  | [Bitcrush FX](termkrush/Bitcrush-FX.md) |  | [fx](.am/tags/fx.md) [icebox](.am/tags/icebox.md) |
-|  | [Cache BPM and analysis per file](termkrush/Cache-BPM-and-analysis-per-file.md) | 2 | [tempo](.am/tags/tempo.md) [cache](.am/tags/cache.md) |
 |  | [Crossfader assignment per deck](termkrush/Crossfader-assignment-per-deck.md) | 3 | [mix](.am/tags/mix.md) [multi-deck](.am/tags/multi-deck.md) |
 |  | [Crossfader curve options](termkrush/Crossfader-curve-options.md) |  | [mix](.am/tags/mix.md) [icebox](.am/tags/icebox.md) |
 |  | [Crossfader cut and momentary kill](termkrush/Crossfader-cut-and-momentary-kill.md) | 2 | [mix](.am/tags/mix.md) [scratch](.am/tags/scratch.md) |
@@ -65,7 +64,7 @@
 |  | [V0.5.0 more decks](termkrush/v050-more-decks.md) |  |  |
 |  | [V0.6.0 record](termkrush/v060-record.md) |  |  |
 |  | [Yt-dlp shell-out for media URLs](termkrush/yt-dlp-shell-out-for-media-URLs.md) | 3 | [download](.am/tags/download.md) [yt-dlp](.am/tags/yt-dlp.md) |
-| Total Points | | 74 | |
+| Total Points | | 72 | |
 
 ### Started
 | User | Title | Points | Tags |
@@ -137,6 +136,7 @@
 |  | [More clip patterns transformer stutter warble and reverse](termkrush/More-clip-patterns-transformer-stutter-warble-and-reverse.md) | 5 |  |
 |  | [Pitch-preserving time-stretch](termkrush/Pitch-preserving-time-stretch.md) | 5 | [tempo](.am/tags/tempo.md) [dsp](.am/tags/dsp.md) |
 |  | [Optional auto BPM on clip playback via time stretch](termkrush/Optional-auto-BPM-on-clip-playback-via-time-stretch.md) | 5 |  |
+|  | [Cache BPM and analysis per file](termkrush/Cache-BPM-and-analysis-per-file.md) | 2 | [tempo](.am/tags/tempo.md) [cache](.am/tags/cache.md) |
 
 ### Rejected
 | User | Title | Points | Tags |

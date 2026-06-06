@@ -2,12 +2,14 @@
 title: 'Bug: crate panel text truncated (empty-state message and long track names cut off at panel width)'
 type: bug
 created: "2026-06-06T08:53:29Z"
-modified: "2026-06-06T08:56:41Z"
+modified: "2026-06-06T08:56:59Z"
 author: Matt Reider
-status: finished
+status: accepted
 started: "2026-06-06T08:53:39Z"
 finished: "2026-06-06T08:56:41Z"
 project: termkrush
+delivered: "2026-06-06T08:56:59Z"
+accepted: "2026-06-06T08:56:59Z"
 ---
 
 ## Symptom

@@ -37,7 +37,6 @@
 |  | [Multiple hot cues per deck](termkrush/Multiple-hot-cues-per-deck.md) |  | [deck](.am/tags/deck.md) [cue](.am/tags/cue.md) [icebox](.am/tags/icebox.md) |
 |  | [Per-deck FX bus](termkrush/Per-deck-FX-bus.md) | 3 | [fx](.am/tags/fx.md) [architecture](.am/tags/architecture.md) |
 |  | [Phaser FX](termkrush/Phaser-FX.md) |  | [fx](.am/tags/fx.md) [icebox](.am/tags/icebox.md) |
-|  | [Pitch-preserving time-stretch](termkrush/Pitch-preserving-time-stretch.md) | 5 | [tempo](.am/tags/tempo.md) [dsp](.am/tags/dsp.md) |
 |  | [Pitch shift independent of tempo](termkrush/Pitch-shift-independent-of-tempo.md) |  | [dsp](.am/tags/dsp.md) [icebox](.am/tags/icebox.md) |
 |  | [Plugin or scripting interface](termkrush/Plugin-or-scripting-interface.md) |  | [extensibility](.am/tags/extensibility.md) [icebox](.am/tags/icebox.md) |
 |  | [Polish README for first release](termkrush/Polish-README-for-first-release.md) |  | [docs](.am/tags/docs.md) [release](.am/tags/release.md) |
@@ -67,7 +66,7 @@
 |  | [V0.6.0 record](termkrush/v060-record.md) |  |  |
 |  | [Yt-dlp shell-out for media URLs](termkrush/yt-dlp-shell-out-for-media-URLs.md) | 3 | [download](.am/tags/download.md) [yt-dlp](.am/tags/yt-dlp.md) |
 |  | [Optional auto BPM on clip playback via time stretch](termkrush/Optional-auto-BPM-on-clip-playback-via-time-stretch.md) | 5 |  |
-| Total Points | | 84 | |
+| Total Points | | 79 | |
 
 ### Started
 | User | Title | Points | Tags |
@@ -137,6 +136,7 @@
 |  | [Clip timeline view with precise non destructive trim](termkrush/Clip-timeline-view-with-precise-non-destructive-trim.md) | 5 |  |
 |  | [Beat synced clip patterns cut and baby scratch](termkrush/Beat-synced-clip-patterns-cut-and-baby-scratch.md) | 5 |  |
 |  | [More clip patterns transformer stutter warble and reverse](termkrush/More-clip-patterns-transformer-stutter-warble-and-reverse.md) | 5 |  |
+|  | [Pitch-preserving time-stretch](termkrush/Pitch-preserving-time-stretch.md) | 5 | [tempo](.am/tags/tempo.md) [dsp](.am/tags/dsp.md) |
 
 ### Rejected
 | User | Title | Points | Tags |

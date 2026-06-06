@@ -24,7 +24,7 @@ use ratatui::crossterm::terminal::{
     disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen,
 };
 use ratatui::prelude::*;
-use ratatui::widgets::{Block, Clear, List, ListItem, ListState, Paragraph};
+use ratatui::widgets::{Block, Clear, List, ListItem, ListState, Paragraph, Wrap};
 
 use crate::audio::AudioOutput;
 use crate::config::Config;
@@ -511,16 +511,32 @@ fn draw_crate_panel(f: &mut Frame, area: Rect, app: &App) {
         None => format!("Crate  ({} tracks)", app.crate_lib.len()),
     };
 
+    // Empty crate (not filtering): show a wrapped how-to instead of a single
+    // line that runs off the panel edge.
+    if app.crate_lib.is_empty() && app.filter.is_none() {
+        let help = Paragraph::new(
+            "No tracks found.\n\nSet crate_root in your\nconfig.toml — see the\nREADME, then relaunch.",
+        )
+        .wrap(Wrap { trim: false })
+        .block(
+            Block::bordered()
+                .title(title.clone())
+                .style(Style::default().fg(GREEN).bg(BG)),
+        )
+        .style(Style::default().fg(GREEN).bg(BG));
+        f.render_widget(help, area);
+        return;
+    }
+
+    // Names wider than the panel get an ellipsis rather than a hard cut.
+    // Width = inner minus the borders and the "▶ " highlight gutter.
+    let name_w = (area.width as usize).saturating_sub(4);
     let items: Vec<ListItem> = if visible.is_empty() {
-        vec![ListItem::new(if app.crate_lib.is_empty() {
-            "  (no mp3s — set crate_root, see README)"
-        } else {
-            "  (no matches)"
-        })]
+        vec![ListItem::new("(no matches)")]
     } else {
         visible
             .iter()
-            .map(|e| ListItem::new(e.name.clone()))
+            .map(|e| ListItem::new(ellipsize(&e.name, name_w)))
             .collect()
     };
 
@@ -569,6 +585,21 @@ fn draw_loaded_panel(f: &mut Frame, area: Rect, app: &App) {
         )
         .style(Style::default().fg(GREEN).bg(BG));
     f.render_widget(panel, area);
+}
+
+/// Truncate `s` to at most `max` display columns, ending in `…` when cut,
+/// so long track names don't run off the panel edge.
+fn ellipsize(s: &str, max: usize) -> String {
+    let n = s.chars().count();
+    if n <= max || max == 0 {
+        return s.to_string();
+    }
+    if max == 1 {
+        return "…".to_string();
+    }
+    let mut out: String = s.chars().take(max - 1).collect();
+    out.push('…');
+    out
 }
 
 /// Format a linear gain as dBFS-relative decibels: `1.0 -> +0.0 dB`,
@@ -1552,6 +1583,40 @@ mod tests {
         let centered = crossfader_bar(0.0, 21);
         // '|' at byte 0, then cells; center handle is the 11th char.
         assert_eq!(centered.chars().nth(11), Some('●'));
+    }
+
+    #[test]
+    fn ellipsize_truncates_long_with_marker() {
+        assert_eq!(ellipsize("short", 10), "short");
+        let e = ellipsize("a very long track name.mp3", 10);
+        assert_eq!(e.chars().count(), 10);
+        assert!(e.ends_with('…'));
+        assert!(!e.contains("name"), "tail should be dropped: {e}");
+    }
+
+    #[test]
+    fn empty_crate_shows_wrapped_help_not_truncated() {
+        // The how-to wraps to fit the 32-col panel rather than running off
+        // the edge — the key tokens survive in full.
+        let text = buffer_text(&render(&App::new(), 100, 30));
+        assert!(
+            text.contains("crate_root"),
+            "missing crate_root hint:\n{text}"
+        );
+        assert!(
+            text.contains("config.toml"),
+            "config hint got cut off:\n{text}"
+        );
+    }
+
+    #[test]
+    fn long_track_names_are_ellipsized_in_the_crate() {
+        let app = app_with_crate(&["This Is An Absurdly Long Track Title That Overflows.mp3"]);
+        let text = buffer_text(&render(&app, 100, 30));
+        assert!(
+            text.contains('…'),
+            "long name should be ellipsized:\n{text}"
+        );
     }
 
     #[test]

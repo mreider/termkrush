@@ -26,3 +26,8 @@ pub mod library;
 pub mod logging;
 pub mod mix;
 pub mod tui;
+
+/// Shared test rigging (signal generators + measurements) for the clip
+/// engine and audio tests. Compiled only under test.
+#[cfg(test)]
+pub mod test_support;

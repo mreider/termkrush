@@ -2,11 +2,15 @@
 title: Clip engine test harness for record trim patterns and stretch
 type: chore
 created: "2026-06-06T14:19:27Z"
-modified: "2026-06-06T14:20:49Z"
+modified: "2026-06-06T19:19:17Z"
 author: Matt Reider
-status: unstarted
+status: accepted
 epic: clips
 project: termkrush
+started: "2026-06-06T19:17:55Z"
+finished: "2026-06-06T19:19:17Z"
+delivered: "2026-06-06T19:19:17Z"
+accepted: "2026-06-06T19:19:17Z"
 ---
 
 ## Why a chore

@@ -227,3 +227,7 @@
 2026-06-06T18:48:53Z	Matt Reider	created	termkrush/Resample-the-live-mix-into-a-pad-record-whatever-is-playing.md	target=priority position=bottom
 2026-06-06T18:48:53Z	Matt Reider	set-type	termkrush/Resample-the-live-mix-into-a-pad-record-whatever-is-playing.md	feature
 2026-06-06T18:48:53Z	Matt Reider	estimate	termkrush/Resample-the-live-mix-into-a-pad-record-whatever-is-playing.md	5
+2026-06-06T18:52:06Z	Matt Reider	started	termkrush/Grid-focus-navigation-tab-and-arrows-with-per-cell-action-dispatch.md	
+2026-06-06T19:00:27Z	Matt Reider	finished	termkrush/Grid-focus-navigation-tab-and-arrows-with-per-cell-action-dispatch.md	
+2026-06-06T19:00:27Z	Matt Reider	delivered	termkrush/Grid-focus-navigation-tab-and-arrows-with-per-cell-action-dispatch.md	
+2026-06-06T19:00:27Z	Matt Reider	accepted	termkrush/Grid-focus-navigation-tab-and-arrows-with-per-cell-action-dispatch.md	Unified cell-focus model (Focus enum: Crate, Deck, MixSoft, MixHard, Pad(0..7), Dj). Tab steps every cell (13, wraps); arrows move the focus box 2D — crate is the left column (left-edge returns to it; on crate, up/down browse the list). One action cluster dispatches per focused cell: deck play/cue/vol/jog/bpm; mix-soft fade A/B; mix-hard cut A/B; pad trigger/assign/bpm; crate j/enter load. Replaced focus:usize+clips_focused+clip_sel with Focus+last_deck. Focused cell highlighted amber (incl. crate). Global g/h/G/H/space + 1-7 still work. README/help updated. 112 lib + all suites green; fmt/clippy clean. Supersedes the 3-target Tab.

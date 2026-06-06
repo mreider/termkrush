@@ -895,23 +895,8 @@ fn event_loop(terminal: &mut Term) -> io::Result<()> {
         // Poll up to one frame; redraw at least every FRAME, sooner on input.
         if event::poll(FRAME)? {
             let ev = event::read()?;
-            let focus = app.focus();
-            match app.on_event(&ev) {
-                Action::OpenFile => {
-                    let path = demo_track_path();
-                    if load_into(&mut app.mixer, focus, &path, target_rate, &bpm_tx) {
-                        app.note_loaded(path);
-                    }
-                }
-                Action::LoadSelected => {
-                    if let Some(path) = app.take_pending_load() {
-                        if load_into(&mut app.mixer, focus, &path, target_rate, &bpm_tx) {
-                            app.note_loaded(path);
-                        }
-                    }
-                }
-                _ => {}
-            }
+            let action = app.on_event(&ev);
+            apply_load_action(&mut app, action, target_rate, &bpm_tx);
         }
         // Apply any completed background BPM detections.
         while let Ok((idx, bpm)) = bpm_rx.try_recv() {
@@ -958,6 +943,33 @@ fn pump(
             let _ = producer.push(s); // room was reserved above
         }
     }
+}
+
+/// Carry out a load `action` — the event loop's load step, lifted out so
+/// it can be exercised end-to-end in tests (no TTY/audio needed). On
+/// `OpenFile` it loads the demo track into the focused deck; on
+/// `LoadSelected` it loads the pending crate selection. Returns whether a
+/// track was loaded, and records it in the "Loaded" shortlist on success.
+fn apply_load_action(
+    app: &mut App,
+    action: Action,
+    target_rate: u32,
+    bpm_tx: &std::sync::mpsc::Sender<(usize, f32)>,
+) -> bool {
+    let focus = app.focus();
+    let path = match action {
+        Action::OpenFile => demo_track_path(),
+        Action::LoadSelected => match app.take_pending_load() {
+            Some(p) => p,
+            None => return false,
+        },
+        _ => return false,
+    };
+    let loaded = load_into(&mut app.mixer, focus, &path, target_rate, bpm_tx);
+    if loaded {
+        app.note_loaded(path);
+    }
+    loaded
 }
 
 /// Decode `path` at the output rate, load it into deck `idx`, and kick off
@@ -1678,5 +1690,118 @@ mod tests {
             "loaded panel title missing:\n{text}"
         );
         assert!(text.contains("banger.mp3"), "recent track missing:\n{text}");
+    }
+
+    // ---- end-to-end command flow (the gap that let "enter does nothing" ship) ----
+
+    /// A real, decodable fixture on disk (the committed CC0 sine WAV).
+    fn fixture_wav() -> PathBuf {
+        Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/sine_a440_10s.wav")
+    }
+
+    /// An app whose crate holds one real fixture track (so a load actually
+    /// decodes a file end-to-end).
+    fn app_with_real_crate() -> App {
+        use crate::library::{Crate, CrateEntry};
+        let p = fixture_wav();
+        let name = p.file_name().unwrap().to_str().unwrap().to_string();
+        let mut app = App::new();
+        app.set_crate(Crate::from_entries(vec![CrateEntry { name, path: p }]));
+        app
+    }
+
+    #[test]
+    fn enter_loads_the_selected_track_end_to_end() {
+        let mut app = app_with_real_crate();
+        let (tx, _rx) = std::sync::mpsc::channel();
+        let act = app.on_key(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE));
+        assert_eq!(act, Action::LoadSelected, "enter signals a load");
+        // This is the step the old tests never ran: decode + land on the deck.
+        let loaded = apply_load_action(&mut app, act, 44_100, &tx);
+        assert!(loaded, "enter must decode + load the selected track");
+        assert_eq!(app.mixer.deck(0).state(), DeckState::Loaded);
+        assert!(app
+            .mixer
+            .deck(0)
+            .display_name()
+            .unwrap_or("")
+            .contains("sine_a440"));
+        assert!((app.mixer.deck(0).duration_secs() - 10.0).abs() < 0.1);
+        assert!(!app.recent().is_empty(), "load lands in the shortlist");
+    }
+
+    #[test]
+    fn loaded_track_produces_audible_output_when_played() {
+        // The whole chain: select → enter → decode → load → play → mix.
+        let mut app = app_with_real_crate();
+        let (tx, _rx) = std::sync::mpsc::channel();
+        let act = app.on_key(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE));
+        apply_load_action(&mut app, act, 44_100, &tx);
+        assert_eq!(app.on_key(key('f')), Action::PlayPause); // play deck A
+        let mut buf = vec![0.0f32; 4096];
+        app.mixer.fill_mix(&mut buf);
+        assert!(
+            buf.iter().any(|&s| s.abs() > 0.01),
+            "playing a loaded track should produce non-silent audio"
+        );
+    }
+
+    #[test]
+    fn every_command_key_maps_to_an_action() {
+        // Transport + mixer keys (don't change input mode).
+        let mut a = loaded_app();
+        let cases = [
+            ('f', Action::PlayPause),
+            ('d', Action::Stop),
+            ('w', Action::DeckGain),
+            ('s', Action::DeckGain),
+            ('e', Action::Seek),
+            ('r', Action::Seek),
+            ('j', Action::PlayPause),
+            ('k', Action::Stop),
+            ('o', Action::DeckGain),
+            ('l', Action::DeckGain),
+            ('i', Action::Seek),
+            ('u', Action::Seek),
+            ('g', Action::Crossfade),
+            ('h', Action::Crossfade),
+            (' ', Action::Crossfade),
+            ('[', Action::MasterGain),
+            (']', Action::MasterGain),
+            (',', Action::Seek),
+            ('.', Action::Seek),
+            ('z', Action::ToggleCrate),
+            ('\\', Action::OpenFile),
+        ];
+        for (k, want) in cases {
+            assert_eq!(a.on_key(key(k)), want, "key {k:?} unmapped/wrong");
+        }
+        assert_eq!(
+            a.on_key(KeyEvent::new(KeyCode::Tab, KeyModifiers::NONE)),
+            Action::Focus
+        );
+        assert_eq!(a.on_key(key('?')), Action::ToggleHelp);
+        assert_eq!(
+            a.on_key(KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE)),
+            Action::ToggleHelp
+        );
+
+        // Crate keys on a populated crate (separate app: `/` enters filter mode).
+        let mut c = app_with_crate(&["a.mp3", "b.mp3"]);
+        assert_eq!(
+            c.on_key(KeyEvent::new(KeyCode::Down, KeyModifiers::NONE)),
+            Action::CrateNav
+        );
+        assert_eq!(
+            c.on_key(KeyEvent::new(KeyCode::Up, KeyModifiers::NONE)),
+            Action::CrateNav
+        );
+        assert_eq!(
+            c.on_key(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE)),
+            Action::LoadSelected
+        );
+        assert_eq!(c.on_key(key('/')), Action::Filter);
+
+        assert_eq!(a.on_key(key('q')), Action::Quit); // quit last
     }
 }

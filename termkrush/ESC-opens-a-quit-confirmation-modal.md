@@ -2,12 +2,16 @@
 title: ESC opens a quit confirmation modal
 type: feature
 created: "2026-06-06T14:19:26Z"
-modified: "2026-06-06T14:20:49Z"
+modified: "2026-06-06T14:37:01Z"
 author: Matt Reider
-status: unstarted
+status: accepted
 estimate: "2"
 epic: ux
 project: termkrush
+started: "2026-06-06T14:33:32Z"
+finished: "2026-06-06T14:37:01Z"
+delivered: "2026-06-06T14:37:01Z"
+accepted: "2026-06-06T14:37:01Z"
 ---
 
 ## Intent

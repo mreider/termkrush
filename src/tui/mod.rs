@@ -115,6 +115,7 @@ pub enum Action {
     None,
     Quit,
     ToggleHelp,
+    ConfirmQuit,
     PlayPause,
     Stop,
     OpenFile,
@@ -137,6 +138,9 @@ pub enum Action {
 pub struct App {
     pub show_help: bool,
     pub should_quit: bool,
+    /// When true, the "Quit? (y/n)" confirmation modal is open and captures
+    /// input until the user confirms (`y`) or cancels (`n`/Esc).
+    pub confirm_quit: bool,
     pub mixer: Mixer,
     /// Which deck the transport keys target (`Tab` cycles).
     focus: usize,
@@ -286,6 +290,27 @@ impl App {
         if key.kind == KeyEventKind::Release {
             return Action::None;
         }
+        // Ctrl-C is the unconditional hard escape hatch — works from any
+        // mode, including the quit modal.
+        if key.code == KeyCode::Char('c') && key.modifiers.contains(KeyModifiers::CONTROL) {
+            self.should_quit = true;
+            return Action::Quit;
+        }
+        // The quit modal is modal: only y / n / Esc matter; everything else
+        // is swallowed so a stray key can't act on the decks behind it.
+        if self.confirm_quit {
+            match key.code {
+                KeyCode::Char('y') | KeyCode::Char('Y') => {
+                    self.should_quit = true;
+                    return Action::Quit;
+                }
+                KeyCode::Char('n') | KeyCode::Char('N') | KeyCode::Esc => {
+                    self.confirm_quit = false;
+                    return Action::ConfirmQuit;
+                }
+                _ => return Action::None,
+            }
+        }
         // While the filter is open, keystrokes edit the query / navigate the
         // list rather than driving transport.
         if self.filter.is_some() {
@@ -300,13 +325,11 @@ impl App {
         let seek_amt = if shift { SEEK_FAR } else { SEEK_JUMP };
         match (key.code, key.modifiers) {
             // ---- global / out of the play cluster ----
+            // `q` no longer quits outright — it opens the confirm modal, so a
+            // fat-fingered `q` mid-set can't drop you out.
             (KeyCode::Char('q'), _) => {
-                self.should_quit = true;
-                Action::Quit
-            }
-            (KeyCode::Char('c'), KeyModifiers::CONTROL) => {
-                self.should_quit = true;
-                Action::Quit
+                self.confirm_quit = true;
+                Action::ConfirmQuit
             }
             (KeyCode::Char('?'), _) => {
                 self.show_help = !self.show_help;
@@ -315,6 +338,11 @@ impl App {
             (KeyCode::Esc, _) if self.show_help => {
                 self.show_help = false;
                 Action::ToggleHelp
+            }
+            // Esc (with no overlay open) asks to quit.
+            (KeyCode::Esc, _) => {
+                self.confirm_quit = true;
+                Action::ConfirmQuit
             }
 
             // ---- DECK A — left hand ----
@@ -585,6 +613,28 @@ pub fn draw(f: &mut Frame, app: &App) {
     if app.show_help {
         draw_help(f, area);
     }
+    // The quit modal sits on top of everything (including help).
+    if app.confirm_quit {
+        draw_quit_modal(f, area);
+    }
+}
+
+/// A small centered "Quit?" confirmation modal. `y` quits, `n`/Esc cancels.
+fn draw_quit_modal(f: &mut Frame, area: Rect) {
+    let w = 34.min(area.width);
+    let h = 5.min(area.height);
+    let x = area.x + (area.width.saturating_sub(w)) / 2;
+    let y = area.y + (area.height.saturating_sub(h)) / 2;
+    let popup = Rect::new(x, y, w, h);
+    f.render_widget(Clear, popup);
+    let modal = Paragraph::new("\nQuit TermKrush?\n(y) yes    (n) no")
+        .alignment(Alignment::Center)
+        .block(
+            Block::bordered()
+                .border_style(Style::default().fg(AMBER))
+                .title("Quit"),
+        );
+    f.render_widget(modal, popup);
 }
 
 /// The mixer row: a bordered panel with the crossfader fader graphic over
@@ -954,7 +1004,7 @@ fn draw_help(f: &mut Frame, area: Rect) {
     f.render_widget(Clear, popup);
     // Keys are by finger position: left hand = deck A, right hand = deck B.
     let help = Paragraph::new(
-        "Keys  —  left hand = A,  right hand = B\n\n              DECK A        DECK B\n  play/pause    f             j\n  cue (stop)    d             k\n  volume +/-    w / s         o / l\n  seek -/+      e / r         i / u    (shift: far)\n\n  crossfader    g  ◄A   B►  h     space  center\n  master  -/+   [ / ]\n  fine scrub    , / .   (focused deck)\n  pads          1-4 trigger   !@#$ assign selected\n\n  crate   tab focus   / filter   ↑/↓ pick   enter load\n          \\ load demo   z hide crate\n  ?  help     q / C-c  quit",
+        "Keys  —  left hand = A,  right hand = B\n\n              DECK A        DECK B\n  play/pause    f             j\n  cue (stop)    d             k\n  volume +/-    w / s         o / l\n  seek -/+      e / r         i / u    (shift: far)\n\n  crossfader    g  ◄A   B►  h     space  center\n  master  -/+   [ / ]\n  fine scrub    , / .   (focused deck)\n  pads          1-4 trigger   !@#$ assign selected\n\n  crate   tab focus   / filter   ↑/↓ pick   enter load\n          \\ load demo   z hide crate\n  ?  help   esc/q quit   C-c force",
     )
     .block(
         Block::bordered()
@@ -1224,19 +1274,80 @@ mod tests {
         assert_eq!(cell.bg, BG, "background should be CRT dark");
     }
 
+    fn esc(app: &mut App) -> Action {
+        app.on_key(KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE))
+    }
+
     #[test]
-    fn q_quits() {
+    fn q_opens_quit_modal_then_y_confirms() {
         let mut app = App::new();
-        assert_eq!(app.on_key(key('q')), Action::Quit);
+        // `q` no longer quits outright — it opens the confirm modal.
+        assert_eq!(app.on_key(key('q')), Action::ConfirmQuit);
+        assert!(
+            app.confirm_quit && !app.should_quit,
+            "modal open, not quitting yet"
+        );
+        // `y` confirms.
+        assert_eq!(app.on_key(key('y')), Action::Quit);
         assert!(app.should_quit);
     }
 
     #[test]
-    fn ctrl_c_quits() {
+    fn esc_opens_quit_modal_then_y_confirms() {
         let mut app = App::new();
-        let ev = KeyEvent::new(KeyCode::Char('c'), KeyModifiers::CONTROL);
-        assert_eq!(app.on_key(ev), Action::Quit);
+        assert_eq!(esc(&mut app), Action::ConfirmQuit);
+        assert!(app.confirm_quit && !app.should_quit);
+        assert_eq!(app.on_key(key('y')), Action::Quit);
         assert!(app.should_quit);
+    }
+
+    #[test]
+    fn quit_modal_cancels_with_n_or_esc() {
+        let mut app = App::new();
+        esc(&mut app);
+        assert_eq!(app.on_key(key('n')), Action::ConfirmQuit);
+        assert!(!app.confirm_quit && !app.should_quit, "n cancels");
+        esc(&mut app); // reopen
+        assert!(app.confirm_quit);
+        esc(&mut app); // esc cancels
+        assert!(!app.confirm_quit && !app.should_quit, "esc cancels");
+    }
+
+    #[test]
+    fn quit_modal_swallows_other_keys() {
+        let mut app = loaded_app(); // deck A loaded, not playing
+        esc(&mut app); // open modal
+        assert_eq!(
+            app.on_key(key('f')),
+            Action::None,
+            "key behind modal is swallowed"
+        );
+        assert_ne!(
+            app.mixer.deck(0).state(),
+            DeckState::Playing,
+            "deck untouched"
+        );
+        assert!(app.confirm_quit, "modal still open");
+    }
+
+    #[test]
+    fn ctrl_c_quits_even_from_the_modal() {
+        let ctrl_c = KeyEvent::new(KeyCode::Char('c'), KeyModifiers::CONTROL);
+        let mut app = App::new();
+        assert_eq!(app.on_key(ctrl_c), Action::Quit);
+        assert!(app.should_quit);
+        // Also from inside the modal.
+        let mut app2 = App::new();
+        esc(&mut app2);
+        assert_eq!(app2.on_key(ctrl_c), Action::Quit);
+        assert!(app2.should_quit);
+    }
+
+    #[test]
+    fn quit_modal_renders() {
+        let mut app = App::new();
+        esc(&mut app);
+        assert!(buffer_text(&render(&app, 80, 24)).contains("Quit TermKrush?"));
     }
 
     #[test]
@@ -2016,7 +2127,7 @@ mod tests {
         );
         assert_eq!(c.on_key(key('/')), Action::Filter);
 
-        assert_eq!(a.on_key(key('q')), Action::Quit); // quit last
+        assert_eq!(a.on_key(key('q')), Action::ConfirmQuit); // q opens the quit modal
     }
 
     #[test]

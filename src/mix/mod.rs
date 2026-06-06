@@ -191,6 +191,9 @@ pub struct Mixer {
     pad_trim: [(usize, usize); PADS],
     /// Playback pattern per pad (Straight / Cut / BabyScratch).
     pad_pattern: [Pattern; PADS],
+    /// Per-pad auto-BPM: when on, triggering time-stretches the clip to a
+    /// target tempo (beat-match) instead of playing at its native rate.
+    pad_autobpm: [bool; PADS],
     /// Currently-sounding one-shot voices, summed atop the deck mix.
     voices: Vec<SampleVoice>,
     /// When armed, `fill_mix` appends each block of master output here so the
@@ -222,6 +225,7 @@ impl Mixer {
             pad_bpm: Default::default(),
             pad_trim: Default::default(),
             pad_pattern: Default::default(),
+            pad_autobpm: Default::default(),
             voices: Vec::new(),
             recording: false,
             record_buf: Vec::new(),
@@ -363,6 +367,51 @@ impl Mixer {
     /// Pad `i`'s current playback pattern.
     pub fn pad_pattern(&self, i: usize) -> Pattern {
         self.pad_pattern.get(i).copied().unwrap_or_default()
+    }
+
+    /// Toggle pad `i`'s auto-BPM (beat-match on trigger).
+    pub fn toggle_pad_autobpm(&mut self, i: usize) {
+        if i < PADS {
+            self.pad_autobpm[i] = !self.pad_autobpm[i];
+        }
+    }
+
+    /// Whether pad `i` is set to auto-BPM.
+    pub fn pad_autobpm(&self, i: usize) -> bool {
+        self.pad_autobpm.get(i).copied().unwrap_or(false)
+    }
+
+    /// Trigger pad `i`, beat-matching to `target_bpm` when auto-BPM is on:
+    /// the trimmed region is time-stretched (pitch-preserving) by
+    /// `clip_bpm / target_bpm` and played straight. Falls back to the normal
+    /// patterned trigger when auto-BPM is off or the tempos are unknown.
+    pub fn trigger_pad_synced(&mut self, i: usize, target_bpm: f32) {
+        let auto = self.pad_autobpm.get(i).copied().unwrap_or(false);
+        let src = self.pad_bpm.get(i).copied().flatten();
+        if let (true, Some(src_bpm)) = (auto && target_bpm > 0.0, src) {
+            let (in_f, out_f) = self.pad_trim.get(i).copied().unwrap_or((0, 0));
+            if let Some(Some(clip)) = self.pads.get(i) {
+                let total = clip.len() / 2;
+                let (a, b) = ((in_f.min(total)) * 2, (out_f.min(total)) * 2);
+                if b > a {
+                    let stretched =
+                        crate::audio::time_stretch(&clip[a..b], 2, src_bpm / target_bpm);
+                    let len_f = stretched.len() / 2;
+                    self.voices.push(SampleVoice {
+                        clip: Arc::new(stretched),
+                        pattern: Pattern::Straight,
+                        in_f: 0,
+                        len_f,
+                        t: 0,
+                        div: 1.0,
+                        head: 0.0,
+                        dir: 1.0,
+                    });
+                    return;
+                }
+            }
+        }
+        self.trigger_pad(i); // native rate, with the pad's pattern
     }
 
     /// Number of sampler voices currently sounding.
@@ -934,6 +983,39 @@ mod tests {
         assert_eq!(m.pad_trim(0).0, 99);
         m.nudge_pad_out(0, 1000); // can't pass the clip end
         assert_eq!(m.pad_trim(0).1, 100);
+    }
+
+    #[test]
+    fn auto_bpm_time_stretches_a_pad_on_trigger() {
+        let mut m = Mixer::new();
+        m.assign_pad(0, vec![0.3; 8192]); // 4096 frames
+        m.set_pad_bpm(0, Some(120.0));
+        m.toggle_pad_autobpm(0);
+        assert!(m.pad_autobpm(0));
+        m.trigger_pad_synced(0, 60.0); // half the tempo → ~2× length
+        assert_eq!(m.active_voices(), 1);
+        m.fill_mix(&mut [0.0f32; 8192]); // 4096 frames — the NATIVE length
+        assert_eq!(
+            m.active_voices(),
+            1,
+            "stretched clip outlasts its native length"
+        );
+        m.fill_mix(&mut [0.0f32; 9000]); // drain the rest
+        assert_eq!(m.active_voices(), 0);
+    }
+
+    #[test]
+    fn auto_bpm_off_plays_native_length() {
+        let mut m = Mixer::new();
+        m.assign_pad(0, vec![0.3; 200]); // 100 frames
+        m.set_pad_bpm(0, Some(120.0)); // autobpm OFF
+        m.trigger_pad_synced(0, 60.0);
+        m.fill_mix(&mut [0.0f32; 200]); // 100 frames drains a native voice
+        assert_eq!(
+            m.active_voices(),
+            0,
+            "played at native length, not stretched"
+        );
     }
 
     #[test]

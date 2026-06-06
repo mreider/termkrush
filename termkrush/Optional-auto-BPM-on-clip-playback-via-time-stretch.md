@@ -2,12 +2,16 @@
 title: Optional auto BPM on clip playback via time stretch
 type: feature
 created: "2026-06-06T14:19:27Z"
-modified: "2026-06-06T14:20:49Z"
+modified: "2026-06-06T19:54:15Z"
 author: Matt Reider
-status: unstarted
+status: accepted
 estimate: "5"
 epic: clips
 project: termkrush
+started: "2026-06-06T19:51:00Z"
+finished: "2026-06-06T19:54:15Z"
+delivered: "2026-06-06T19:54:15Z"
+accepted: "2026-06-06T19:54:15Z"
 ---
 
 ## Intent

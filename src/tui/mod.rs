@@ -479,10 +479,7 @@ impl App {
                 self.mixer.deck_mut(i).toggle();
                 Action::PlayPause
             }
-            Focus::Pad(i) => {
-                self.mixer.trigger_pad(i);
-                Action::TriggerPad
-            }
+            Focus::Pad(i) => self.fire_pad(i),
             Focus::MixSoft => {
                 self.mixer.autofade_to(-1.0, self.fade_secs()); // fade to A
                 Action::Crossfade
@@ -574,6 +571,24 @@ impl App {
     /// Clips recorded this session, oldest first.
     pub fn recordings(&self) -> &[Clip] {
         &self.recordings
+    }
+
+    /// Trigger pad `i`, beat-matching to the active deck's tempo when the
+    /// pad has auto-BPM on (else native rate, with its pattern).
+    fn fire_pad(&mut self, i: usize) -> Action {
+        let target = self.mixer.deck(self.active_deck()).bpm().unwrap_or(0.0);
+        self.mixer.trigger_pad_synced(i, target);
+        Action::TriggerPad
+    }
+
+    /// `b` — toggle auto-BPM on the focused pad.
+    fn toggle_pad_autobpm(&mut self) -> Action {
+        if let Focus::Pad(i) = self.focus {
+            self.mixer.toggle_pad_autobpm(i);
+            Action::Mark
+        } else {
+            Action::None
+        }
     }
 
     /// `r` — toggle the live-mix recorder. Arming captures the master output
@@ -902,12 +917,12 @@ impl App {
             (KeyCode::Char('z'), _) => self.crate_collapse_toggle(),
             (KeyCode::Char('\\'), _) => Action::OpenFile, // load demo into focused deck
             (KeyCode::Char('r'), _) => self.toggle_record(), // resample the live mix
+            (KeyCode::Char('b'), _) => self.toggle_pad_autobpm(), // beat-match this pad
 
             // ---- direct clip triggers (quick, always live) ----
             (KeyCode::Char(c @ '1'..='7'), _) => {
                 let pad = c.to_digit(10).unwrap() as usize - 1;
-                self.mixer.trigger_pad(pad);
-                Action::TriggerPad
+                self.fire_pad(pad)
             }
 
             _ => Action::None,
@@ -1214,7 +1229,15 @@ fn draw_pad_cell(f: &mut Frame, area: Rect, app: &App, pad: usize) {
         format!("  {bpm}")
     };
     let line1 = if loaded {
-        format!("  {glyph} {}", pattern_label(app.mixer.pad_pattern(pad)))
+        let sync = if app.mixer.pad_autobpm(pad) {
+            " sync"
+        } else {
+            ""
+        };
+        format!(
+            "  {glyph} {}{sync}",
+            pattern_label(app.mixer.pad_pattern(pad))
+        )
     } else {
         format!("  {glyph}")
     };
@@ -1463,7 +1486,7 @@ fn draw_help(f: &mut Frame, area: Rect) {
     f.render_widget(Clear, popup);
     // Keys are by finger position: left hand = deck A, right hand = deck B.
     let help = Paragraph::new(
-        "Keys  —  focus a target, then act\n\n  focus       tab + arrows  (every cell; crate is left)\n  act  j play/trig  k cue/assign-rec  l mark-in/assign  ; mark-out/pattern\n  value       w / s     (deck volume · pad trim out)\n  jog         a / d     (deck scrub · pad trim in; shift = fine)\n\n  transition  g/h cut A/B   G/H auto-fade   space dur\n  master      [ / ]      tempo , / . (deck varispeed)\n  clips       1-7 trigger   r record live mix\n\n  crate   / filter   ↑/↓ pick   enter load\n          \\ load demo   z hide crate\n  ?  help   esc/q quit   C-c force",
+        "Keys  —  focus a target, then act\n\n  focus       tab + arrows  (every cell; crate is left)\n  act  j play/trig  k cue/assign-rec  l mark-in/assign  ; mark-out/pattern\n  value       w / s     (deck volume · pad trim out)\n  jog         a / d     (deck scrub · pad trim in; shift = fine)\n\n  transition  g/h cut A/B   G/H auto-fade   space dur\n  master      [ / ]      tempo , / . (deck varispeed)\n  clips       1-7 trigger   r record mix   b beat-match pad\n\n  crate   / filter   ↑/↓ pick   enter load\n          \\ load demo   z hide crate\n  ?  help   esc/q quit   C-c force",
     )
     .block(
         Block::bordered()
@@ -2808,6 +2831,16 @@ mod tests {
         // Arrow right moves to Pad 1 (the other column).
         app.on_key(KeyEvent::new(KeyCode::Right, KeyModifiers::NONE));
         assert_eq!(app.focus_cell(), Focus::Pad(1));
+    }
+
+    #[test]
+    fn b_toggles_auto_bpm_on_the_focused_pad() {
+        let mut app = App::new();
+        app.mixer.assign_pad(0, vec![0.5; 64]);
+        focus_first_pad(&mut app);
+        assert!(!app.mixer.pad_autobpm(0));
+        assert_eq!(app.on_key(key('b')), Action::Mark);
+        assert!(app.mixer.pad_autobpm(0));
     }
 
     #[test]

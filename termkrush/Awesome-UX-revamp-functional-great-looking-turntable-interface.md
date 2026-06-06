@@ -2,15 +2,15 @@
 title: Awesome UX revamp functional great-looking turntable interface
 type: feature
 created: "2026-06-06T09:06:02Z"
-modified: "2026-06-06T09:18:07Z"
+modified: "2026-06-06T14:18:34Z"
 author: Matt Reider
-status: delivered
+status: accepted
 estimate: "8"
 epic: ux
 project: termkrush
 started: "2026-06-06T09:12:40Z"
-finished: "2026-06-06T09:18:07Z"
 delivered: "2026-06-06T09:18:07Z"
+accepted: "2026-06-06T14:18:34Z"
 ---
 
 ## Problem statement

@@ -67,7 +67,6 @@
 |  | [V0.6.0 record](termkrush/v060-record.md) |  |  |
 |  | [Yt-dlp shell-out for media URLs](termkrush/yt-dlp-shell-out-for-media-URLs.md) | 3 | [download](.am/tags/download.md) [yt-dlp](.am/tags/yt-dlp.md) |
 |  | [Lower-corner 8-bit DJ cat that bobs to the BPM](termkrush/Lower-corner-8-bit-DJ-cat-that-bobs-to-the-BPM.md) | 3 |  |
-|  | [Offline BPM detection on load](termkrush/Offline-BPM-detection-on-load.md) | 5 | [tempo](.am/tags/tempo.md) [analysis](.am/tags/analysis.md) |
 |  | [Beat synced clip patterns cut and baby scratch](termkrush/Beat-synced-clip-patterns-cut-and-baby-scratch.md) | 5 |  |
 |  | [Clip buttons assign clips and trigger straight playback](termkrush/Clip-buttons-assign-clips-and-trigger-straight-playback.md) | 5 |  |
 |  | [Clip engine test harness for record trim patterns and stretch](termkrush/Clip-engine-test-harness-for-record-trim-patterns-and-stretch.md) |  |  |
@@ -77,7 +76,7 @@
 |  | [Record a clip from a deck by marking in and out](termkrush/Record-a-clip-from-a-deck-by-marking-in-and-out.md) | 5 |  |
 |  | [Varispeed nudge deck playback speed pitch rides along driven by the BPM keys](termkrush/Varispeed-nudge-deck-playback-speed-pitch-rides-along-driven-by-the-BPM-keys.md) | 3 |  |
 |  | [Resample the live mix into a pad record whatever is playing](termkrush/Resample-the-live-mix-into-a-pad-record-whatever-is-playing.md) | 5 |  |
-| Total Points | | 125 | |
+| Total Points | | 120 | |
 
 ### Started
 | User | Title | Points | Tags |
@@ -137,6 +136,7 @@
 |  | [Uniform grid layout with equal sized boxes for decks clips and DJ](termkrush/Uniform-grid-layout-with-equal-sized-boxes-for-decks-clips-and-DJ.md) | 5 |  |
 |  | [Grid focus navigation tab and arrows with per cell action dispatch](termkrush/Grid-focus-navigation-tab-and-arrows-with-per-cell-action-dispatch.md) | 5 |  |
 |  | [Xbox controller support as the primary input mapped down to keyboard](termkrush/Xbox-controller-support-as-the-primary-input-mapped-down-to-keyboard.md) | 5 |  |
+|  | [Offline BPM detection on load](termkrush/Offline-BPM-detection-on-load.md) | 5 | [tempo](.am/tags/tempo.md) [analysis](.am/tags/analysis.md) |
 
 ### Rejected
 | User | Title | Points | Tags |

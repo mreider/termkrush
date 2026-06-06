@@ -72,6 +72,8 @@ pub struct Mixer {
     scratch_b: Vec<f32>,
     /// Clip assigned to each sampler pad (interleaved stereo), if any.
     pads: [Option<Arc<Vec<f32>>>; PADS],
+    /// Manually-set BPM per pad (for later beat-sync / auto-bpm).
+    pad_bpm: [Option<f32>; PADS],
     /// Currently-sounding one-shot voices, summed atop the deck mix.
     voices: Vec<SampleVoice>,
 }
@@ -96,6 +98,7 @@ impl Mixer {
             scratch_a: Vec::new(),
             scratch_b: Vec::new(),
             pads: Default::default(),
+            pad_bpm: Default::default(),
             voices: Vec::new(),
         }
     }
@@ -105,6 +108,19 @@ impl Mixer {
         if i < PADS {
             self.pads[i] = Some(Arc::new(clip));
         }
+    }
+
+    /// Manually nudge pad `i`'s BPM by `delta` (from 120 if unset), clamped.
+    pub fn nudge_pad_bpm(&mut self, i: usize, delta: f32) {
+        if i < PADS {
+            let next = (self.pad_bpm[i].unwrap_or(120.0) + delta).clamp(40.0, 240.0);
+            self.pad_bpm[i] = Some(next);
+        }
+    }
+
+    /// Pad `i`'s manually-set BPM, if any.
+    pub fn pad_bpm(&self, i: usize) -> Option<f32> {
+        self.pad_bpm.get(i).copied().flatten()
     }
 
     /// `true` if pad `i` has a clip assigned.

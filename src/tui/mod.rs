@@ -130,6 +130,7 @@ pub enum Action {
     ToggleCrate,
     TriggerPad,
     AssignPad,
+    Bpm,
 }
 
 /// UI state for the shell: the decks + master bus (owned by [`Mixer`]),
@@ -265,6 +266,16 @@ impl App {
     fn act_mark_out(&mut self) -> Action {
         // reserved: deck mark-out (Record) / clip auto-BPM toggle (Auto-BPM)
         Action::None
+    }
+
+    /// Nudge the focused target's BPM (deck, or the selected pad in Clips).
+    fn nudge_bpm(&mut self, delta: f32) -> Action {
+        if self.clips_focused {
+            self.mixer.nudge_pad_bpm(self.clip_sel, delta);
+        } else {
+            self.focused_mut().nudge_bpm(delta);
+        }
+        Action::Bpm
     }
 
     // ---- the context-sensitive value keys (w / s) ----
@@ -503,6 +514,10 @@ impl App {
                 Action::MasterGain
             }
 
+            // ---- BPM of the focused target: ,/. nudge ∓1 (shift = ∓0.1) ----
+            (KeyCode::Char(','), _) => self.nudge_bpm(if shift { -0.1 } else { -1.0 }),
+            (KeyCode::Char('.'), _) => self.nudge_bpm(if shift { 0.1 } else { 1.0 }),
+
             // ---- focus + crate browser ----
             (KeyCode::Tab, _) => self.cycle_target(),
             (KeyCode::Char('/'), _) => {
@@ -739,11 +754,25 @@ fn draw_mixer_panel(f: &mut Frame, area: Rect, app: &App) {
             app.mixer.master_gain(),
             fmt_db(app.mixer.master_gain()),
         )),
-        Line::from(format!(
-            "pads {}    voices {}",
-            pads_readout(app),
-            app.mixer.active_voices()
-        )),
+        Line::from(if app.clips_focused() {
+            let bpm = app
+                .mixer
+                .pad_bpm(app.clip_sel())
+                .map(|b| format!("{b:.0}"))
+                .unwrap_or_else(|| "--".into());
+            format!(
+                "pads {}   slot {} · {} bpm",
+                pads_readout(app),
+                app.clip_sel() + 1,
+                bpm
+            )
+        } else {
+            format!(
+                "pads {}    voices {}",
+                pads_readout(app),
+                app.mixer.active_voices()
+            )
+        }),
     ];
     let panel = Paragraph::new(lines)
         .alignment(Alignment::Center)
@@ -1048,7 +1077,7 @@ fn draw_help(f: &mut Frame, area: Rect) {
     f.render_widget(Clear, popup);
     // Keys are by finger position: left hand = deck A, right hand = deck B.
     let help = Paragraph::new(
-        "Keys  —  focus a target, then act\n\n  focus       tab    (Deck A -> Deck B -> Clips)\n  act         j primary   k cue/2nd   l mark·assign   ; alt\n  value       w / s     (deck: volume   clips: pick slot)\n  jog         a / d     (scrub focused deck; shift = coarse)\n\n  transition  g/h cut A/B   G/H auto-fade   space dur\n  master      [ / ]\n  clips       1-4 trigger\n\n  crate   / filter   ↑/↓ pick   enter load\n          \\ load demo   z hide crate\n  ?  help   esc/q quit   C-c force",
+        "Keys  —  focus a target, then act\n\n  focus       tab    (Deck A -> Deck B -> Clips)\n  act         j primary   k cue/2nd   l mark·assign   ; alt\n  value       w / s     (deck: volume   clips: pick slot)\n  jog         a / d     (scrub focused deck; shift = coarse)\n\n  transition  g/h cut A/B   G/H auto-fade   space dur\n  master      [ / ]      bpm  , / .  (shift = .1)\n  clips       1-4 trigger\n\n  crate   / filter   ↑/↓ pick   enter load\n          \\ load demo   z hide crate\n  ?  help   esc/q quit   C-c force",
     )
     .block(
         Block::bordered()
@@ -1822,6 +1851,31 @@ mod tests {
     }
 
     #[test]
+    fn comma_period_nudge_focused_deck_bpm_and_lock_survives_detection() {
+        let mut app = app_with_track(2000, 100); // deck A focused, no BPM yet
+                                                 // `.` nudges up from the 120 default; `,` down; shift = fine.
+        assert_eq!(app.on_key(key('.')), Action::Bpm);
+        assert_eq!(app.mixer.deck(0).bpm(), Some(121.0));
+        app.on_key(KeyEvent::new(KeyCode::Char(','), KeyModifiers::SHIFT));
+        assert_eq!(app.mixer.deck(0).bpm(), Some(120.9));
+        // A later async detection must NOT clobber the manual value.
+        app.mixer.deck_mut(0).set_bpm(174.0);
+        assert_eq!(app.mixer.deck(0).bpm(), Some(120.9), "manual BPM is locked");
+    }
+
+    #[test]
+    fn comma_period_nudge_selected_pad_bpm_in_clips_focus() {
+        let mut app = App::new();
+        let tab = KeyEvent::new(KeyCode::Tab, KeyModifiers::NONE);
+        app.on_key(tab);
+        app.on_key(tab); // -> Clips, slot 0
+        assert_eq!(app.on_key(key('.')), Action::Bpm);
+        assert_eq!(app.mixer.pad_bpm(0), Some(121.0));
+        // Deck A's BPM is untouched by pad nudges.
+        assert_eq!(app.mixer.deck(0).bpm(), None);
+    }
+
+    #[test]
     fn deck_border_is_amber_focused_dim_unfocused() {
         // Acceptance: focus border colors match the design.
         assert_eq!(deck_border(true), AMBER);
@@ -2116,6 +2170,8 @@ mod tests {
             (' ', Action::Crossfade),
             ('[', Action::MasterGain),
             (']', Action::MasterGain),
+            (',', Action::Bpm),
+            ('.', Action::Bpm),
             ('z', Action::ToggleCrate),
             ('\\', Action::OpenFile),
             ('1', Action::TriggerPad),

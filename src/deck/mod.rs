@@ -48,7 +48,16 @@ pub struct Deck {
     name: Option<String>,
     /// Detected tempo in BPM, filled in asynchronously after load.
     bpm: Option<f32>,
+    /// Set once the user manually adjusts the BPM, so a later async
+    /// detection result does not overwrite their value.
+    bpm_locked: bool,
 }
+
+/// Musical BPM range a manual nudge is clamped to.
+pub const MIN_BPM: f32 = 40.0;
+pub const MAX_BPM: f32 = 240.0;
+/// BPM assumed as the starting point when nudging with none set yet.
+const DEFAULT_BPM: f32 = 120.0;
 
 /// Allowed gain range: silence up to +3.5 dB of headroom (1.5x linear).
 pub const GAIN_MIN: f32 = 0.0;
@@ -76,6 +85,7 @@ impl Deck {
             smoothed_gain: 1.0,
             name: None,
             bpm: None,
+            bpm_locked: false,
         }
     }
 
@@ -99,17 +109,27 @@ impl Deck {
         self.state = DeckState::Loaded;
         self.name = None;
         self.bpm = None;
+        self.bpm_locked = false;
     }
 
     /// Record the detected tempo (BPM). Set asynchronously once background
-    /// analysis finishes; ignored if no track is loaded.
+    /// analysis finishes; ignored if no track is loaded or the user has
+    /// manually locked the BPM.
     pub fn set_bpm(&mut self, bpm: f32) {
-        if self.track.is_some() {
+        if self.track.is_some() && !self.bpm_locked {
             self.bpm = Some(bpm);
         }
     }
 
-    /// Detected tempo in BPM, if analysis has completed.
+    /// Manually nudge the BPM by `delta` (from 120 if none yet), clamped to
+    /// the musical range. Locks the value so detection won't overwrite it.
+    pub fn nudge_bpm(&mut self, delta: f32) {
+        let next = (self.bpm.unwrap_or(DEFAULT_BPM) + delta).clamp(MIN_BPM, MAX_BPM);
+        self.bpm = Some(next);
+        self.bpm_locked = true;
+    }
+
+    /// Detected (or manually-set) tempo in BPM, if any.
     pub fn bpm(&self) -> Option<f32> {
         self.bpm
     }

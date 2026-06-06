@@ -9,7 +9,7 @@
 ```
 Velocity (last 12 iterations of 1 week)
 
-  80 |                                    
+  80 |                                  ▃▃
   70 |                                  ▇▇
   60 |                                  ▇▇
   50 |                                  ▇▇

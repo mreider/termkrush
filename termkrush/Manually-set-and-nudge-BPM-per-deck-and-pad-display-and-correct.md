@@ -11,6 +11,7 @@ started: "2026-06-06T17:10:02Z"
 finished: "2026-06-06T17:13:21Z"
 delivered: "2026-06-06T17:13:21Z"
 accepted: "2026-06-06T17:13:21Z"
+project: termkrush
 ---
 
 ## Intent

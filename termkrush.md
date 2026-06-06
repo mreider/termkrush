@@ -133,6 +133,7 @@
 |  | [ESC opens a quit confirmation modal](termkrush/ESC-opens-a-quit-confirmation-modal.md) | 2 |  |
 |  | [Auto fade and hard cut between decks replacing the manual crossfader](termkrush/Auto-fade-and-hard-cut-between-decks-replacing-the-manual-crossfader.md) | 5 |  |
 |  | [Refactor controls into a minimal select then act model](termkrush/Refactor-controls-into-a-minimal-select-then-act-model.md) | 5 |  |
+|  | [Manually set and nudge BPM per deck and pad display and correct](termkrush/Manually-set-and-nudge-BPM-per-deck-and-pad-display-and-correct.md) | 3 |  |
 
 ### Rejected
 | User | Title | Points | Tags |

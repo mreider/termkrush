@@ -74,9 +74,8 @@
 |  | [More clip patterns transformer stutter warble and reverse](termkrush/More-clip-patterns-transformer-stutter-warble-and-reverse.md) | 5 |  |
 |  | [Optional auto BPM on clip playback via time stretch](termkrush/Optional-auto-BPM-on-clip-playback-via-time-stretch.md) | 5 |  |
 |  | [Record a clip from a deck by marking in and out](termkrush/Record-a-clip-from-a-deck-by-marking-in-and-out.md) | 5 |  |
-|  | [Varispeed nudge deck playback speed pitch rides along driven by the BPM keys](termkrush/Varispeed-nudge-deck-playback-speed-pitch-rides-along-driven-by-the-BPM-keys.md) | 3 |  |
 |  | [Resample the live mix into a pad record whatever is playing](termkrush/Resample-the-live-mix-into-a-pad-record-whatever-is-playing.md) | 5 |  |
-| Total Points | | 120 | |
+| Total Points | | 117 | |
 
 ### Started
 | User | Title | Points | Tags |
@@ -137,6 +136,7 @@
 |  | [Grid focus navigation tab and arrows with per cell action dispatch](termkrush/Grid-focus-navigation-tab-and-arrows-with-per-cell-action-dispatch.md) | 5 |  |
 |  | [Xbox controller support as the primary input mapped down to keyboard](termkrush/Xbox-controller-support-as-the-primary-input-mapped-down-to-keyboard.md) | 5 |  |
 |  | [Offline BPM detection on load](termkrush/Offline-BPM-detection-on-load.md) | 5 | [tempo](.am/tags/tempo.md) [analysis](.am/tags/analysis.md) |
+|  | [Varispeed nudge deck playback speed pitch rides along driven by the BPM keys](termkrush/Varispeed-nudge-deck-playback-speed-pitch-rides-along-driven-by-the-BPM-keys.md) | 3 |  |
 
 ### Rejected
 | User | Title | Points | Tags |

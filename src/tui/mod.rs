@@ -1040,13 +1040,7 @@ pub fn draw(f: &mut Frame, app: &App) {
     }
     let r = split2(grid_rows[5]);
     draw_pad_cell(f, r[0], app, 6); // pad 7
-    draw_cell(
-        f,
-        r[1],
-        "DJ",
-        vec![Line::from(""), Line::from("  ♪ (soon)")],
-        app.focus_cell() == Focus::Dj,
-    );
+    draw_cell(f, r[1], "DJ", dj_lines(app), app.focus_cell() == Focus::Dj);
 
     if app.show_help {
         draw_help(f, area);
@@ -1108,6 +1102,33 @@ fn blend_state(app: &App) -> String {
     } else {
         "A + B".into()
     }
+}
+
+/// Which bob frame the 8-bit DJ cat is on: it alternates once per beat off
+/// the first playing deck's effective BPM, and rests (frame 0) when nothing
+/// is playing or no tempo is known.
+fn dj_frame(app: &App) -> usize {
+    for i in 0..DECKS {
+        let d = app.mixer.deck(i);
+        if d.state() == DeckState::Playing {
+            if let Some(bpm) = d.bpm() {
+                let beats = d.position_secs() * bpm as f64 / 60.0;
+                return (beats.floor() as i64).rem_euclid(2) as usize;
+            }
+        }
+    }
+    0
+}
+
+/// The DJ tile's two-line 8-bit cat for the current bob frame (low detail
+/// on purpose). Frame 1 lifts the ears / opens the eyes a touch.
+fn dj_lines(app: &App) -> Vec<Line<'static>> {
+    let (face, deck) = if dj_frame(app) == 0 {
+        ("  =^.^=", "  ♫ dj ♫")
+    } else {
+        ("  =^o^=", "  ♫ DJ ♫")
+    };
+    vec![Line::from(face), Line::from(deck)]
 }
 
 /// One sampler-pad cell: number + assigned/empty glyph + its BPM. Focused
@@ -2744,6 +2765,37 @@ mod tests {
         assert_eq!(act, Action::AssignPad);
         drive_action(&mut app, act); // decodes off-thread, then assigns
         assert!(app.mixer.pad_loaded(0), "slot 0 now holds a clip");
+    }
+
+    #[test]
+    fn dj_cat_bobs_on_the_beat_and_idles() {
+        use crate::audio::DecodedAudio;
+        use crate::test_support::flat_stereo;
+        let rate = 100;
+        let mut app = App::new();
+        // Idle (nothing playing): rest frame, and the cat face renders.
+        assert_eq!(dj_frame(&app), 0);
+        assert!(
+            buffer_text(&render(&app, 100, 36)).contains("=^"),
+            "cat face renders"
+        );
+
+        app.mixer.deck_mut(0).load(DecodedAudio {
+            samples: flat_stereo(400, 0.4),
+            sample_rate: rate,
+            channels: 2,
+            source_sample_rate: rate,
+            source_channels: 2,
+            duration_secs: 4.0,
+            title: None,
+            artist: None,
+        });
+        app.mixer.deck_mut(0).set_bpm(120.0);
+        app.mixer.deck_mut(0).play();
+        assert_eq!(dj_frame(&app), 0, "rest on the downbeat");
+        // 0.5s = one beat at 120 BPM → the bob frame flips.
+        app.mixer.deck_mut(0).fill(&mut vec![0.0f32; 100]); // 50 frames = 0.5s
+        assert_eq!(dj_frame(&app), 1, "bobbed after one beat");
     }
 
     #[test]

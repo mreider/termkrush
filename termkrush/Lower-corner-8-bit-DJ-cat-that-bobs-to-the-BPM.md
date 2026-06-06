@@ -2,12 +2,16 @@
 title: Lower-corner 8-bit DJ cat that bobs to the BPM
 type: feature
 created: "2026-06-05T21:18:14Z"
-modified: "2026-06-06T14:20:50Z"
+modified: "2026-06-06T19:31:59Z"
 author: Matt Reider
-status: unstarted
+status: accepted
 estimate: "3"
 epic: mascot
 project: termkrush
+started: "2026-06-06T19:30:39Z"
+finished: "2026-06-06T19:31:58Z"
+delivered: "2026-06-06T19:31:59Z"
+accepted: "2026-06-06T19:31:59Z"
 ---
 
 ## Intent

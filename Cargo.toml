@@ -39,3 +39,14 @@ proptest = "1"
 opt-level = 3
 lto = true
 strip = true       # strip symbols at link time — cross-target safe, no external strip
+
+# Optimize *dependencies* even in dev/test builds, while keeping our own
+# crate unoptimized (fast incremental builds, debuggable). Without this the
+# audio DSP deps (symphonia mp3 decode, rubato/rustfft resampling) run
+# ~50-80x slower in debug, turning a track load into a ~60s "stuck" decode.
+# Our code stays at the profile's default opt-level so iteration is quick.
+[profile.dev.package."*"]
+opt-level = 3
+
+[profile.test.package."*"]
+opt-level = 3

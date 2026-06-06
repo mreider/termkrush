@@ -253,11 +253,14 @@ fn resample_stereo(
     dst_rate: u32,
 ) -> Result<(Vec<f32>, Vec<f32>), DecodeError> {
     let ratio = dst_rate as f64 / src_rate as f64;
+    // A 128-tap sinc is transparent for music playback and ~2x cheaper than
+    // 256; the resample runs offline on a background thread, but keeping it
+    // snappy matters for the load-time "loading…" wait.
     let params = SincInterpolationParameters {
-        sinc_len: 256,
+        sinc_len: 128,
         f_cutoff: 0.95,
         interpolation: SincInterpolationType::Linear,
-        oversampling_factor: 256,
+        oversampling_factor: 128,
         window: WindowFunction::BlackmanHarris2,
     };
 

@@ -1188,6 +1188,10 @@ fn pattern_label(p: Pattern) -> &'static str {
         Pattern::Straight => "play",
         Pattern::Cut => "cut",
         Pattern::BabyScratch => "scratch",
+        Pattern::Transformer => "xform",
+        Pattern::Stutter => "stutter",
+        Pattern::Warble => "warble",
+        Pattern::Reverse => "reverse",
     }
 }
 

@@ -2,12 +2,16 @@
 title: More clip patterns transformer stutter warble and reverse
 type: feature
 created: "2026-06-06T14:19:27Z"
-modified: "2026-06-06T14:20:49Z"
+modified: "2026-06-06T19:46:22Z"
 author: Matt Reider
-status: unstarted
+status: accepted
 estimate: "5"
 epic: clips
 project: termkrush
+started: "2026-06-06T19:44:15Z"
+finished: "2026-06-06T19:46:22Z"
+delivered: "2026-06-06T19:46:22Z"
+accepted: "2026-06-06T19:46:22Z"
 ---
 
 ## Intent

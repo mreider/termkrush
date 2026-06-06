@@ -30,6 +30,15 @@ pub enum Pattern {
     /// "over and back": a read head bounces across a short slice, audible
     /// both ways — a baby scratch.
     BabyScratch,
+    /// Forward, gated on/off at a finer (sixteenth) division — the
+    /// transformer chop.
+    Transformer,
+    /// Loop a tiny slice rapidly — a roll / stutter.
+    Stutter,
+    /// Forward with a sinusoidally wobbling read rate — pitch vibrato.
+    Warble,
+    /// Play the trimmed region backward.
+    Reverse,
 }
 
 /// One playing sampler voice. Reads its clip according to a [`Pattern`],
@@ -92,6 +101,31 @@ impl SampleVoice {
                     self.dir = 1.0;
                 }
                 frame
+            }
+            Pattern::Transformer => {
+                let (l, r) = self.frame_at((self.in_f + self.t) as f64);
+                let cell = (self.div / 2.0).max(1.0); // sixteenth: finer than Cut
+                let gate = if (self.t as f64 % cell) < cell / 2.0 {
+                    1.0
+                } else {
+                    0.0
+                };
+                (l * gate, r * gate)
+            }
+            Pattern::Stutter => {
+                let slice = (self.div / 2.0).max(1.0) as usize; // tiny looping slice
+                self.frame_at((self.in_f + self.t % slice) as f64)
+            }
+            Pattern::Warble => {
+                // Wobble the read rate ±30% sinusoidally for pitch vibrato.
+                let phase = std::f64::consts::TAU * self.t as f64 / self.div;
+                let frame = self.frame_at(self.head);
+                self.head += 1.0 + 0.3 * phase.sin();
+                frame
+            }
+            Pattern::Reverse => {
+                let idx = self.in_f + self.len_f.saturating_sub(1) - self.t;
+                self.frame_at(idx as f64)
             }
         };
         self.t += 1;
@@ -317,7 +351,11 @@ impl Mixer {
             self.pad_pattern[i] = match self.pad_pattern[i] {
                 Pattern::Straight => Pattern::Cut,
                 Pattern::Cut => Pattern::BabyScratch,
-                Pattern::BabyScratch => Pattern::Straight,
+                Pattern::BabyScratch => Pattern::Transformer,
+                Pattern::Transformer => Pattern::Stutter,
+                Pattern::Stutter => Pattern::Warble,
+                Pattern::Warble => Pattern::Reverse,
+                Pattern::Reverse => Pattern::Straight,
             };
         }
     }
@@ -769,15 +807,69 @@ mod tests {
     }
 
     #[test]
-    fn cycle_pad_pattern_rotates() {
+    fn cycle_pad_pattern_rotates_through_all() {
         let mut m = Mixer::new();
-        assert_eq!(m.pad_pattern(0), Pattern::Straight);
-        m.cycle_pad_pattern(0);
-        assert_eq!(m.pad_pattern(0), Pattern::Cut);
-        m.cycle_pad_pattern(0);
-        assert_eq!(m.pad_pattern(0), Pattern::BabyScratch);
-        m.cycle_pad_pattern(0);
-        assert_eq!(m.pad_pattern(0), Pattern::Straight);
+        let order = [
+            Pattern::Straight,
+            Pattern::Cut,
+            Pattern::BabyScratch,
+            Pattern::Transformer,
+            Pattern::Stutter,
+            Pattern::Warble,
+            Pattern::Reverse,
+        ];
+        for &want in &order {
+            assert_eq!(m.pad_pattern(0), want);
+            m.cycle_pad_pattern(0);
+        }
+        assert_eq!(m.pad_pattern(0), Pattern::Straight, "wraps");
+    }
+
+    /// Build a rising-ramp stereo clip (frame value = i/n).
+    fn ramp_clip(n: usize) -> Vec<f32> {
+        let mut c = Vec::with_capacity(n * 2);
+        for i in 0..n {
+            let v = i as f32 / n as f32;
+            c.push(v);
+            c.push(v);
+        }
+        c
+    }
+
+    #[test]
+    fn reverse_pattern_plays_backward() {
+        let mut m = Mixer::new();
+        m.assign_pad(0, ramp_clip(200));
+        // Straight → ... → Reverse (6 cycles).
+        for _ in 0..6 {
+            m.cycle_pad_pattern(0);
+        }
+        assert_eq!(m.pad_pattern(0), Pattern::Reverse);
+        m.trigger_pad(0);
+        let mut buf = vec![0.0f32; 400];
+        m.fill_mix(&mut buf);
+        let left: Vec<f32> = (0..200).map(|i| buf[i * 2]).collect();
+        assert!(
+            left[0] > left[199],
+            "starts high (end of clip), ends low (start)"
+        );
+    }
+
+    #[test]
+    fn stutter_pattern_loops_a_short_slice() {
+        let mut m = Mixer::new();
+        m.set_sample_rate(1000);
+        m.assign_pad(0, ramp_clip(800));
+        m.set_pad_bpm(0, Some(120.0)); // div=250 → slice = 125 frames
+        for _ in 0..4 {
+            m.cycle_pad_pattern(0);
+        } // → Stutter
+        assert_eq!(m.pad_pattern(0), Pattern::Stutter);
+        m.trigger_pad(0);
+        let mut buf = vec![0.0f32; 1600];
+        m.fill_mix(&mut buf);
+        // The slice repeats: frame 0 and frame 125 read the same source.
+        assert!((buf[0] - buf[125 * 2]).abs() < 1e-6, "slice loops");
     }
 
     #[test]

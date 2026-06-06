@@ -221,3 +221,6 @@
 2026-06-06T17:37:27Z	Matt Reider	set-type	termkrush/Grid-focus-navigation-tab-and-arrows-with-per-cell-action-dispatch.md	feature
 2026-06-06T17:37:27Z	Matt Reider	estimate	termkrush/Grid-focus-navigation-tab-and-arrows-with-per-cell-action-dispatch.md	5
 2026-06-06T17:37:27Z	Matt Reider	started	termkrush/Uniform-grid-layout-with-equal-sized-boxes-for-decks-clips-and-DJ.md	
+2026-06-06T17:45:43Z	Matt Reider	finished	termkrush/Uniform-grid-layout-with-equal-sized-boxes-for-decks-clips-and-DJ.md	
+2026-06-06T17:45:43Z	Matt Reider	delivered	termkrush/Uniform-grid-layout-with-equal-sized-boxes-for-decks-clips-and-DJ.md	
+2026-06-06T17:45:43Z	Matt Reider	accepted	termkrush/Uniform-grid-layout-with-equal-sized-boxes-for-decks-clips-and-DJ.md	Grid render: the control surface is now a 2-column grid of equal cells — [Deck A|Deck B] [Mix·soft|Mix·hard] [Pad1|Pad2]..[Pad7|DJ]. Pad bank grown 4->7 (1-7 trigger); mixer split into soft (auto-fade+dur) and hard (cut+master) cells; DJ placeholder tile. Focused cell highlighted amber (decks + selected pad). Crate stays as the collapsible left panel. Removed draw_deck_panel/draw_mixer_panel/platter/pads_readout. 110 lib + all suites green; fmt/clippy clean. Follow-up: tab/arrow focus nav + per-cell dispatch (next story).

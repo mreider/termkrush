@@ -55,7 +55,7 @@ jog/scratch the focused deck · `Start` quit · `Back` help.
 | `tab`          | step focus through every grid cell (decks · mixer · pads · DJ · crate) |
 | `↑↓←→`         | move the focus box around the grid; on the crate, `↑`/`↓` browse the list |
 | `j`            | primary — deck play/pause · clip trigger |
-| `k`            | secondary — deck cue/stop                |
+| `k`            | secondary — deck cue/stop · on a **pad**: assign the latest recorded clip |
 | `l` / `;`      | on a **deck**: mark-in / mark-out → records that region as a clip; on a **pad**: `l` assigns the highlighted crate track |
 | `w` / `s`      | value — deck volume · clips pick slot    |
 | `a` / `d`      | jog/scrub the focused deck (`shift` = coarse) |

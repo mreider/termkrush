@@ -123,6 +123,13 @@ impl Mixer {
         self.pad_bpm.get(i).copied().flatten()
     }
 
+    /// Set pad `i`'s BPM (e.g. carried from a recorded clip on assignment).
+    pub fn set_pad_bpm(&mut self, i: usize, bpm: Option<f32>) {
+        if i < PADS {
+            self.pad_bpm[i] = bpm;
+        }
+    }
+
     /// `true` if pad `i` has a clip assigned.
     pub fn pad_loaded(&self, i: usize) -> bool {
         i < PADS && self.pads[i].is_some()

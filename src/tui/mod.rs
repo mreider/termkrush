@@ -509,7 +509,16 @@ impl App {
                 self.mixer.cut_to(1.0); // hard cut to B
                 Action::Crossfade
             }
-            _ => Action::None, // pad pattern cycle reserved; deck/crate/dj n/a
+            // On a pad: drop the most-recent recording onto this slot.
+            Focus::Pad(i) => match self.recordings.last() {
+                Some(clip) => {
+                    self.mixer.assign_pad(i, clip.samples.clone());
+                    self.mixer.set_pad_bpm(i, clip.bpm);
+                    Action::AssignPad
+                }
+                None => Action::None,
+            },
+            _ => Action::None, // deck/crate/dj have no secondary here
         }
     }
 
@@ -1334,7 +1343,7 @@ fn draw_help(f: &mut Frame, area: Rect) {
     f.render_widget(Clear, popup);
     // Keys are by finger position: left hand = deck A, right hand = deck B.
     let help = Paragraph::new(
-        "Keys  —  focus a target, then act\n\n  focus       tab + arrows  (every cell; crate is left)\n  act         j play/trigger  k cue   l mark-in/assign  ; mark-out\n  value       w / s     (deck: volume   clips: pick slot)\n  jog         a / d     (scrub focused deck; shift = coarse)\n\n  transition  g/h cut A/B   G/H auto-fade   space dur\n  master      [ / ]      tempo , / . (deck varispeed)\n  clips       1-4 trigger\n\n  crate   / filter   ↑/↓ pick   enter load\n          \\ load demo   z hide crate\n  ?  help   esc/q quit   C-c force",
+        "Keys  —  focus a target, then act\n\n  focus       tab + arrows  (every cell; crate is left)\n  act         j play/trig  k cue/assign-rec  l mark-in/assign-crate  ; mark-out\n  value       w / s     (deck: volume   clips: pick slot)\n  jog         a / d     (scrub focused deck; shift = coarse)\n\n  transition  g/h cut A/B   G/H auto-fade   space dur\n  master      [ / ]      tempo , / . (deck varispeed)\n  clips       1-4 trigger\n\n  crate   / filter   ↑/↓ pick   enter load\n          \\ load demo   z hide crate\n  ?  help   esc/q quit   C-c force",
     )
     .block(
         Block::bordered()
@@ -2665,6 +2674,23 @@ mod tests {
         // Arrow right moves to Pad 1 (the other column).
         app.on_key(KeyEvent::new(KeyCode::Right, KeyModifiers::NONE));
         assert_eq!(app.focus_cell(), Focus::Pad(1));
+    }
+
+    #[test]
+    fn focused_pad_k_assigns_latest_recording_then_triggers() {
+        let mut app = App::new();
+        app.recordings.push(Clip::new(
+            crate::test_support::flat_stereo(64, 0.5),
+            Some(126.0),
+            "rec",
+        ));
+        focus_first_pad(&mut app); // Pad 0
+        assert_eq!(app.on_key(key('k')), Action::AssignPad);
+        assert!(app.mixer.pad_loaded(0), "recording landed on the pad");
+        assert_eq!(app.mixer.pad_bpm(0), Some(126.0), "clip BPM carried over");
+        // And it triggers like any pad clip.
+        assert_eq!(app.on_key(key('j')), Action::TriggerPad);
+        assert_eq!(app.mixer.active_voices(), 1);
     }
 
     #[test]

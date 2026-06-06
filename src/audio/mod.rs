@@ -8,7 +8,9 @@
 pub mod bpm;
 pub mod decode;
 pub mod output;
+pub mod stretch;
 
 pub use bpm::detect_bpm;
 pub use decode::{decode_file, DecodeError, DecodedAudio};
 pub use output::{AudioOutput, SineSink, Sink};
+pub use stretch::time_stretch;

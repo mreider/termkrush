@@ -2,13 +2,17 @@
 title: Pitch-preserving time-stretch
 type: feature
 created: "2026-06-04T09:15:06Z"
-modified: "2026-06-04T09:15:06Z"
+modified: "2026-06-06T19:49:22Z"
 author: Matt Reider
-status: unstarted
+status: accepted
 estimate: "5"
 epic: tempo
 tags: [tempo, dsp]
 project: termkrush
+started: "2026-06-06T19:47:01Z"
+finished: "2026-06-06T19:49:22Z"
+delivered: "2026-06-06T19:49:22Z"
+accepted: "2026-06-06T19:49:22Z"
 ---
 
 ## Problem statement

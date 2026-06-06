@@ -1273,6 +1273,8 @@ fn draw_deck_cell(
     let marker = if focused { "▸ " } else { "" };
     let bpm = match deck.bpm() {
         Some(b) => format!("  {b:.0} BPM"),
+        // Track loaded but tempo not in yet: a placeholder during analysis.
+        None if deck.state() != DeckState::Empty => "  … BPM".to_string(),
         None => String::new(),
     };
     let title = format!("{marker}Deck {label}{bpm}");
@@ -2321,6 +2323,15 @@ mod tests {
         assert!(
             text.contains("auto-fade"),
             "transition readout missing:\n{text}"
+        );
+    }
+
+    #[test]
+    fn deck_panel_shows_bpm_placeholder_until_detected() {
+        let app = app_with_track(1000, 100); // loaded, BPM not yet known
+        assert!(
+            buffer_text(&render(&app, 100, 36)).contains("… BPM"),
+            "placeholder shows during the detection window"
         );
     }
 

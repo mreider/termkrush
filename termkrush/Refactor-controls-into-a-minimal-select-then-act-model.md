@@ -2,12 +2,16 @@
 title: Refactor controls into a minimal select then act model
 type: feature
 created: "2026-06-06T14:49:48Z"
-modified: "2026-06-06T14:50:11Z"
+modified: "2026-06-06T15:04:00Z"
 author: Matt Reider
-status: unstarted
+status: accepted
 estimate: "5"
 epic: controls
 project: termkrush
+started: "2026-06-06T14:55:10Z"
+finished: "2026-06-06T15:03:59Z"
+delivered: "2026-06-06T15:03:59Z"
+accepted: "2026-06-06T15:04:00Z"
 ---
 
 ## Intent

@@ -39,26 +39,24 @@ Rust 1.75+ (MSRV). The toolchain pin lives in `rust-toolchain.toml`.
 
 ## Keyboard cheatsheet
 
-The layout is **ergonomic, not mnemonic** — keys are placed by finger, not by
-the action's initial letter. Your **left hand drives Deck A**, your **right
-hand mirrors it for Deck B**, and the crossfader sits between the hands. (Full
-map is in the in-app `?` help.)
+The model is **focus → act**: pick a target (Deck A · Deck B · Clips), then a
+small fixed cluster of keys acts on it — meaning set by what's focused. Fewer
+keys, no per-deck duplication, and a 1:1 shape with the gamepad. (Full map is
+in the in-app `?` help; an Xbox controller is the preferred input.)
 
-|                | **Deck A** (left) | **Deck B** (right) |
-|----------------|:------:|:------:|
-| play / pause   | `f`    | `j`    |
-| cue (stop → 0) | `d`    | `k`    |
-| volume up/down | `w` / `s` | `o` / `l` |
-| seek − / +     | `e` / `r` | `i` / `u` | _(hold `shift` = far)_ |
-
-| Key            | Action                                  |
+| Key            | Action (on the **focused** target)      |
 |----------------|-----------------------------------------|
+| `tab`          | cycle focus: Deck A → Deck B → Clips     |
+| `j`            | primary — deck play/pause · clip trigger |
+| `k`            | secondary — deck cue/stop                |
+| `l`            | mark / assign — clip: assign highlighted crate track |
+| `w` / `s`      | value — deck volume · clips pick slot    |
+| `a` / `d`      | jog/scrub the focused deck (`shift` = coarse) |
 | `g` / `h`      | hard-cut the mix to deck A / deck B (instant) |
 | `G` / `H`      | auto-fade to deck A / deck B over the set duration |
 | `space`        | cycle the auto-fade duration (1 / 2 / 4 / 8 s) |
+| `1`–`4`        | trigger clip pads directly              |
 | `[` / `]`      | master volume down / up                 |
-| `,` / `.`      | fine scrub the focused deck (±0.1s)     |
-| `tab`          | switch focused deck (load / scrub target) |
 | `/`            | filter the crate; `↑`/`↓` pick; `enter` load |
 | `\`            | load the demo track (or `$TERMKRUSH_DEMO_TRACK`) |
 | `z`            | hide / show the crate panel             |

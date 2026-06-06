@@ -16,7 +16,6 @@
 |  | [Custom color themes](termkrush/Custom-color-themes.md) |  | [tui](.am/tags/tui.md) [icebox](.am/tags/icebox.md) |
 |  | [DJ stabs sampler bank](termkrush/DJ-stabs-sampler-bank.md) |  | [sampler](.am/tags/sampler.md) [fx](.am/tags/fx.md) [icebox](.am/tags/icebox.md) |
 |  | [Direct URL mp3 download](termkrush/Direct-URL-mp3-download.md) | 3 | [download](.am/tags/download.md) [net](.am/tags/net.md) |
-|  | [Display BPM per deck](termkrush/Display-BPM-per-deck.md) | 1 | [tempo](.am/tags/tempo.md) [tui](.am/tags/tui.md) |
 |  | [Download TUI panel](termkrush/Download-TUI-panel.md) | 3 | [download](.am/tags/download.md) [tui](.am/tags/tui.md) |
 |  | [Echo delay effect](termkrush/Echo-delay-effect.md) | 3 | [fx](.am/tags/fx.md) [dsp](.am/tags/dsp.md) |
 |  | [Filter sweep effect](termkrush/Filter-sweep-effect.md) | 3 | [fx](.am/tags/fx.md) [dsp](.am/tags/dsp.md) |
@@ -50,7 +49,6 @@
 |  | [Spectrum analyzer](termkrush/Spectrum-analyzer.md) |  | [tui](.am/tags/tui.md) [icebox](.am/tags/icebox.md) [viz](.am/tags/viz.md) |
 |  | [Sync deck BPM to reference deck](termkrush/Sync-deck-BPM-to-reference-deck.md) | 3 | [tempo](.am/tags/tempo.md) [sync](.am/tags/sync.md) |
 |  | [Tap tempo](termkrush/Tap-tempo.md) |  | [tempo](.am/tags/tempo.md) [icebox](.am/tags/icebox.md) |
-|  | [Tempo nudge controls](termkrush/Tempo-nudge-controls.md) | 2 | [tempo](.am/tags/tempo.md) [tui](.am/tags/tui.md) |
 |  | [Tempo ramping curves](termkrush/Tempo-ramping-curves.md) |  | [tempo](.am/tags/tempo.md) [icebox](.am/tags/icebox.md) |
 |  | [Track metadata ID3 editor](termkrush/Track-metadata-ID3-editor.md) |  | [metadata](.am/tags/metadata.md) [icebox](.am/tags/icebox.md) |
 |  | [Vinyl noise FX](termkrush/Vinyl-noise-FX.md) |  | [fx](.am/tags/fx.md) [icebox](.am/tags/icebox.md) [texture](.am/tags/texture.md) |
@@ -64,7 +62,7 @@
 |  | [V0.5.0 more decks](termkrush/v050-more-decks.md) |  |  |
 |  | [V0.6.0 record](termkrush/v060-record.md) |  |  |
 |  | [Yt-dlp shell-out for media URLs](termkrush/yt-dlp-shell-out-for-media-URLs.md) | 3 | [download](.am/tags/download.md) [yt-dlp](.am/tags/yt-dlp.md) |
-| Total Points | | 72 | |
+| Total Points | | 69 | |
 
 ### Started
 | User | Title | Points | Tags |
@@ -137,6 +135,8 @@
 |  | [Pitch-preserving time-stretch](termkrush/Pitch-preserving-time-stretch.md) | 5 | [tempo](.am/tags/tempo.md) [dsp](.am/tags/dsp.md) |
 |  | [Optional auto BPM on clip playback via time stretch](termkrush/Optional-auto-BPM-on-clip-playback-via-time-stretch.md) | 5 |  |
 |  | [Cache BPM and analysis per file](termkrush/Cache-BPM-and-analysis-per-file.md) | 2 | [tempo](.am/tags/tempo.md) [cache](.am/tags/cache.md) |
+|  | [Display BPM per deck](termkrush/Display-BPM-per-deck.md) | 1 | [tempo](.am/tags/tempo.md) [tui](.am/tags/tui.md) |
+|  | [Tempo nudge controls](termkrush/Tempo-nudge-controls.md) | 2 | [tempo](.am/tags/tempo.md) [tui](.am/tags/tui.md) |
 
 ### Rejected
 | User | Title | Points | Tags |

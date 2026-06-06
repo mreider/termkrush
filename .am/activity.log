@@ -287,3 +287,11 @@
 2026-06-06T19:57:38Z	Matt Reider	finished	termkrush/Cache-BPM-and-analysis-per-file.md	
 2026-06-06T19:57:38Z	Matt Reider	delivered	termkrush/Cache-BPM-and-analysis-per-file.md	
 2026-06-06T19:57:38Z	Matt Reider	accepted	termkrush/Cache-BPM-and-analysis-per-file.md	BPM cache per file path (App.bpm_cache). Detected BPM is remembered on first analysis (place_decoded); a later load of the same path passes the cached value into the decode (detect=false), so re-analysis is skipped and the deck shows the tempo immediately. Test: pre-seeded cache → load applies it without detecting. 142 lib + all suites green; fmt/clippy clean.
+2026-06-06T19:58:21Z	Matt Reider	started	termkrush/Display-BPM-per-deck.md	
+2026-06-06T19:59:38Z	Matt Reider	finished	termkrush/Display-BPM-per-deck.md	
+2026-06-06T19:59:38Z	Matt Reider	delivered	termkrush/Display-BPM-per-deck.md	
+2026-06-06T19:59:38Z	Matt Reider	accepted	termkrush/Display-BPM-per-deck.md	Deck panel shows BPM after load (Deck cell title 'Deck A 126 BPM'); a '… BPM' placeholder shows while a track is loaded but the tempo isn't in yet (detection window); cached BPM (per #56) means a reloaded file matches its prior analysis. Added the placeholder; the rest landed with BPM detection + the grid deck cell. Test: placeholder renders pre-detection; 128 BPM renders after. 143 lib green.
+2026-06-06T19:59:38Z	Matt Reider	started	termkrush/Tempo-nudge-controls.md	
+2026-06-06T19:59:38Z	Matt Reider	finished	termkrush/Tempo-nudge-controls.md	
+2026-06-06T19:59:38Z	Matt Reider	delivered	termkrush/Tempo-nudge-controls.md	
+2026-06-06T19:59:38Z	Matt Reider	accepted	termkrush/Tempo-nudge-controls.md	Delivered by Varispeed: ,/. nudge the focused deck's tempo (±1%, shift ±0.1%), the readout (effective BPM = base×speed + speed %) updates each press, and the value persists once released (it's a stored multiplier). Effective tempo changes audibly. No new code — the varispeed story satisfies all three acceptance points; pitch-preserving tempo is the separate time-stretch engine.

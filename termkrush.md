@@ -78,7 +78,8 @@
 |  | [Xbox controller support as the primary input mapped down to keyboard](termkrush/Xbox-controller-support-as-the-primary-input-mapped-down-to-keyboard.md) | 5 |  |
 |  | [Grid focus navigation tab and arrows with per cell action dispatch](termkrush/Grid-focus-navigation-tab-and-arrows-with-per-cell-action-dispatch.md) | 5 |  |
 |  | [Varispeed nudge deck playback speed pitch rides along driven by the BPM keys](termkrush/Varispeed-nudge-deck-playback-speed-pitch-rides-along-driven-by-the-BPM-keys.md) | 3 |  |
-| Total Points | | 130 | |
+|  | [Resample the live mix into a pad record whatever is playing](termkrush/Resample-the-live-mix-into-a-pad-record-whatever-is-playing.md) | 5 |  |
+| Total Points | | 135 | |
 
 ### Started
 | User | Title | Points | Tags |

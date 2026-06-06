@@ -42,6 +42,7 @@ Stack-rank order. Top is the highest priority. Edit by hand or via `am rank` / `
 - [Clip engine test harness for record trim patterns and stretch](Clip-engine-test-harness-for-record-trim-patterns-and-stretch.md)
 - [Record a clip from a deck by marking in and out](Record-a-clip-from-a-deck-by-marking-in-and-out.md)
 - [Clip buttons assign clips and trigger straight playback](Clip-buttons-assign-clips-and-trigger-straight-playback.md)
+- [Resample the live mix into a pad record whatever is playing](Resample-the-live-mix-into-a-pad-record-whatever-is-playing.md)
 - [Lower-corner 8-bit DJ cat that bobs to the BPM](Lower-corner-8-bit-DJ-cat-that-bobs-to-the-BPM.md)
 - [Clip timeline view with precise non destructive trim](Clip-timeline-view-with-precise-non-destructive-trim.md)
 - [Beat synced clip patterns cut and baby scratch](Beat-synced-clip-patterns-cut-and-baby-scratch.md)

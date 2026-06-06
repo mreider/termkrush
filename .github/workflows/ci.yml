@@ -34,7 +34,7 @@ jobs:
           components: rustfmt, clippy
       - uses: Swatinem/rust-cache@v2
       - name: Install ALSA dev headers
-        run: sudo apt-get update && sudo apt-get install -y libasound2-dev
+        run: sudo apt-get update && sudo apt-get install -y libasound2-dev libudev-dev
       - name: rustfmt
         run: cargo fmt --all --check
       - name: clippy
@@ -51,7 +51,7 @@ jobs:
       - uses: Swatinem/rust-cache@v2
       - uses: taiki-e/install-action@cargo-llvm-cov
       - name: Install ALSA dev headers
-        run: sudo apt-get update && sudo apt-get install -y libasound2-dev
+        run: sudo apt-get update && sudo apt-get install -y libasound2-dev libudev-dev
       - name: Generate coverage (LCOV)
         # Prints the per-file summary and fails the job if total line
         # coverage drops below the floor — the visible, hard gate. Codecov
@@ -81,7 +81,7 @@ jobs:
       - uses: Swatinem/rust-cache@v2
       - name: Install ALSA dev headers (Linux)
         if: runner.os == 'Linux'
-        run: sudo apt-get update && sudo apt-get install -y libasound2-dev
+        run: sudo apt-get update && sudo apt-get install -y libasound2-dev libudev-dev
       - name: test
         run: cargo test --all
       - name: build release

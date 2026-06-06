@@ -2,12 +2,16 @@
 title: Xbox controller support as the primary input mapped down to keyboard
 type: feature
 created: "2026-06-06T14:49:48Z"
-modified: "2026-06-06T14:50:12Z"
+modified: "2026-06-06T19:08:29Z"
 author: Matt Reider
-status: unstarted
+status: accepted
 estimate: "5"
 epic: controls
 project: termkrush
+started: "2026-06-06T19:03:59Z"
+finished: "2026-06-06T19:08:28Z"
+delivered: "2026-06-06T19:08:28Z"
+accepted: "2026-06-06T19:08:29Z"
 ---
 
 ## Intent

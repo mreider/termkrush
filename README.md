@@ -44,6 +44,12 @@ small fixed cluster of keys acts on it — meaning set by what's focused. Fewer
 keys, no per-deck duplication, and a 1:1 shape with the gamepad. (Full map is
 in the in-app `?` help; an Xbox controller is the preferred input.)
 
+**Xbox controller** (plug it in — picked up automatically; keyboard still
+works): `LB`/`RB` focus Deck A/B · D-pad moves the focus box · `A`/`B`/`X`/`Y`
+are the action cluster (play / cue / mark·assign / alt) · `LT`/`RT` auto-fade
+toward A/B · **right stick** = continuous crossfade, **left stick** =
+jog/scratch the focused deck · `Start` quit · `Back` help.
+
 | Key            | Action (on the **focused** target)      |
 |----------------|-----------------------------------------|
 | `tab`          | step focus through every grid cell (decks · mixer · pads · DJ · crate) |

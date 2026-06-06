@@ -30,6 +30,9 @@ symphonia = { version = "0.5", default-features = false, features = ["mp3", "wav
 rubato = "0.16"
 # Config file parsing (~/.config/termkrush/config.toml).
 toml = "0.8"
+# Gamepad input (Xbox is the preferred controller). The mapping layer is
+# unit-tested via a normalized PadInput enum; gilrs only feeds it at runtime.
+gilrs = "0.11"
 
 [dev-dependencies]
 # Property-based testing for the DSP path (gain, crossfade, mix).

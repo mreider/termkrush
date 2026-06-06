@@ -160,6 +160,30 @@ enum Dir {
     Right,
 }
 
+/// A normalized gamepad input — decoupled from `gilrs` so the mapping is
+/// unit-testable without hardware. The runtime translates raw pad events
+/// into these; [`App::on_pad`] applies them via the same focus→act model the
+/// keyboard uses (Xbox is the preferred controller; the keyboard mirrors it).
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum PadInput {
+    FocusDeckA, // LB
+    FocusDeckB, // RB
+    DpadUp,
+    DpadDown,
+    DpadLeft,
+    DpadRight,
+    FaceA, // primary   (play / trigger / load)
+    FaceB, // secondary (cue / fade-to-B)
+    FaceX, // mark / assign
+    FaceY, // alt
+    FadeA, // LT — auto-fade toward A
+    FadeB, // RT — auto-fade toward B
+    Crossfade(f32),
+    Jog(f32),
+    Quit, // Start
+    Help, // Back / View
+}
+
 /// UI state for the shell: the decks + master bus (owned by [`Mixer`]),
 /// which deck has focus, and the browsable local crate.
 #[derive(Debug, Default)]
@@ -369,6 +393,72 @@ impl App {
             Action::LoadSelected
         } else {
             Action::None
+        }
+    }
+
+    /// Apply a gamepad input via the same focus→act model as the keyboard.
+    /// Pure of hardware (takes a normalized [`PadInput`]), so it's testable;
+    /// the runtime translates raw `gilrs` events into these.
+    pub fn on_pad(&mut self, input: PadInput) -> Action {
+        use PadInput::*;
+        // The quit modal captures confirm/cancel first.
+        if self.confirm_quit {
+            return match input {
+                FaceA | Quit => {
+                    self.should_quit = true;
+                    Action::Quit
+                }
+                FaceB => {
+                    self.confirm_quit = false;
+                    Action::ConfirmQuit
+                }
+                _ => Action::None,
+            };
+        }
+        match input {
+            FocusDeckA => {
+                self.set_focus(Focus::Deck(0));
+                Action::Focus
+            }
+            FocusDeckB => {
+                self.set_focus(Focus::Deck(1));
+                Action::Focus
+            }
+            DpadUp => self.move_focus(Dir::Up),
+            DpadDown => self.move_focus(Dir::Down),
+            DpadLeft => self.move_focus(Dir::Left),
+            DpadRight => self.move_focus(Dir::Right),
+            FaceA => self.act_primary(),
+            FaceB => self.act_secondary(),
+            FaceX => self.act_mark_in(),
+            FaceY => self.act_mark_out(),
+            FadeA => {
+                self.mixer.autofade_to(-1.0, self.fade_secs());
+                Action::Crossfade
+            }
+            FadeB => {
+                self.mixer.autofade_to(1.0, self.fade_secs());
+                Action::Crossfade
+            }
+            // Right stick = continuous crossfade (the platter/fader).
+            Crossfade(x) => {
+                self.mixer.cut_to(x.clamp(-1.0, 1.0));
+                Action::Crossfade
+            }
+            // Left stick = jog/scratch the focused deck.
+            Jog(x) => {
+                let amt = x.clamp(-1.0, 1.0) as f64 * SEEK_SCRUB;
+                self.focused_mut().seek_by(amt);
+                Action::Seek
+            }
+            Quit => {
+                self.confirm_quit = true;
+                Action::ConfirmQuit
+            }
+            Help => {
+                self.show_help = !self.show_help;
+                Action::ToggleHelp
+            }
         }
     }
 
@@ -1279,9 +1369,23 @@ fn event_loop(terminal: &mut Term) -> io::Result<()> {
     // Background decode threads post finished tracks (with BPM) back here.
     let (load_tx, load_rx) = std::sync::mpsc::channel::<Decoded>();
 
-    tracing::info!("tui event loop started");
+    // Gamepad (Xbox preferred). Optional: absent or unsupported → keyboard
+    // only. We poll its events each frame alongside the terminal's.
+    let mut gilrs = gilrs::Gilrs::new().ok();
+
+    tracing::info!(gamepad = gilrs.is_some(), "tui event loop started");
     while !app.should_quit {
         terminal.draw(|f| draw(f, &app))?;
+        // Drain gamepad events (non-blocking) through the same action path.
+        if let Some(g) = gilrs.as_mut() {
+            while let Some(gilrs::Event { event, .. }) = g.next_event() {
+                if let Some(input) = translate_pad(event) {
+                    let action = app.on_pad(input);
+                    apply_load_action(&mut app, action, target_rate, &load_tx);
+                    apply_pad_assign(&mut app, action, target_rate, &load_tx);
+                }
+            }
+        }
         // Poll up to one frame; redraw at least every FRAME, sooner on input.
         if event::poll(FRAME)? {
             let ev = event::read()?;
@@ -1393,6 +1497,39 @@ fn apply_pad_assign(
         load_tx.clone(),
     );
     true
+}
+
+/// Translate a raw `gilrs` event into a normalized [`PadInput`] (Xbox
+/// layout), or `None` for events we don't map. Axis jitter near center is
+/// dropped via a small deadzone. The mapping mirrors the keyboard model.
+fn translate_pad(ev: gilrs::EventType) -> Option<PadInput> {
+    use gilrs::{Axis, Button, EventType};
+    use PadInput::*;
+    match ev {
+        EventType::ButtonPressed(b, _) => match b {
+            Button::South => Some(FaceA),             // A
+            Button::East => Some(FaceB),              // B
+            Button::West => Some(FaceX),              // X
+            Button::North => Some(FaceY),             // Y
+            Button::LeftTrigger => Some(FocusDeckA),  // LB
+            Button::RightTrigger => Some(FocusDeckB), // RB
+            Button::LeftTrigger2 => Some(FadeA),      // LT
+            Button::RightTrigger2 => Some(FadeB),     // RT
+            Button::Start => Some(Quit),
+            Button::Select => Some(Help),
+            Button::DPadUp => Some(DpadUp),
+            Button::DPadDown => Some(DpadDown),
+            Button::DPadLeft => Some(DpadLeft),
+            Button::DPadRight => Some(DpadRight),
+            _ => None,
+        },
+        EventType::AxisChanged(axis, v, _) if v.abs() >= 0.1 => match axis {
+            Axis::RightStickX => Some(Crossfade(v)), // continuous crossfade
+            Axis::LeftStickX => Some(Jog(v)),        // jog/scratch focused deck
+            _ => None,
+        },
+        _ => None,
+    }
 }
 
 /// The `o` quick-demo track path: `TERMKRUSH_DEMO_TRACK` if set, else the
@@ -2022,6 +2159,39 @@ mod tests {
         assert_eq!(app.focus_cell(), Focus::MixHard);
         assert_eq!(app.on_key(key('j')), Action::Crossfade);
         assert_eq!(app.mixer.xfade_applied(), -1.0, "hard cut to A is instant");
+    }
+
+    #[test]
+    fn pad_bumpers_focus_decks_and_face_buttons_act() {
+        let mut app = loaded_app(); // deck A loaded + focused
+        assert_eq!(app.on_pad(PadInput::FocusDeckB), Action::Focus);
+        assert_eq!(app.focus_cell(), Focus::Deck(1));
+        assert_eq!(app.on_pad(PadInput::FocusDeckA), Action::Focus);
+        assert_eq!(app.focus_cell(), Focus::Deck(0));
+        assert_eq!(app.on_pad(PadInput::FaceA), Action::PlayPause); // A = play
+        assert_eq!(app.mixer.deck(0).state(), DeckState::Playing);
+        assert_eq!(app.on_pad(PadInput::FaceB), Action::Stop); // B = cue/stop
+    }
+
+    #[test]
+    fn pad_dpad_navigates_and_triggers_and_sticks_blend() {
+        let mut app = App::new();
+        assert_eq!(app.on_pad(PadInput::DpadRight), Action::Focus);
+        assert_eq!(app.focus_cell(), Focus::Deck(1)); // dpad = grid nav
+        assert_eq!(app.on_pad(PadInput::FadeB), Action::Crossfade); // RT auto-fade
+        assert!(app.mixer.is_fading());
+        // Right stick = continuous crossfade (instant blend position).
+        assert_eq!(app.on_pad(PadInput::Crossfade(-1.0)), Action::Crossfade);
+        assert_eq!(app.mixer.xfade_applied(), -1.0);
+    }
+
+    #[test]
+    fn pad_start_opens_quit_modal_then_a_confirms() {
+        let mut app = App::new();
+        assert_eq!(app.on_pad(PadInput::Quit), Action::ConfirmQuit);
+        assert!(app.confirm_quit && !app.should_quit);
+        assert_eq!(app.on_pad(PadInput::FaceA), Action::Quit); // A = yes
+        assert!(app.should_quit);
     }
 
     #[test]

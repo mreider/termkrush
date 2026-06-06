@@ -68,8 +68,7 @@
 |  | [Yt-dlp shell-out for media URLs](termkrush/yt-dlp-shell-out-for-media-URLs.md) | 3 | [download](.am/tags/download.md) [yt-dlp](.am/tags/yt-dlp.md) |
 |  | [Clip pads trigger samples over the mix](termkrush/Clip-pads-trigger-samples-over-the-mix.md) | 5 |  |
 |  | [Lower-corner 8-bit DJ cat that bobs to the BPM](termkrush/Lower-corner-8-bit-DJ-cat-that-bobs-to-the-BPM.md) | 3 |  |
-|  | [Awesome UX revamp functional great-looking turntable interface](termkrush/Awesome-UX-revamp-functional-great-looking-turntable-interface.md) | 8 |  |
-| Total Points | | 95 | |
+| Total Points | | 87 | |
 
 ### Started
 | User | Title | Points | Tags |
@@ -85,6 +84,7 @@
 ### Delivered
 | User | Title | Points | Tags |
 |---|---|:---:|---|
+|  | [Awesome UX revamp functional great-looking turntable interface](termkrush/Awesome-UX-revamp-functional-great-looking-turntable-interface.md) | 8 |  |
 
 ### Accepted
 | User | Title | Points | Tags |

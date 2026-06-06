@@ -135,3 +135,6 @@
 2026-06-06T09:11:19Z	Matt Reider	finished	termkrush/Bug-pressing-enter-does-not-load-a-track-load-path-untested-empty-crate-is-a-silent-no-op.md	
 2026-06-06T09:11:19Z	Matt Reider	delivered	termkrush/Bug-pressing-enter-does-not-load-a-track-load-path-untested-empty-crate-is-a-silent-no-op.md	
 2026-06-06T09:11:19Z	Matt Reider	accepted	termkrush/Bug-pressing-enter-does-not-load-a-track-load-path-untested-empty-crate-is-a-silent-no-op.md	Root cause: empty crate (crate_root unset) -> enter had nothing to select; compounded by the load path never being integration-tested. Fixed: load step lifted to testable apply_load_action + proven e2e (enter decodes+loads real fixture; loaded track plays non-silent), empty-crate now shows actionable guidance, empty-enter is a safe no-op. No new code beyond the integration-tests chore + crate-truncation bug + config; this verifies/closes it. 96 lib tests green.
+2026-06-06T09:12:40Z	Matt Reider	started	termkrush/Awesome-UX-revamp-functional-great-looking-turntable-interface.md	
+2026-06-06T09:18:07Z	Matt Reider	finished	termkrush/Awesome-UX-revamp-functional-great-looking-turntable-interface.md	
+2026-06-06T09:18:07Z	Matt Reider	delivered	termkrush/Awesome-UX-revamp-functional-great-looking-turntable-interface.md	

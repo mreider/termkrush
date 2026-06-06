@@ -28,7 +28,6 @@
 |  | [Loop roll quarter and eighth beat loops](termkrush/Loop-roll-quarter-and-eighth-beat-loops.md) |  | [loop](.am/tags/loop.md) [icebox](.am/tags/icebox.md) |
 |  | [MIDI controller support](termkrush/MIDI-controller-support.md) |  | [midi](.am/tags/midi.md) [icebox](.am/tags/icebox.md) [hardware](.am/tags/hardware.md) |
 |  | [MP3 encoder](termkrush/MP3-encoder.md) | 5 | [record](.am/tags/record.md) [io](.am/tags/io.md) [encode](.am/tags/encode.md) |
-|  | [Manual cue points per deck](termkrush/Manual-cue-points-per-deck.md) | 3 | [deck](.am/tags/deck.md) [cue](.am/tags/cue.md) |
 |  | [Mark scratch zone on a deck](termkrush/Mark-scratch-zone-on-a-deck.md) | 2 | [scratch](.am/tags/scratch.md) [deck](.am/tags/deck.md) |
 |  | [Master tap into ring buffer](termkrush/Master-tap-into-ring-buffer.md) | 3 | [record](.am/tags/record.md) [architecture](.am/tags/architecture.md) |
 |  | [Multi-detector BPM consensus](termkrush/Multi-detector-BPM-consensus.md) |  | [tempo](.am/tags/tempo.md) [analysis](.am/tags/analysis.md) [icebox](.am/tags/icebox.md) |
@@ -61,7 +60,7 @@
 |  | [V0.5.0 more decks](termkrush/v050-more-decks.md) |  |  |
 |  | [V0.6.0 record](termkrush/v060-record.md) |  |  |
 |  | [Yt-dlp shell-out for media URLs](termkrush/yt-dlp-shell-out-for-media-URLs.md) | 3 | [download](.am/tags/download.md) [yt-dlp](.am/tags/yt-dlp.md) |
-| Total Points | | 66 | |
+| Total Points | | 63 | |
 
 ### Started
 | User | Title | Points | Tags |
@@ -137,6 +136,7 @@
 |  | [Display BPM per deck](termkrush/Display-BPM-per-deck.md) | 1 | [tempo](.am/tags/tempo.md) [tui](.am/tags/tui.md) |
 |  | [Tempo nudge controls](termkrush/Tempo-nudge-controls.md) | 2 | [tempo](.am/tags/tempo.md) [tui](.am/tags/tui.md) |
 |  | [Sync deck BPM to reference deck](termkrush/Sync-deck-BPM-to-reference-deck.md) | 3 | [tempo](.am/tags/tempo.md) [sync](.am/tags/sync.md) |
+|  | [Manual cue points per deck](termkrush/Manual-cue-points-per-deck.md) | 3 | [deck](.am/tags/deck.md) [cue](.am/tags/cue.md) |
 
 ### Rejected
 | User | Title | Points | Tags |

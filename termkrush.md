@@ -68,12 +68,11 @@
 |  | [Yt-dlp shell-out for media URLs](termkrush/yt-dlp-shell-out-for-media-URLs.md) | 3 | [download](.am/tags/download.md) [yt-dlp](.am/tags/yt-dlp.md) |
 |  | [Lower-corner 8-bit DJ cat that bobs to the BPM](termkrush/Lower-corner-8-bit-DJ-cat-that-bobs-to-the-BPM.md) | 3 |  |
 |  | [Beat synced clip patterns cut and baby scratch](termkrush/Beat-synced-clip-patterns-cut-and-baby-scratch.md) | 5 |  |
-|  | [Clip buttons assign clips and trigger straight playback](termkrush/Clip-buttons-assign-clips-and-trigger-straight-playback.md) | 5 |  |
 |  | [Clip timeline view with precise non destructive trim](termkrush/Clip-timeline-view-with-precise-non-destructive-trim.md) | 5 |  |
 |  | [More clip patterns transformer stutter warble and reverse](termkrush/More-clip-patterns-transformer-stutter-warble-and-reverse.md) | 5 |  |
 |  | [Optional auto BPM on clip playback via time stretch](termkrush/Optional-auto-BPM-on-clip-playback-via-time-stretch.md) | 5 |  |
 |  | [Resample the live mix into a pad record whatever is playing](termkrush/Resample-the-live-mix-into-a-pad-record-whatever-is-playing.md) | 5 |  |
-| Total Points | | 112 | |
+| Total Points | | 107 | |
 
 ### Started
 | User | Title | Points | Tags |
@@ -137,6 +136,7 @@
 |  | [Varispeed nudge deck playback speed pitch rides along driven by the BPM keys](termkrush/Varispeed-nudge-deck-playback-speed-pitch-rides-along-driven-by-the-BPM-keys.md) | 3 |  |
 |  | [Clip engine test harness for record trim patterns and stretch](termkrush/Clip-engine-test-harness-for-record-trim-patterns-and-stretch.md) |  |  |
 |  | [Record a clip from a deck by marking in and out](termkrush/Record-a-clip-from-a-deck-by-marking-in-and-out.md) | 5 |  |
+|  | [Clip buttons assign clips and trigger straight playback](termkrush/Clip-buttons-assign-clips-and-trigger-straight-playback.md) | 5 |  |
 
 ### Rejected
 | User | Title | Points | Tags |

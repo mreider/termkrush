@@ -56,7 +56,7 @@ jog/scratch the focused deck · `Start` quit · `Back` help.
 | `↑↓←→`         | move the focus box around the grid; on the crate, `↑`/`↓` browse the list |
 | `j`            | primary — deck play/pause · clip trigger |
 | `k`            | secondary — deck cue/stop · on a **pad**: assign the latest recorded clip |
-| `l` / `;`      | on a **deck**: mark-in / mark-out → records that region as a clip; on a **pad**: `l` assigns the highlighted crate track |
+| `l` / `;`      | **deck**: mark-in / mark-out → records that region as a clip; **pad**: `l` assigns the highlighted crate track, `;` cycles the playback pattern (play → cut → scratch) |
 | `w` / `s`      | value — deck volume · on a **pad**: trim the out-point ± (`shift` = fine) |
 | `a` / `d`      | deck: jog/scrub (`shift` = coarse) · on a **pad**: trim the in-point ∓ (non-destructive) |
 | `g` / `h`      | hard-cut the mix to deck A / deck B (instant) |

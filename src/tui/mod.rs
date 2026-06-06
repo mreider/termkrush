@@ -32,7 +32,7 @@ use crate::clip::Clip;
 use crate::config::Config;
 use crate::deck::{Deck, DeckState};
 use crate::library::Crate;
-use crate::mix::{Mixer, DECKS, PADS};
+use crate::mix::{Mixer, Pattern, DECKS, PADS};
 
 /// Display labels for the decks, indexed by deck number.
 const DECK_LABELS: [&str; DECKS] = ["A", "B"];
@@ -562,7 +562,12 @@ impl App {
                 }
                 None => Action::None, // no in-point yet
             },
-            _ => Action::None, // clip auto-BPM toggle reserved (Auto-BPM story)
+            // On a pad: cycle its playback pattern (Straight/Cut/BabyScratch).
+            Focus::Pad(i) => {
+                self.mixer.cycle_pad_pattern(i);
+                Action::Mark
+            }
+            _ => Action::None,
         }
     }
 
@@ -1178,6 +1183,14 @@ fn trim_bar(inp: usize, out: usize, len: usize, width: usize) -> String {
     s
 }
 
+fn pattern_label(p: Pattern) -> &'static str {
+    match p {
+        Pattern::Straight => "play",
+        Pattern::Cut => "cut",
+        Pattern::BabyScratch => "scratch",
+    }
+}
+
 fn draw_pad_cell(f: &mut Frame, area: Rect, app: &App, pad: usize) {
     let focused = app.focus_cell() == Focus::Pad(pad);
     let loaded = app.mixer.pad_loaded(pad);
@@ -1196,11 +1209,16 @@ fn draw_pad_cell(f: &mut Frame, area: Rect, app: &App, pad: usize) {
             .unwrap_or_else(|| "-- bpm".into());
         format!("  {bpm}")
     };
+    let line1 = if loaded {
+        format!("  {glyph} {}", pattern_label(app.mixer.pad_pattern(pad)))
+    } else {
+        format!("  {glyph}")
+    };
     draw_cell(
         f,
         area,
         &format!("Pad {}", pad + 1),
-        vec![Line::from(format!("  {glyph}")), Line::from(line2)],
+        vec![Line::from(line1), Line::from(line2)],
         focused,
     );
 }
@@ -1441,7 +1459,7 @@ fn draw_help(f: &mut Frame, area: Rect) {
     f.render_widget(Clear, popup);
     // Keys are by finger position: left hand = deck A, right hand = deck B.
     let help = Paragraph::new(
-        "Keys  —  focus a target, then act\n\n  focus       tab + arrows  (every cell; crate is left)\n  act         j play/trig  k cue/assign-rec  l mark-in/assign-crate  ; mark-out\n  value       w / s     (deck volume · pad trim out)\n  jog         a / d     (deck scrub · pad trim in; shift = fine)\n\n  transition  g/h cut A/B   G/H auto-fade   space dur\n  master      [ / ]      tempo , / . (deck varispeed)\n  clips       1-7 trigger   r record live mix\n\n  crate   / filter   ↑/↓ pick   enter load\n          \\ load demo   z hide crate\n  ?  help   esc/q quit   C-c force",
+        "Keys  —  focus a target, then act\n\n  focus       tab + arrows  (every cell; crate is left)\n  act  j play/trig  k cue/assign-rec  l mark-in/assign  ; mark-out/pattern\n  value       w / s     (deck volume · pad trim out)\n  jog         a / d     (deck scrub · pad trim in; shift = fine)\n\n  transition  g/h cut A/B   G/H auto-fade   space dur\n  master      [ / ]      tempo , / . (deck varispeed)\n  clips       1-7 trigger   r record live mix\n\n  crate   / filter   ↑/↓ pick   enter load\n          \\ load demo   z hide crate\n  ?  help   esc/q quit   C-c force",
     )
     .block(
         Block::bordered()
@@ -2786,6 +2804,19 @@ mod tests {
         // Arrow right moves to Pad 1 (the other column).
         app.on_key(KeyEvent::new(KeyCode::Right, KeyModifiers::NONE));
         assert_eq!(app.focus_cell(), Focus::Pad(1));
+    }
+
+    #[test]
+    fn focused_pad_semicolon_cycles_the_pattern() {
+        let mut app = App::new();
+        app.mixer.assign_pad(0, vec![0.5; 64]);
+        focus_first_pad(&mut app);
+        assert_eq!(app.mixer.pad_pattern(0), Pattern::Straight);
+        assert_eq!(
+            app.on_key(KeyEvent::new(KeyCode::Char(';'), KeyModifiers::NONE)),
+            Action::Mark
+        );
+        assert_eq!(app.mixer.pad_pattern(0), Pattern::Cut);
     }
 
     #[test]

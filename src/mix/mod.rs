@@ -18,12 +18,89 @@ pub const DECKS: usize = 2;
 /// Number of sampler pads (clip triggers).
 pub const PADS: usize = 7;
 
-/// One playing sampler voice: a shared clip and a position into it.
+/// A clip playback pattern — how a triggered pad reads its clip.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum Pattern {
+    /// Play the trimmed region forward once.
+    #[default]
+    Straight,
+    /// "over and silent": forward, but gated on/off at the beat division —
+    /// rhythmic cutting.
+    Cut,
+    /// "over and back": a read head bounces across a short slice, audible
+    /// both ways — a baby scratch.
+    BabyScratch,
+}
+
+/// One playing sampler voice. Reads its clip according to a [`Pattern`],
+/// beat-synced via `div` (the beat-division length in frames).
 #[derive(Debug)]
 struct SampleVoice {
     clip: Arc<Vec<f32>>, // interleaved stereo at the mix rate
-    pos: usize,          // sample index into `clip`
-    end: usize,          // stop at this sample index (trim out-point)
+    pattern: Pattern,
+    in_f: usize,  // trim in-point (frames)
+    len_f: usize, // playable length in output frames
+    t: usize,     // output frames elapsed
+    div: f64,     // beat-division length in frames (cut gate / scratch slice)
+    head: f64,    // baby-scratch read head (absolute frame, fractional)
+    dir: f64,     // baby-scratch direction (+1 / -1)
+}
+
+impl SampleVoice {
+    /// Interpolated stereo frame at fractional frame index `f` (clamped).
+    fn frame_at(&self, f: f64) -> (f32, f32) {
+        let total = self.clip.len() / 2;
+        if total == 0 {
+            return (0.0, 0.0);
+        }
+        let p0 = (f.floor() as usize).min(total - 1);
+        let p1 = (p0 + 1).min(total - 1);
+        let frac = (f - f.floor()) as f32;
+        let (a, b) = (p0 * 2, p1 * 2);
+        (
+            self.clip[a] * (1.0 - frac) + self.clip[b] * frac,
+            self.clip[a + 1] * (1.0 - frac) + self.clip[b + 1] * frac,
+        )
+    }
+
+    /// The next output frame, or `None` once the voice is finished.
+    fn next_frame(&mut self) -> Option<(f32, f32)> {
+        if self.t >= self.len_f {
+            return None;
+        }
+        let out = match self.pattern {
+            Pattern::Straight => self.frame_at((self.in_f + self.t) as f64),
+            Pattern::Cut => {
+                let (l, r) = self.frame_at((self.in_f + self.t) as f64);
+                let gate = if (self.t as f64 % self.div) < self.div / 2.0 {
+                    1.0
+                } else {
+                    0.0
+                };
+                (l * gate, r * gate)
+            }
+            Pattern::BabyScratch => {
+                let frame = self.frame_at(self.head);
+                let lo = self.in_f as f64;
+                let hi = (self.in_f as f64 + self.div).min((self.clip.len() / 2) as f64 - 1.0);
+                self.head += self.dir;
+                if self.head >= hi {
+                    self.head = hi;
+                    self.dir = -1.0;
+                } else if self.head <= lo {
+                    self.head = lo;
+                    self.dir = 1.0;
+                }
+                frame
+            }
+        };
+        self.t += 1;
+        Some(out)
+    }
+
+    fn done(&self) -> bool {
+        self.t >= self.len_f
+    }
 }
 
 /// Allowed master gain range: silence up to +3.5 dB of headroom.
@@ -78,6 +155,8 @@ pub struct Mixer {
     /// Non-destructive trim bounds per pad, in frames `(in, out)`. The clip
     /// samples are never modified; triggering plays only `[in, out)`.
     pad_trim: [(usize, usize); PADS],
+    /// Playback pattern per pad (Straight / Cut / BabyScratch).
+    pad_pattern: [Pattern; PADS],
     /// Currently-sounding one-shot voices, summed atop the deck mix.
     voices: Vec<SampleVoice>,
     /// When armed, `fill_mix` appends each block of master output here so the
@@ -108,6 +187,7 @@ impl Mixer {
             pads: Default::default(),
             pad_bpm: Default::default(),
             pad_trim: Default::default(),
+            pad_pattern: Default::default(),
             voices: Vec::new(),
             recording: false,
             record_buf: Vec::new(),
@@ -207,15 +287,44 @@ impl Mixer {
     /// is empty. Overlapping triggers stack (polyphonic).
     pub fn trigger_pad(&mut self, i: usize) {
         let (inp, out) = self.pad_trim.get(i).copied().unwrap_or((0, 0));
+        let pattern = self.pad_pattern.get(i).copied().unwrap_or_default();
+        // Beat division (eighth note) in frames, from the pad's BPM; fall
+        // back to ~1/8 s when no tempo is known.
+        let div = match self.pad_bpm.get(i).copied().flatten() {
+            Some(bpm) if bpm > 0.0 => (self.sample_rate as f64 * 60.0 / bpm as f64) / 2.0,
+            _ => self.sample_rate as f64 * 0.125,
+        };
         if let Some(Some(clip)) = self.pads.get(i) {
-            let end = (out * 2).min(clip.len());
-            let pos = (inp * 2).min(end);
+            let total = clip.len() / 2;
+            let in_f = inp.min(total);
+            let len_f = out.min(total).saturating_sub(in_f);
             self.voices.push(SampleVoice {
                 clip: Arc::clone(clip),
-                pos,
-                end,
+                pattern,
+                in_f,
+                len_f,
+                t: 0,
+                div: div.max(1.0),
+                head: in_f as f64,
+                dir: 1.0,
             });
         }
+    }
+
+    /// Cycle pad `i`'s playback pattern: Straight → Cut → BabyScratch → …
+    pub fn cycle_pad_pattern(&mut self, i: usize) {
+        if i < PADS {
+            self.pad_pattern[i] = match self.pad_pattern[i] {
+                Pattern::Straight => Pattern::Cut,
+                Pattern::Cut => Pattern::BabyScratch,
+                Pattern::BabyScratch => Pattern::Straight,
+            };
+        }
+    }
+
+    /// Pad `i`'s current playback pattern.
+    pub fn pad_pattern(&self, i: usize) -> Pattern {
+        self.pad_pattern.get(i).copied().unwrap_or_default()
     }
 
     /// Number of sampler voices currently sounding.
@@ -313,14 +422,18 @@ impl Mixer {
     /// Add each active voice's next block into `out` (interleaved stereo),
     /// advancing its position; voices that reach their end are removed.
     fn mix_voices(&mut self, out: &mut [f32]) {
+        let frames = out.len() / 2;
         self.voices.retain_mut(|v| {
-            let remaining = v.end.saturating_sub(v.pos);
-            let n = out.len().min(remaining);
-            for (o, s) in out.iter_mut().zip(v.clip[v.pos..v.pos + n].iter()) {
-                *o += *s;
+            for i in 0..frames {
+                match v.next_frame() {
+                    Some((l, r)) => {
+                        out[i * 2] += l;
+                        out[i * 2 + 1] += r;
+                    }
+                    None => break,
+                }
             }
-            v.pos += n;
-            v.pos < v.end // keep until the trim out-point
+            !v.done()
         });
     }
 
@@ -653,6 +766,72 @@ mod tests {
 
         // The underlying clip is untouched — trimming only set bounds.
         assert_eq!(m.pad_clip_frames(0), 100);
+    }
+
+    #[test]
+    fn cycle_pad_pattern_rotates() {
+        let mut m = Mixer::new();
+        assert_eq!(m.pad_pattern(0), Pattern::Straight);
+        m.cycle_pad_pattern(0);
+        assert_eq!(m.pad_pattern(0), Pattern::Cut);
+        m.cycle_pad_pattern(0);
+        assert_eq!(m.pad_pattern(0), Pattern::BabyScratch);
+        m.cycle_pad_pattern(0);
+        assert_eq!(m.pad_pattern(0), Pattern::Straight);
+    }
+
+    #[test]
+    fn cut_pattern_gates_the_clip_on_the_beat() {
+        let mut m = Mixer::new();
+        m.set_sample_rate(1000);
+        m.assign_pad(0, vec![0.5; 1200]); // 600 frames, flat 0.5
+        m.set_pad_bpm(0, Some(120.0)); // div = 250 frames → 125 on / 125 off
+        m.cycle_pad_pattern(0); // Straight → Cut
+        m.trigger_pad(0);
+        let mut buf = vec![0.0f32; 1200]; // 600 frames
+        m.fill_mix(&mut buf);
+        assert!(
+            buf.iter().any(|&s| s.abs() < 1e-6),
+            "off-beats gated to silence"
+        );
+        assert!(
+            buf.iter().any(|&s| (s - 0.5).abs() < 1e-6),
+            "on-beats pass through"
+        );
+    }
+
+    #[test]
+    fn baby_scratch_reverses_over_a_slice() {
+        let mut m = Mixer::new();
+        m.set_sample_rate(1000);
+        // Ramp clip: value rises with frame, so a reversal shows as output
+        // rising then falling.
+        let n = 400usize;
+        let mut clip = Vec::with_capacity(n * 2);
+        for i in 0..n {
+            let v = i as f32 / n as f32;
+            clip.push(v);
+            clip.push(v);
+        }
+        m.assign_pad(0, clip);
+        m.set_pad_bpm(0, Some(120.0)); // 250-frame scratch slice
+        m.cycle_pad_pattern(0);
+        m.cycle_pad_pattern(0); // → BabyScratch
+        m.trigger_pad(0);
+        let mut buf = vec![0.0f32; 800]; // 400 frames
+        m.fill_mix(&mut buf);
+        let left: Vec<f32> = (0..400).map(|i| buf[i * 2]).collect();
+        let peak = left
+            .iter()
+            .enumerate()
+            .max_by(|a, b| a.1.partial_cmp(b.1).unwrap())
+            .unwrap()
+            .0;
+        assert!(peak < 399, "head reverses before the end (peak mid-buffer)");
+        assert!(
+            left[399] < left[peak],
+            "output comes back down after reversal"
+        );
     }
 
     #[test]

@@ -2,12 +2,16 @@
 title: Polish README for first release
 type: chore
 created: "2026-06-04T09:15:06Z"
-modified: "2026-06-04T09:15:06Z"
+modified: "2026-06-06T20:13:31Z"
 author: Matt Reider
-status: unstarted
+status: accepted
 epic: release-v0-1
 tags: [docs, release]
 project: termkrush
+started: "2026-06-06T20:11:03Z"
+finished: "2026-06-06T20:13:31Z"
+delivered: "2026-06-06T20:13:31Z"
+accepted: "2026-06-06T20:13:31Z"
 ---
 
 ## Why this is a chore

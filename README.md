@@ -3,26 +3,60 @@
 [![CI](https://github.com/mreider/termkrush/actions/workflows/ci.yml/badge.svg)](https://github.com/mreider/termkrush/actions/workflows/ci.yml)
 [![codecov](https://codecov.io/gh/mreider/termkrush/branch/main/graph/badge.svg)](https://codecov.io/gh/mreider/termkrush)
 
-A keyboard-first terminal DJ application. Pull tracks locally, beat-match and
-crossfade up to four decks, keyboard-jog scratch over marked zones, add minimal
-FX (filter, echo, reverb), and record the master to wav/mp3 — all from your
-shell.
+A keyboard-first (and **Xbox-first**) terminal DJ app. Two decks with
+auto-fade and beat-sync, a seven-pad clip sampler for live recording,
+scratching, and beat-matched playback, and an 8-bit DJ cat that bobs to the
+beat — all from your shell.
 
 **Site:** https://mreider.github.io/termkrush
 
-> Status: early foundation, built one story at a time from the top of the
-> backlog. The backlog lives under `termkrush/`; the working rules are in
-> `CLAUDE.md`.
+> Status: built one story at a time from the top of the backlog. The two-deck
+> mix, the clip/scratch sampler, and the keyboard + controller layer are all
+> in; release packaging is the current work. The backlog lives under
+> `termkrush/`; the working rules are in `CLAUDE.md`.
+
+## What it does
+
+- **Two decks** — load from a local crate, play/pause/cue, jog/scrub, varispeed
+  (pitch rides), set a hot cue, and **sync** one deck's tempo to the other.
+- **Transitions** — instant hard-cut A↔B, or a hands-free **auto-fade** over a
+  set number of seconds *or* bars (synced to the beat).
+- **Clip sampler (7 pads)** — fill a pad by recording a region off a deck,
+  resampling the live mix, or grabbing a crate track; then trigger it with a
+  **pattern**: straight, cut, baby-scratch, transformer, stutter, warble, or
+  reverse. Trim any clip on a timeline (non-destructive), and optionally
+  **beat-match** it to the active deck (pitch-preserving time-stretch).
+- **Focus → act controls** — one small key cluster acts on whatever cell you've
+  focused (a deck, the mixer, a pad). Mirrored 1:1 onto an Xbox controller, with
+  the right stick as a jog/scratch platter.
+- **BPM** — detected on load (cached), shown per deck, manually nudgeable.
 
 ## Screenshot
 
-_Placeholder — a TUI capture lands once the deck and mixer views exist._
+```
+                                            TermKrush
+                tab focus   j play  k cue   a/d jog   g/h cut  G/H fade   ? help
+┌Crate  (3 tracks)─────────────┐┌▸ Deck A  126 BPM─────────────┐┌Deck B  174 BPM───────────────┐
+│▶ Teo Laza - Doing Too Much.m…││  ▶ Teo Laza - Doing Too Much ││  ⏏ Yarin Primak - Trippin  lo│
+│  Yarin Primak - Trippin.mp3  ││  [░░░░░░]  00:00.0 / 02:39.0 ││  [░░░░░░]  00:00.0 / 02:20.0 │
+│  Lazerpunk - Hyperdrive.mp3  ││                              ││                              │
+│                              │└──────────────────────────────┘└──────────────────────────────┘
+│                              │┌Mix · soft────────────────────┐┌Mix · hard────────────────────┐
+│                              ││A + B                         ││A + B                         │
+│                              ││auto-fade 1s                  ││master 1.00  +0.0 dB          │
+│                              │└──────────────────────────────┘└──────────────────────────────┘
+│                              │┌Pad 1─────────────────────────┐┌Pad 2─────────────────────────┐
+│                              ││  ● play                      ││  ·                           │
+│                              ││  126 bpm                     ││  -- bpm                      │
+│                              │└──────────────────────────────┘└──────────────────────────────┘
+│                              │┌Pad 3 … Pad 7 ────────────────┐┌DJ────────────────────────────┐
+│                              ││  ● play                      ││  =^.^=                       │
+│                              ││                              ││  ♫ dj ♫                      │
+└──────────────────────────────┘└──────────────────────────────┘└──────────────────────────────┘
+```
 
-```
-┌─ TermKrush ─────────────────────────────────────────────┐
-│  (decks, crossfader, and library browser render here)    │
-└──────────────────────────────────────────────────────────┘
-```
+The screen is a uniform grid of equal cells: the crate browser on the left,
+then decks, the soft/hard mixer, the seven clip pads, and the DJ.
 
 ## Install
 
@@ -31,15 +65,18 @@ _Placeholder until the first release publishes binaries (v0.1.0 "spins")._
 Until then, build from source:
 
 ```sh
-cargo build --release
-cargo run            # prints the version banner today
+cargo run --release          # launches the TUI
 ```
 
-Rust 1.75+ (MSRV). The toolchain pin lives in `rust-toolchain.toml`.
+Set `crate_root` (see [Configuration](#configuration)) so your tracks show up,
+or press `\` for the bundled demo. On Linux you'll need ALSA + udev headers
+(`libasound2-dev libudev-dev`). Rust 1.75+ (MSRV); the toolchain pin lives in
+`rust-toolchain.toml`. For repeated runs during development, `scripts/dev-run.sh`
+builds once and reuses the binary.
 
 ## Keyboard cheatsheet
 
-The model is **focus → act**: pick a target (Deck A · Deck B · Clips), then a
+The model is **focus → act**: pick any cell (a deck, the mixer, a pad), then a
 small fixed cluster of keys acts on it — meaning set by what's focused. Fewer
 keys, no per-deck duplication, and a 1:1 shape with the gamepad. (Full map is
 in the in-app `?` help; an Xbox controller is the preferred input.)
@@ -94,12 +131,13 @@ The crate browser lists every `*.mp3` under `crate_root` at launch; press
 
 | Module        | Responsibility                                          |
 |---------------|---------------------------------------------------------|
-| `src/audio`   | output device, decoding, resampling, realtime path      |
-| `src/deck`    | a single track: transport, pitch, cue/loop, scratch     |
-| `src/mix`     | crossfader, sync, master bus, FX                        |
-| `src/tui`     | ratatui/crossterm interface and key handling            |
-| `src/library` | local track storage, downloads, metadata                |
-| `src/config`  | user configuration and key bindings                     |
+| `src/audio`   | output device, decoding, resampling, pitch-preserving time-stretch, BPM detection |
+| `src/deck`    | a single track: transport, varispeed, seek/jog, hot cue, clip capture |
+| `src/clip`    | a captured clip (samples + tempo) — the sampler's unit    |
+| `src/mix`     | deck blend + auto-fade, master bus, the clip/scratch/pattern sampler |
+| `src/tui`     | ratatui/crossterm grid UI, focus→act keymap, Xbox mapping |
+| `src/library` | local track crate (scan + filter)                       |
+| `src/config`  | user configuration                                      |
 
 ## Support
 

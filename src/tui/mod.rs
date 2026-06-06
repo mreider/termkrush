@@ -41,8 +41,25 @@ const DECK_LABELS: [&str; DECKS] = ["A", "B"];
 /// Per-keypress gain nudge (linear), for both deck and master.
 const GAIN_NUDGE: f32 = 0.05;
 
-/// Selectable auto-fade durations (seconds); `space` cycles through them.
-const FADE_SECS: [f32; 4] = [1.0, 2.0, 4.0, 8.0];
+/// An auto-fade duration: wall-clock seconds, or musical bars (converted to
+/// seconds from the active deck's tempo, 4 beats per bar).
+#[derive(Clone, Copy)]
+enum FadeAmount {
+    Secs(f32),
+    Bars(f32),
+}
+
+/// Selectable auto-fade durations; `space` cycles through them.
+const FADE_AMOUNTS: [FadeAmount; 8] = [
+    FadeAmount::Secs(1.0),
+    FadeAmount::Secs(2.0),
+    FadeAmount::Secs(4.0),
+    FadeAmount::Secs(8.0),
+    FadeAmount::Bars(2.0),
+    FadeAmount::Bars(4.0),
+    FadeAmount::Bars(8.0),
+    FadeAmount::Bars(16.0),
+];
 
 /// Seek amounts (seconds): the per-deck seek keys jump `SEEK_JUMP`, with
 /// Shift held they jump `SEEK_FAR`; `,`/`.` scrub the focused deck finely.
@@ -275,9 +292,30 @@ impl App {
         self.mixer.deck_mut(i)
     }
 
-    /// The currently-selected auto-fade duration in seconds.
+    /// The currently-selected auto-fade duration in seconds. Bar-based
+    /// amounts convert via the active deck's tempo (4 beats/bar; 120 BPM
+    /// fallback when unknown).
     pub fn fade_secs(&self) -> f32 {
-        FADE_SECS[self.fade_idx % FADE_SECS.len()]
+        match FADE_AMOUNTS[self.fade_idx % FADE_AMOUNTS.len()] {
+            FadeAmount::Secs(s) => s,
+            FadeAmount::Bars(bars) => {
+                let bpm = self
+                    .mixer
+                    .deck(self.active_deck())
+                    .bpm()
+                    .filter(|&b| b > 0.0)
+                    .unwrap_or(120.0);
+                bars * 4.0 * 60.0 / bpm
+            }
+        }
+    }
+
+    /// A short label for the current fade amount (e.g. `2s` or `4 bar`).
+    pub fn fade_label(&self) -> String {
+        match FADE_AMOUNTS[self.fade_idx % FADE_AMOUNTS.len()] {
+            FadeAmount::Secs(s) => format!("{s:.0}s"),
+            FadeAmount::Bars(b) => format!("{b:.0} bar"),
+        }
     }
 
     /// The focused cell — for rendering + tests.
@@ -922,7 +960,7 @@ impl App {
                 Action::Crossfade
             }
             (KeyCode::Char(' '), _) => {
-                self.fade_idx = (self.fade_idx + 1) % FADE_SECS.len(); // cycle duration
+                self.fade_idx = (self.fade_idx + 1) % FADE_AMOUNTS.len(); // cycle duration
                 Action::Crossfade
             }
 
@@ -1106,7 +1144,7 @@ pub fn draw(f: &mut Frame, app: &App) {
         soft_title,
         vec![
             Line::from(blend_state(app)),
-            Line::from(format!("auto-fade {:.0}s", app.fade_secs())),
+            Line::from(format!("auto-fade {}", app.fade_label())),
         ],
         app.focus_cell() == Focus::MixSoft,
     );
@@ -1529,7 +1567,7 @@ fn draw_help(f: &mut Frame, area: Rect) {
     f.render_widget(Clear, popup);
     // Keys are by finger position: left hand = deck A, right hand = deck B.
     let help = Paragraph::new(
-        "Keys  —  focus a target, then act\n\n  focus       tab + arrows  (every cell; crate is left)\n  act  j play/trig  k cue/assign-rec  l mark-in/assign  ; mark-out/pattern\n  value       w / s     (deck volume · pad trim out)\n  jog         a / d     (deck scrub · pad trim in; shift = fine)\n\n  transition  g/h cut A/B   G/H auto-fade   space dur\n  master  [ / ]   tempo , / .   cue  c set  v jump\n  clips  1-7 trig  r record mix  b sync deck / beat-match pad\n\n  crate   / filter   ↑/↓ pick   enter load\n          \\ load demo   z hide crate\n  ?  help   esc/q quit   C-c force",
+        "Keys  —  focus a target, then act\n\n  focus       tab + arrows  (every cell; crate is left)\n  act  j play/trig  k cue/assign-rec  l mark-in/assign  ; mark-out/pattern\n  value       w / s     (deck volume · pad trim out)\n  jog         a / d     (deck scrub · pad trim in; shift = fine)\n\n  transition  g/h cut   G/H fade   space dur (s/bars)\n  master  [ / ]   tempo , / .   cue  c set  v jump\n  clips  1-7 trig  r record mix  b sync deck / beat-match pad\n\n  crate   / filter   ↑/↓ pick   enter load\n          \\ load demo   z hide crate\n  ?  help   esc/q quit   C-c force",
     )
     .block(
         Block::bordered()
@@ -2598,14 +2636,28 @@ mod tests {
     #[test]
     fn space_cycles_the_fade_duration() {
         let mut app = App::new();
-        assert_eq!(app.fade_secs(), 1.0);
+        assert_eq!(app.fade_secs(), 1.0); // first amount: 1s
         assert_eq!(app.on_key(key(' ')), Action::Crossfade);
-        assert_eq!(app.fade_secs(), 2.0);
-        app.on_key(key(' '));
-        app.on_key(key(' '));
-        assert_eq!(app.fade_secs(), 8.0);
-        app.on_key(key(' '));
-        assert_eq!(app.fade_secs(), 1.0, "wraps back around");
+        assert_eq!(app.fade_secs(), 2.0); // 2s
+                                          // Eight amounts total (4 seconds + 4 bars); a full cycle wraps.
+        for _ in 0..7 {
+            app.on_key(key(' '));
+        }
+        assert_eq!(app.fade_secs(), 1.0, "wraps after eight amounts");
+    }
+
+    #[test]
+    fn fade_in_bars_uses_the_active_deck_tempo() {
+        let mut app = App::new();
+        app.mixer.deck_mut(0).load(synth_track(2000));
+        app.mixer.deck_mut(0).set_bpm(120.0); // 2 beats/sec → 1 bar = 2s
+                                              // Cycle to the first bars amount (index 4 = 2 bars).
+        for _ in 0..4 {
+            app.on_key(key(' '));
+        }
+        assert_eq!(app.fade_label(), "2 bar");
+        // 2 bars × 4 beats × (60/120) = 4s.
+        assert!((app.fade_secs() - 4.0).abs() < 1e-3);
     }
 
     #[test]

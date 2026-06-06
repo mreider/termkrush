@@ -61,7 +61,7 @@ jog/scratch the focused deck · `Start` quit · `Back` help.
 | `a` / `d`      | deck: jog/scrub (`shift` = coarse) · on a **pad**: trim the in-point ∓ (non-destructive) |
 | `g` / `h`      | hard-cut the mix to deck A / deck B (instant) |
 | `G` / `H`      | auto-fade to deck A / deck B over the set duration |
-| `space`        | cycle the auto-fade duration (1 / 2 / 4 / 8 s) |
+| `space`        | cycle the auto-fade duration — seconds (1/2/4/8 s) or **bars** (2/4/8/16, synced to the active deck's tempo) |
 | `1`–`7`        | trigger clip pads directly              |
 | `r`            | resample the live mix (arm/disarm) → a clip on the focused pad, else the recordings stash |
 | `b`            | beat-match — on a **deck**: sync its tempo (varispeed) to the other deck's BPM; on a **pad**: toggle auto-BPM (clip stretches to the active deck) |

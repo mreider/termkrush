@@ -2,13 +2,17 @@
 title: Auto-fade transition over N bars
 type: feature
 created: "2026-06-04T09:15:06Z"
-modified: "2026-06-04T09:15:06Z"
+modified: "2026-06-06T20:08:06Z"
 author: Matt Reider
-status: unstarted
+status: accepted
 estimate: "3"
 epic: sync-and-fade
 tags: [mix, sync]
 project: termkrush
+started: "2026-06-06T20:05:57Z"
+finished: "2026-06-06T20:08:06Z"
+delivered: "2026-06-06T20:08:06Z"
+accepted: "2026-06-06T20:08:06Z"
 ---
 
 ## Problem statement

@@ -48,7 +48,7 @@ proptest! {
         gb in 0.0f32..=1.5,
     ) {
         let mut m = Mixer::new();
-        m.set_xfade(xfade);
+        m.cut_to(xfade);
         m.set_master(master);
         m.deck_mut(0).set_gain(ga);
         m.deck_mut(1).set_gain(gb);
@@ -71,7 +71,7 @@ proptest! {
         master in 0.0f32..=1.5,
     ) {
         let mut m = Mixer::new();
-        m.set_xfade(xfade);
+        m.cut_to(xfade);
         m.set_master(master);
         m.deck_mut(0).load(track(vec![0.0; frames * 2]));
         m.deck_mut(1).load(track(vec![0.0; frames * 2]));

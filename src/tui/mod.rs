@@ -39,8 +39,8 @@ const DECK_LABELS: [&str; DECKS] = ["A", "B"];
 /// Per-keypress gain nudge (linear), for both deck and master.
 const GAIN_NUDGE: f32 = 0.05;
 
-/// Per-keypress crossfader slide.
-const XFADE_NUDGE: f32 = 0.05;
+/// Selectable auto-fade durations (seconds); `space` cycles through them.
+const FADE_SECS: [f32; 4] = [1.0, 2.0, 4.0, 8.0];
 
 /// Seek amounts (seconds): the per-deck seek keys jump `SEEK_JUMP`, with
 /// Shift held they jump `SEEK_FAR`; `,`/`.` scrub the focused deck finely.
@@ -141,6 +141,8 @@ pub struct App {
     /// When true, the "Quit? (y/n)" confirmation modal is open and captures
     /// input until the user confirms (`y`) or cancels (`n`/Esc).
     pub confirm_quit: bool,
+    /// Index into [`FADE_SECS`] — the auto-fade duration `space` cycles.
+    fade_idx: usize,
     pub mixer: Mixer,
     /// Which deck the transport keys target (`Tab` cycles).
     focus: usize,
@@ -188,6 +190,11 @@ impl App {
     /// The focused deck, mutable.
     fn focused_mut(&mut self) -> &mut Deck {
         self.mixer.deck_mut(self.focus)
+    }
+
+    /// The currently-selected auto-fade duration in seconds.
+    pub fn fade_secs(&self) -> f32 {
+        FADE_SECS[self.fade_idx % FADE_SECS.len()]
     }
 
     /// Which deck currently has focus (`0..DECKS`).
@@ -399,17 +406,27 @@ impl App {
                 Action::Seek
             }
 
-            // ---- crossfader — between the hands (index inner reach) ----
+            // ---- deck transitions — between the hands (index inner reach) ----
+            // lowercase = instant hard cut; Shift = hands-free auto-fade over
+            // the selected duration; space cycles that duration.
             (KeyCode::Char('g'), _) => {
-                self.mixer.nudge_xfade(-XFADE_NUDGE); // toward deck A
+                self.mixer.cut_to(-1.0); // hard cut to A
                 Action::Crossfade
             }
             (KeyCode::Char('h'), _) => {
-                self.mixer.nudge_xfade(XFADE_NUDGE); // toward deck B
+                self.mixer.cut_to(1.0); // hard cut to B
+                Action::Crossfade
+            }
+            (KeyCode::Char('G'), _) => {
+                self.mixer.autofade_to(-1.0, self.fade_secs()); // auto-fade to A
+                Action::Crossfade
+            }
+            (KeyCode::Char('H'), _) => {
+                self.mixer.autofade_to(1.0, self.fade_secs()); // auto-fade to B
                 Action::Crossfade
             }
             (KeyCode::Char(' '), _) => {
-                self.mixer.center_xfade(); // big neutral key = recenter
+                self.fade_idx = (self.fade_idx + 1) % FADE_SECS.len(); // cycle duration
                 Action::Crossfade
             }
 
@@ -654,17 +671,29 @@ fn pads_readout(app: &App) -> String {
         .to_string()
 }
 
+/// Read-only deck-blend + auto-fade state: which deck is live (or the fade
+/// in progress) and the selected auto-fade duration.
+fn transition_readout(app: &App) -> String {
+    let x = app.mixer.xfade_applied();
+    let state = if app.mixer.is_fading() {
+        if app.mixer.xfade() >= x {
+            "A → B".to_string()
+        } else {
+            "B → A".to_string()
+        }
+    } else if x <= -0.5 {
+        "▶ A".to_string()
+    } else if x >= 0.5 {
+        "▶ B".to_string()
+    } else {
+        "A + B".to_string()
+    };
+    format!("mix {state}     auto-fade {:.0}s", app.fade_secs())
+}
+
 fn draw_mixer_panel(f: &mut Frame, area: Rect, app: &App) {
-    // A real crossfader has a short, centered throw — not a console-wide
-    // rail. Size it to a tidy fixed width (odd, so the center detent lands
-    // on a cell), centered in the mixer row between the two decks.
-    let inner = area.width.saturating_sub(2) as usize; // minus the borders
-    let mut bar_w = inner.saturating_sub(8).clamp(5, 25); // leave margin + "A "/" B"
-    if bar_w % 2 == 0 {
-        bar_w -= 1;
-    }
     let lines = vec![
-        Line::from(format!("A {} B", crossfader_bar(app.mixer.xfade(), bar_w)))
+        Line::from(transition_readout(app))
             .style(Style::default().fg(AMBER).add_modifier(Modifier::BOLD)),
         Line::from(format!(
             "master {:.2}  {}",
@@ -681,7 +710,7 @@ fn draw_mixer_panel(f: &mut Frame, area: Rect, app: &App) {
         .alignment(Alignment::Center)
         .block(
             Block::bordered()
-                .title("Mixer  ·  crossfader")
+                .title("Mixer  ·  transitions")
                 .style(Style::default().fg(GREEN).bg(BG)),
         )
         .style(Style::default().fg(GREEN).bg(BG));
@@ -961,30 +990,6 @@ fn platter_rows(bucket: usize) -> [String; 3] {
     ]
 }
 
-/// A `|───●───|` crossfader slider `width` cells wide between the bars,
-/// with the handle `●` at `pos` in `[-1, 1]` (`-1` left, `0` center, `+1`
-/// right). `width` should be odd so center lands on a cell.
-fn crossfader_bar(pos: f32, width: usize) -> String {
-    let pos = pos.clamp(-1.0, 1.0);
-    let last = width.saturating_sub(1);
-    // Map [-1, 1] -> [0, width-1].
-    let handle = (((pos + 1.0) / 2.0) * last as f32).round() as usize;
-    let center = last / 2;
-    let mut s = String::with_capacity(width + 2);
-    s.push('|');
-    for i in 0..width {
-        s.push(if i == handle {
-            '●' // the handle
-        } else if i == center {
-            '┼' // center detent
-        } else {
-            '─'
-        });
-    }
-    s.push('|');
-    s
-}
-
 /// Format seconds as `mm:ss.s`.
 fn fmt_clock(secs: f64) -> String {
     let secs = secs.max(0.0);
@@ -1004,7 +1009,7 @@ fn draw_help(f: &mut Frame, area: Rect) {
     f.render_widget(Clear, popup);
     // Keys are by finger position: left hand = deck A, right hand = deck B.
     let help = Paragraph::new(
-        "Keys  —  left hand = A,  right hand = B\n\n              DECK A        DECK B\n  play/pause    f             j\n  cue (stop)    d             k\n  volume +/-    w / s         o / l\n  seek -/+      e / r         i / u    (shift: far)\n\n  crossfader    g  ◄A   B►  h     space  center\n  master  -/+   [ / ]\n  fine scrub    , / .   (focused deck)\n  pads          1-4 trigger   !@#$ assign selected\n\n  crate   tab focus   / filter   ↑/↓ pick   enter load\n          \\ load demo   z hide crate\n  ?  help   esc/q quit   C-c force",
+        "Keys  —  left hand = A,  right hand = B\n\n              DECK A        DECK B\n  play/pause    f             j\n  cue (stop)    d             k\n  volume +/-    w / s         o / l\n  seek -/+      e / r         i / u    (shift: far)\n\n  cut to A/B    g / h          (instant)\n  auto-fade     G / H    space cycles 1-8s\n  master  -/+   [ / ]\n  fine scrub    , / .   (focused deck)\n  pads          1-4 trigger   !@#$ assign selected\n\n  crate   tab focus   / filter   ↑/↓ pick   enter load\n          \\ load demo   z hide crate\n  ?  help   esc/q quit   C-c force",
     )
     .block(
         Block::bordered()
@@ -1092,6 +1097,7 @@ fn event_loop(terminal: &mut Term) -> io::Result<()> {
     };
     let out_channels = audio_out.as_ref().map(|o| o.channels).unwrap_or(2);
     let target_rate = audio_out.as_ref().map(|o| o.sample_rate).unwrap_or(44_100);
+    app.mixer.set_sample_rate(target_rate); // so auto-fades land in real seconds
     let mut scratch: Vec<f32> = Vec::new();
 
     // Background decode threads post finished tracks (with BPM) back here.
@@ -1771,8 +1777,8 @@ mod tests {
         );
         // Position bars render (empty decks -> all-empty bar).
         assert!(text.contains('['), "deck position bars missing:\n{text}");
-        // Crossfader fader graphic in the mixer row.
-        assert!(text.contains('●'), "crossfader graphic missing:\n{text}");
+        // Mixer row shows the deck-blend / auto-fade state.
+        assert!(text.contains("auto-fade"), "transition readout missing:\n{text}");
     }
 
     #[test]
@@ -1832,28 +1838,39 @@ mod tests {
     }
 
     #[test]
-    fn gh_slide_and_space_centers_crossfader() {
+    fn g_h_hard_cut_instantly() {
         let mut app = App::new();
         assert_eq!(app.on_key(key('g')), Action::Crossfade);
-        assert!(
-            (app.mixer.xfade() - (-0.05)).abs() < 1e-6,
-            "g slides toward A"
+        assert_eq!(
+            app.mixer.xfade_applied(),
+            -1.0,
+            "g hard-cuts to A instantly"
         );
+        assert!(!app.mixer.is_fading());
         assert_eq!(app.on_key(key('h')), Action::Crossfade);
-        assert!(app.mixer.xfade().abs() < 1e-6, "h slides back toward B");
-        app.on_key(key('h')); // now +0.05
-        assert_eq!(app.on_key(key(' ')), Action::Crossfade);
-        assert_eq!(app.mixer.xfade(), 0.0, "space re-centers");
+        assert_eq!(app.mixer.xfade_applied(), 1.0, "h hard-cuts to B instantly");
     }
 
     #[test]
-    fn crossfader_bar_places_handle() {
-        // 21-wide bar: handle index 0 (left), 10 (center), 20 (right).
-        assert!(crossfader_bar(-1.0, 21).starts_with("|●"));
-        assert!(crossfader_bar(1.0, 21).ends_with("●|"));
-        let centered = crossfader_bar(0.0, 21);
-        // '|' at byte 0, then cells; center handle is the 11th char.
-        assert_eq!(centered.chars().nth(11), Some('●'));
+    fn shift_g_h_start_an_autofade() {
+        let mut app = App::new();
+        app.on_key(key('g')); // sit on A
+        assert_eq!(app.on_key(key('H')), Action::Crossfade); // auto-fade to B
+        assert_eq!(app.mixer.xfade(), 1.0, "target is B");
+        assert!(app.mixer.is_fading(), "fade is in progress, not instant");
+    }
+
+    #[test]
+    fn space_cycles_the_fade_duration() {
+        let mut app = App::new();
+        assert_eq!(app.fade_secs(), 1.0);
+        assert_eq!(app.on_key(key(' ')), Action::Crossfade);
+        assert_eq!(app.fade_secs(), 2.0);
+        app.on_key(key(' '));
+        app.on_key(key(' '));
+        assert_eq!(app.fade_secs(), 8.0);
+        app.on_key(key(' '));
+        assert_eq!(app.fade_secs(), 1.0, "wraps back around");
     }
 
     #[test]
@@ -1916,35 +1933,18 @@ mod tests {
     }
 
     #[test]
-    fn crossfader_renders_in_panel() {
-        let app = App::new();
-        let text = buffer_text(&render(&app, 100, 28));
-        assert!(text.contains('●'), "crossfader handle missing:\n{text}");
-    }
-
-    #[test]
-    fn crossfader_is_right_sized_and_centered() {
-        // A tidy, centered throw (not a console-wide rail), flanked by A/B,
-        // with a visible center detent. Nudge off-center so the handle
-        // doesn't sit on (and hide) the detent.
+    fn mixer_panel_shows_transition_state_and_fade_duration() {
         let mut app = App::new();
-        app.on_key(key('h'));
-        app.on_key(key('h'));
+        // Default: both decks live, 1s fade.
         let text = buffer_text(&render(&app, 100, 30));
-        let bar_line = text
-            .lines()
-            .find(|l| l.contains('●'))
-            .expect("a crossfader line");
+        assert!(text.contains("A + B"), "blend state missing:\n{text}");
         assert!(
-            bar_line.contains('A') && bar_line.contains('B'),
-            "A/B ends missing: {bar_line}"
+            text.contains("auto-fade 1s"),
+            "fade duration missing:\n{text}"
         );
-        assert!(bar_line.contains('┼'), "center detent missing: {bar_line}");
-        let rail = bar_line.chars().filter(|&c| c == '─').count();
-        assert!(
-            (10..=26).contains(&rail),
-            "fader should be a tidy width, not full-span; rail={rail}: {bar_line}"
-        );
+        // Hard cut to B → shows ▶ B.
+        app.on_key(key('h'));
+        assert!(buffer_text(&render(&app, 100, 30)).contains("▶ B"));
     }
 
     #[test]
@@ -2088,6 +2088,8 @@ mod tests {
             ('u', Action::Seek),
             ('g', Action::Crossfade),
             ('h', Action::Crossfade),
+            ('G', Action::Crossfade),
+            ('H', Action::Crossfade),
             (' ', Action::Crossfade),
             ('[', Action::MasterGain),
             (']', Action::MasterGain),

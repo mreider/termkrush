@@ -61,6 +61,11 @@ pub struct Mixer {
     xfade: f32,
     /// Applied crossfader position, ramped toward `xfade` per frame.
     xfade_smoothed: f32,
+    /// Per-frame ramp magnitude for the blend. A hard cut sets the blend
+    /// directly; an auto-fade sets this so the ramp lands in N seconds.
+    xfade_step: f32,
+    /// Output sample rate, so timed fades convert seconds to frames.
+    sample_rate: u32,
     /// Reusable per-deck scratch for [`fill_mix`](Self::fill_mix), so the
     /// mix path does not allocate every block.
     scratch_a: Vec<f32>,
@@ -86,6 +91,8 @@ impl Mixer {
             smoothed: 1.0,
             xfade: 0.0,
             xfade_smoothed: 0.0,
+            xfade_step: XFADE_RAMP_STEP,
+            sample_rate: 44_100,
             scratch_a: Vec::new(),
             scratch_b: Vec::new(),
             pads: Default::default(),
@@ -132,24 +139,40 @@ impl Mixer {
         &mut self.decks[i]
     }
 
-    /// Set the crossfader position, clamped to `[-1, 1]`.
-    pub fn set_xfade(&mut self, pos: f32) {
-        self.xfade = pos.clamp(XFADE_MIN, XFADE_MAX);
+    /// Set the output sample rate so timed fades know how many frames a
+    /// second is. Called once at startup by the event loop.
+    pub fn set_sample_rate(&mut self, rate: u32) {
+        self.sample_rate = rate.max(1);
     }
 
-    /// Nudge the crossfader by `delta` (clamped). Bound to `[`/`]` in the UI.
-    pub fn nudge_xfade(&mut self, delta: f32) {
-        self.set_xfade(self.xfade + delta);
+    /// Instant hard-cut the deck blend to `target` (`-1` = A only, `+1` = B
+    /// only). No ramp — for cutting between sources on the beat.
+    pub fn cut_to(&mut self, target: f32) {
+        self.xfade = target.clamp(XFADE_MIN, XFADE_MAX);
+        self.xfade_smoothed = self.xfade;
     }
 
-    /// Return the crossfader to center (both decks at unity). Bound to `\`.
-    pub fn center_xfade(&mut self) {
-        self.xfade = 0.0;
+    /// Begin a hands-free fade to `target` over `secs` seconds. The blend
+    /// ramps per frame in `fill_mix`; pace is set so it lands in `secs`.
+    pub fn autofade_to(&mut self, target: f32, secs: f32) {
+        self.xfade = target.clamp(XFADE_MIN, XFADE_MAX);
+        let frames = (secs.max(0.001) * self.sample_rate as f32).max(1.0);
+        self.xfade_step = ((self.xfade - self.xfade_smoothed).abs() / frames).max(1e-7);
     }
 
     /// Current target crossfader position.
     pub fn xfade(&self) -> f32 {
         self.xfade
+    }
+
+    /// Currently-applied (ramped) blend — what you actually hear right now.
+    pub fn xfade_applied(&self) -> f32 {
+        self.xfade_smoothed
+    }
+
+    /// True while a fade is still travelling toward its target.
+    pub fn is_fading(&self) -> bool {
+        (self.xfade - self.xfade_smoothed).abs() > 1e-4
     }
 
     /// Mix the two decks through the crossfader into `out` (interleaved
@@ -167,9 +190,9 @@ impl Mixer {
         for i in 0..out.len() / 2 {
             // Ramp the fader toward its target, then derive the A/B gains.
             if x < target {
-                x = (x + XFADE_RAMP_STEP).min(target);
+                x = (x + self.xfade_step).min(target);
             } else if x > target {
-                x = (x - XFADE_RAMP_STEP).max(target);
+                x = (x - self.xfade_step).max(target);
             }
             let (ga, gb) = xfade_gains(x);
             let l = self.scratch_a[i * 2] * ga + self.scratch_b[i * 2] * gb;
@@ -313,16 +336,27 @@ mod tests {
     }
 
     #[test]
-    fn xfade_clamps_and_centers() {
+    fn cut_clamps_and_is_instant() {
         let mut m = Mixer::new();
-        m.set_xfade(9.0);
+        m.cut_to(9.0);
         assert_eq!(m.xfade(), XFADE_MAX);
-        m.set_xfade(-9.0);
+        assert_eq!(m.xfade_applied(), XFADE_MAX, "hard cut applies immediately");
+        assert!(!m.is_fading());
+        m.cut_to(-9.0);
         assert_eq!(m.xfade(), XFADE_MIN);
-        m.nudge_xfade(0.5);
-        assert!((m.xfade() - (-0.5)).abs() < 1e-6);
-        m.center_xfade();
-        assert_eq!(m.xfade(), 0.0);
+        assert_eq!(m.xfade_applied(), XFADE_MIN);
+    }
+
+    #[test]
+    fn autofade_ramps_over_the_requested_time() {
+        let mut m = Mixer::new();
+        m.set_sample_rate(10); // 10 frames per second → easy to count
+        m.autofade_to(1.0, 1.0); // travel 0→1 over 10 frames (step 0.1/frame)
+        assert!(m.is_fading());
+        m.fill_mix(&mut [0.0; 10]); // 5 frames → ~halfway
+        assert!((m.xfade_applied() - 0.5).abs() < 0.06 && m.is_fading());
+        m.fill_mix(&mut [0.0; 20]); // +10 frames → lands on target
+        assert!(!m.is_fading() && (m.xfade_applied() - 1.0).abs() < 1e-3);
     }
 
     #[test]
@@ -333,8 +367,8 @@ mod tests {
         m.deck_mut(0).play();
         m.deck_mut(1).play();
 
-        // Full left: after the fader ramps, only A (0.4) is heard.
-        m.set_xfade(-1.0);
+        // Hard cut full left: only A (0.4) is heard, immediately.
+        m.cut_to(-1.0);
         let mut buf = vec![0.0f32; 8192];
         m.fill_mix(&mut buf);
         let last = buf[buf.len() - 1];
@@ -343,8 +377,8 @@ mod tests {
             "full-left should be deck A only, got {last}"
         );
 
-        // Full right: only B (0.6).
-        m.set_xfade(1.0);
+        // Hard cut full right: only B (0.6).
+        m.cut_to(1.0);
         let mut buf = vec![0.0f32; 8192];
         m.fill_mix(&mut buf);
         let last = buf[buf.len() - 1];
@@ -371,15 +405,15 @@ mod tests {
     }
 
     #[test]
-    fn xfade_slide_is_smoothed() {
+    fn autofade_is_smoothed_no_zipper() {
         let mut m = Mixer::new();
         m.deck_mut(0).load(track(20_000, 0.4));
         m.deck_mut(1).load(track(20_000, 0.6));
         m.deck_mut(0).play();
         m.deck_mut(1).play();
-        // Jump the target hard to +1; the first frame must not snap to
-        // B-only — it should still be ~both (A+B ≈ 1.0).
-        m.set_xfade(1.0);
+        // Auto-fade to B over 2s; the first frame must not snap to B-only —
+        // it should still be ~both (A+B ≈ 1.0).
+        m.autofade_to(1.0, 2.0);
         let mut buf = vec![0.0f32; 8];
         m.fill_mix(&mut buf);
         assert!(

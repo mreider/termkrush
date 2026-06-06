@@ -53,8 +53,9 @@ map is in the in-app `?` help.)
 
 | Key            | Action                                  |
 |----------------|-----------------------------------------|
-| `g` / `h`      | crossfader toward A / toward B          |
-| `space`        | re-center the crossfader                |
+| `g` / `h`      | hard-cut the mix to deck A / deck B (instant) |
+| `G` / `H`      | auto-fade to deck A / deck B over the set duration |
+| `space`        | cycle the auto-fade duration (1 / 2 / 4 / 8 s) |
 | `[` / `]`      | master volume down / up                 |
 | `,` / `.`      | fine scrub the focused deck (±0.1s)     |
 | `tab`          | switch focused deck (load / scrub target) |
@@ -62,7 +63,7 @@ map is in the in-app `?` help.)
 | `\`            | load the demo track (or `$TERMKRUSH_DEMO_TRACK`) |
 | `z`            | hide / show the crate panel             |
 | `?`            | toggle help                             |
-| `q` / `C-c`    | quit                                    |
+| `esc` / `q`    | quit (confirm `y`/`n`); `C-c` force-quits |
 
 ## Configuration
 

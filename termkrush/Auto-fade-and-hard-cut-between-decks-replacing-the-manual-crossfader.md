@@ -2,12 +2,16 @@
 title: Auto fade and hard cut between decks replacing the manual crossfader
 type: feature
 created: "2026-06-06T14:19:26Z"
-modified: "2026-06-06T14:20:49Z"
+modified: "2026-06-06T14:45:11Z"
 author: Matt Reider
-status: unstarted
+status: accepted
 estimate: "5"
 epic: transitions
 project: termkrush
+started: "2026-06-06T14:38:15Z"
+finished: "2026-06-06T14:45:11Z"
+delivered: "2026-06-06T14:45:11Z"
+accepted: "2026-06-06T14:45:11Z"
 ---
 
 ## Intent

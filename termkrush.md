@@ -76,9 +76,8 @@
 |  | [Optional auto BPM on clip playback via time stretch](termkrush/Optional-auto-BPM-on-clip-playback-via-time-stretch.md) | 5 |  |
 |  | [Record a clip from a deck by marking in and out](termkrush/Record-a-clip-from-a-deck-by-marking-in-and-out.md) | 5 |  |
 |  | [Uniform grid layout with equal sized boxes for decks clips and DJ](termkrush/Uniform-grid-layout-with-equal-sized-boxes-for-decks-clips-and-DJ.md) | 5 |  |
-|  | [Refactor controls into a minimal select then act model](termkrush/Refactor-controls-into-a-minimal-select-then-act-model.md) | 5 |  |
 |  | [Xbox controller support as the primary input mapped down to keyboard](termkrush/Xbox-controller-support-as-the-primary-input-mapped-down-to-keyboard.md) | 5 |  |
-| Total Points | | 132 | |
+| Total Points | | 127 | |
 
 ### Started
 | User | Title | Points | Tags |
@@ -133,6 +132,7 @@
 |  | [Awesome UX revamp functional great-looking turntable interface](termkrush/Awesome-UX-revamp-functional-great-looking-turntable-interface.md) | 8 |  |
 |  | [ESC opens a quit confirmation modal](termkrush/ESC-opens-a-quit-confirmation-modal.md) | 2 |  |
 |  | [Auto fade and hard cut between decks replacing the manual crossfader](termkrush/Auto-fade-and-hard-cut-between-decks-replacing-the-manual-crossfader.md) | 5 |  |
+|  | [Refactor controls into a minimal select then act model](termkrush/Refactor-controls-into-a-minimal-select-then-act-model.md) | 5 |  |
 
 ### Rejected
 | User | Title | Points | Tags |

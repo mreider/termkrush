@@ -28,6 +28,7 @@ use ratatui::prelude::*;
 use ratatui::widgets::{Block, Clear, List, ListItem, ListState, Paragraph, Wrap};
 
 use crate::audio::{AudioOutput, DecodedAudio};
+use crate::clip::Clip;
 use crate::config::Config;
 use crate::deck::{Deck, DeckState};
 use crate::library::Crate;
@@ -131,6 +132,7 @@ pub enum Action {
     TriggerPad,
     AssignPad,
     Bpm,
+    Mark,
 }
 
 /// A focusable cell of the control surface (plus the crate browser on the
@@ -222,6 +224,12 @@ pub struct App {
     /// Per-deck "a track is decoding in the background" flag, for the
     /// `loading…` indicator. Cleared when the decoded track arrives.
     loading: [bool; DECKS],
+    /// Per-deck record-in mark (playhead frame) while recording a clip; set
+    /// by mark-in, consumed by mark-out.
+    record_in: [Option<usize>; DECKS],
+    /// Clips recorded this session (most recent last), awaiting assignment
+    /// to a pad.
+    recordings: Vec<Clip>,
 }
 
 /// How many recently-loaded tracks the "Loaded" shortlist keeps.
@@ -507,7 +515,12 @@ impl App {
 
     fn act_mark_in(&mut self) -> Action {
         match self.focus {
-            // Assign the highlighted crate track to the focused pad.
+            // On a deck: mark the record-in point at the current playhead.
+            Focus::Deck(i) => {
+                self.record_in[i] = Some(self.mixer.deck(i).position_frames());
+                Action::Mark
+            }
+            // On a pad: assign the highlighted crate track to it.
             Focus::Pad(i) => match self.selected_path() {
                 Some(p) => {
                     self.pending_pad_assign = Some((i, p));
@@ -515,13 +528,42 @@ impl App {
                 }
                 None => Action::None,
             },
-            _ => Action::None, // deck mark-in reserved (Record story)
+            _ => Action::None,
         }
     }
 
     fn act_mark_out(&mut self) -> Action {
-        // reserved: deck mark-out (Record) / clip auto-BPM toggle (Auto-BPM)
-        Action::None
+        match self.focus {
+            // On a deck: with an in-point set, capture the region [in, out)
+            // off the deck into a recorded clip.
+            Focus::Deck(i) => match self.record_in[i].take() {
+                Some(start) => {
+                    let deck = self.mixer.deck(i);
+                    let end = deck.position_frames();
+                    let samples = deck.capture(start, end);
+                    if samples.len() >= 2 {
+                        let name =
+                            format!("Deck {} clip {}", DECK_LABELS[i], self.recordings.len() + 1);
+                        self.recordings.push(Clip::new(samples, deck.bpm(), name));
+                        Action::Mark
+                    } else {
+                        Action::None // empty region
+                    }
+                }
+                None => Action::None, // no in-point yet
+            },
+            _ => Action::None, // clip auto-BPM toggle reserved (Auto-BPM story)
+        }
+    }
+
+    /// Clips recorded this session, oldest first.
+    pub fn recordings(&self) -> &[Clip] {
+        &self.recordings
+    }
+
+    /// Whether deck `i` is armed (an in-point is set, awaiting mark-out).
+    fn recording(&self, i: usize) -> bool {
+        self.record_in.get(i).map(|m| m.is_some()).unwrap_or(false)
     }
 
     /// `,`/`.` — tempo of the focused cell. On a deck it nudges varispeed
@@ -924,6 +966,7 @@ pub fn draw(f: &mut Frame, app: &App) {
             app.mixer.deck(i),
             focused,
             app.is_loading(i),
+            app.recording(i),
         );
     }
 
@@ -1063,6 +1106,7 @@ fn draw_deck_cell(
     deck: &Deck,
     focused: bool,
     loading: bool,
+    recording: bool,
 ) {
     let marker = if focused { "▸ " } else { "" };
     let bpm = match deck.bpm() {
@@ -1090,9 +1134,19 @@ fn draw_deck_cell(
     let total = deck.duration_secs();
     let frac = if total > 0.0 { elapsed / total } else { 0.0 };
     let bar_w = inner.saturating_sub(24).clamp(3, 16); // leave room for the clock
+    let rec = if recording { "  ●REC" } else { "" };
+    let spd = if (deck.speed() - 1.0).abs() > 1e-3 {
+        format!("  {:+.0}%", (deck.speed() - 1.0) * 100.0)
+    } else {
+        String::new()
+    };
     let body = vec![
         Line::from(Span::styled(
-            format!("  {} {}  {state_word}", transport_glyph(deck.state()), name),
+            format!(
+                "  {} {}  {state_word}{rec}{spd}",
+                transport_glyph(deck.state()),
+                name
+            ),
             Style::default().fg(AMBER),
         )),
         Line::from(format!(
@@ -1280,7 +1334,7 @@ fn draw_help(f: &mut Frame, area: Rect) {
     f.render_widget(Clear, popup);
     // Keys are by finger position: left hand = deck A, right hand = deck B.
     let help = Paragraph::new(
-        "Keys  —  focus a target, then act\n\n  focus       tab + arrows  (every cell; crate is left)\n  act         j primary   k cue/2nd   l mark·assign   ; alt\n  value       w / s     (deck: volume   clips: pick slot)\n  jog         a / d     (scrub focused deck; shift = coarse)\n\n  transition  g/h cut A/B   G/H auto-fade   space dur\n  master      [ / ]      tempo , / . (deck varispeed)\n  clips       1-4 trigger\n\n  crate   / filter   ↑/↓ pick   enter load\n          \\ load demo   z hide crate\n  ?  help   esc/q quit   C-c force",
+        "Keys  —  focus a target, then act\n\n  focus       tab + arrows  (every cell; crate is left)\n  act         j play/trigger  k cue   l mark-in/assign  ; mark-out\n  value       w / s     (deck: volume   clips: pick slot)\n  jog         a / d     (scrub focused deck; shift = coarse)\n\n  transition  g/h cut A/B   G/H auto-fade   space dur\n  master      [ / ]      tempo , / . (deck varispeed)\n  clips       1-4 trigger\n\n  crate   / filter   ↑/↓ pick   enter load\n          \\ load demo   z hide crate\n  ?  help   esc/q quit   C-c force",
     )
     .block(
         Block::bordered()
@@ -2129,6 +2183,47 @@ mod tests {
         // Detection updating the base flows through (effective tracks speed).
         app.mixer.deck_mut(0).set_bpm(100.0);
         assert!((app.mixer.deck(0).bpm().unwrap() - 100.9).abs() < 1e-3);
+    }
+
+    #[test]
+    fn mark_in_out_records_a_clip_off_the_deck() {
+        use crate::audio::DecodedAudio;
+        use crate::test_support::{flat_stereo, frames};
+        let rate = 1000;
+        let mut app = App::new(); // Deck A focused by default
+        app.mixer.deck_mut(0).load_named(
+            DecodedAudio {
+                samples: flat_stereo(1000, 0.5),
+                sample_rate: rate,
+                channels: 2,
+                source_sample_rate: rate,
+                source_channels: 2,
+                duration_secs: 1.0,
+                title: None,
+                artist: None,
+            },
+            "x.wav",
+        );
+        app.mixer.deck_mut(0).seek(0.1); // playhead → frame 100
+        assert!(!app.recording(0));
+        assert_eq!(app.on_key(key('l')), Action::Mark); // mark in
+        assert!(app.recording(0));
+        app.mixer.deck_mut(0).seek(0.3); // playhead → frame 300
+        assert_eq!(app.on_key(key(';')), Action::Mark); // mark out → capture [100, 300)
+        assert!(!app.recording(0), "disarmed after capture");
+        assert_eq!(app.recordings().len(), 1);
+        assert_eq!(frames(&app.recordings()[0].samples), 200);
+        assert!(app.recordings()[0]
+            .samples
+            .iter()
+            .all(|&s| (s - 0.5).abs() < 1e-6));
+    }
+
+    #[test]
+    fn mark_out_without_in_is_a_noop() {
+        let mut app = loaded_app();
+        assert_eq!(app.on_key(key(';')), Action::None);
+        assert!(app.recordings().is_empty());
     }
 
     /// Move focus from Deck A down to Pad 0 (Deck A → MixSoft → Pad 0).

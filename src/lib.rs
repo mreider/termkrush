@@ -20,6 +20,7 @@
 #![allow(dead_code)]
 
 pub mod audio;
+pub mod clip;
 pub mod config;
 pub mod deck;
 pub mod library;

@@ -132,6 +132,19 @@ impl Deck {
         self.speed
     }
 
+    /// Capture the interleaved-stereo samples between two frame positions
+    /// (non-destructive — the track is untouched). Bounds are clamped and
+    /// ordered, so `capture(out, in)` works too; an empty/invalid range
+    /// yields an empty buffer. Used to record a clip off the deck.
+    pub fn capture(&self, a: usize, b: usize) -> Vec<f32> {
+        let Some(track) = &self.track else {
+            return Vec::new();
+        };
+        let total = track.frames();
+        let (lo, hi) = (a.min(b).min(total), a.max(b).min(total));
+        track.samples[lo * 2..hi * 2].to_vec()
+    }
+
     /// Effective tempo in BPM = detected base × varispeed, if a base is known.
     pub fn bpm(&self) -> Option<f32> {
         self.bpm.map(|b| b * self.speed)
@@ -451,6 +464,17 @@ mod tests {
             buf.iter().all(|s| s.is_finite()),
             "varispeed output is finite"
         );
+    }
+
+    #[test]
+    fn capture_clamps_orders_and_copies_region() {
+        let mut d = Deck::new();
+        d.load(track(100, 0.5, 1000)); // 100 frames
+        assert_eq!(d.capture(10, 30).len(), 40, "20 frames * 2 samples");
+        assert_eq!(d.capture(30, 10).len(), 40, "bounds get ordered");
+        assert_eq!(d.capture(90, 999).len(), 20, "clamped to track end");
+        assert!(d.capture(50, 50).is_empty(), "empty range");
+        assert!(d.capture(10, 30).iter().all(|&s| (s - 0.5).abs() < 1e-6));
     }
 
     #[test]

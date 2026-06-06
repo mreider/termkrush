@@ -119,6 +119,7 @@
 |  | [Bug: pressing enter does not load a track (load path untested, empty crate is a silent no-op)](termkrush/Bug-pressing-enter-does-not-load-a-track-load-path-untested-empty-crate-is-a-silent-no-op.md) |  |  |
 |  | [Integration tests for every keyboard command end-to-end](termkrush/Integration-tests-for-every-keyboard-command-end-to-end.md) |  |  |
 |  | [Clip pads trigger samples over the mix](termkrush/Clip-pads-trigger-samples-over-the-mix.md) | 5 |  |
+|  | [Bug: pressing enter freezes the UI — track decode and resample run synchronously on the event-loop thread](termkrush/Bug-pressing-enter-freezes-the-UI-track-decode-and-resample-run-synchronously-on-the-event-loop-thread.md) |  |  |
 
 ### Rejected
 | User | Title | Points | Tags |

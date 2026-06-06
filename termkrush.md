@@ -67,13 +67,12 @@
 |  | [V0.6.0 record](termkrush/v060-record.md) |  |  |
 |  | [Yt-dlp shell-out for media URLs](termkrush/yt-dlp-shell-out-for-media-URLs.md) | 3 | [download](.am/tags/download.md) [yt-dlp](.am/tags/yt-dlp.md) |
 |  | [Lower-corner 8-bit DJ cat that bobs to the BPM](termkrush/Lower-corner-8-bit-DJ-cat-that-bobs-to-the-BPM.md) | 3 |  |
-| Total Points | | 82 | |
+|  | [Offline BPM detection on load](termkrush/Offline-BPM-detection-on-load.md) | 5 | [tempo](.am/tags/tempo.md) [analysis](.am/tags/analysis.md) |
+| Total Points | | 87 | |
 
 ### Started
 | User | Title | Points | Tags |
 |---|---|:---:|---|
-|  | [Offline BPM detection on load](termkrush/Offline-BPM-detection-on-load.md) | 5 | [tempo](.am/tags/tempo.md) [analysis](.am/tags/analysis.md) |
-| Total Points | | 5 | |
 
 ### Finished
 | User | Title | Points | Tags |
@@ -121,6 +120,7 @@
 |  | [Clip pads trigger samples over the mix](termkrush/Clip-pads-trigger-samples-over-the-mix.md) | 5 |  |
 |  | [Bug: pressing enter freezes the UI — track decode and resample run synchronously on the event-loop thread](termkrush/Bug-pressing-enter-freezes-the-UI-track-decode-and-resample-run-synchronously-on-the-event-loop-thread.md) |  |  |
 |  | [Bug: loading a full track takes ~60s in dev builds — DSP dependencies (symphonia, rubato/rustfft) compiled unoptimized](termkrush/Bug-loading-a-full-track-takes-60s-in-dev-builds-DSP-dependencies-symphonia-rubato-rustfft-compiled-unoptimized.md) |  |  |
+|  | [Global backlog work-gate: block edits in any am repo when no story is started (cwd-independent hook)](termkrush/Global-backlog-work-gate-block-edits-in-any-am-repo-when-no-story-is-started-cwd-independent-hook.md) |  |  |
 
 ### Rejected
 | User | Title | Points | Tags |

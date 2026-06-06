@@ -5,6 +5,7 @@
 ## Unstarted
 | User | Project | Title | Points | Tags |
 |---|---|---|:---:|---|
+|  | [termkrush](../../termkrush.md) | [Offline BPM detection on load](../../termkrush/Offline-BPM-detection-on-load.md) | 5 | [tempo](tempo.md) [analysis](analysis.md) |
 |  | [termkrush](../../termkrush.md) | [Multi-detector BPM consensus](../../termkrush/Multi-detector-BPM-consensus.md) |  | [tempo](tempo.md) [analysis](analysis.md) [icebox](icebox.md) |
 |  | [termkrush](../../termkrush.md) | [Tap tempo](../../termkrush/Tap-tempo.md) |  | [tempo](tempo.md) [icebox](icebox.md) |
 |  | [termkrush](../../termkrush.md) | [Tempo ramping curves](../../termkrush/Tempo-ramping-curves.md) |  | [tempo](tempo.md) [icebox](icebox.md) |
@@ -16,10 +17,4 @@
 |  | [termkrush](../../termkrush.md) | [Pitch-preserving time-stretch](../../termkrush/Pitch-preserving-time-stretch.md) | 5 | [tempo](tempo.md) [dsp](dsp.md) |
 |  | [termkrush](../../termkrush.md) | [Sync deck BPM to reference deck](../../termkrush/Sync-deck-BPM-to-reference-deck.md) | 3 | [tempo](tempo.md) [sync](sync.md) |
 |  | [termkrush](../../termkrush.md) | [Tempo nudge controls](../../termkrush/Tempo-nudge-controls.md) | 2 | [tempo](tempo.md) [tui](tui.md) |
-| Total Points | | | 15 | |
-
-## Started
-| User | Project | Title | Points | Tags |
-|---|---|---|:---:|---|
-|  | [termkrush](../../termkrush.md) | [Offline BPM detection on load](../../termkrush/Offline-BPM-detection-on-load.md) | 5 | [tempo](tempo.md) [analysis](analysis.md) |
-| Total Points | | | 5 | |
+| Total Points | | | 20 | |

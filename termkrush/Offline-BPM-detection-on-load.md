@@ -2,14 +2,13 @@
 title: Offline BPM detection on load
 type: feature
 created: "2026-06-04T09:15:05Z"
-modified: "2026-06-05T19:17:25Z"
+modified: "2026-06-06T13:35:05Z"
 author: Matt Reider
-status: started
+status: unstarted
 estimate: "5"
 epic: tempo
 tags: [tempo, analysis]
 project: termkrush
-started: "2026-06-05T19:17:25Z"
 ---
 
 ## Problem statement

@@ -65,8 +65,7 @@
 |  | [V0.5.0 more decks](termkrush/v050-more-decks.md) |  |  |
 |  | [V0.6.0 record](termkrush/v060-record.md) |  |  |
 |  | [Yt-dlp shell-out for media URLs](termkrush/yt-dlp-shell-out-for-media-URLs.md) | 3 | [download](.am/tags/download.md) [yt-dlp](.am/tags/yt-dlp.md) |
-|  | [Optional auto BPM on clip playback via time stretch](termkrush/Optional-auto-BPM-on-clip-playback-via-time-stretch.md) | 5 |  |
-| Total Points | | 79 | |
+| Total Points | | 74 | |
 
 ### Started
 | User | Title | Points | Tags |
@@ -137,6 +136,7 @@
 |  | [Beat synced clip patterns cut and baby scratch](termkrush/Beat-synced-clip-patterns-cut-and-baby-scratch.md) | 5 |  |
 |  | [More clip patterns transformer stutter warble and reverse](termkrush/More-clip-patterns-transformer-stutter-warble-and-reverse.md) | 5 |  |
 |  | [Pitch-preserving time-stretch](termkrush/Pitch-preserving-time-stretch.md) | 5 | [tempo](.am/tags/tempo.md) [dsp](.am/tags/dsp.md) |
+|  | [Optional auto BPM on clip playback via time stretch](termkrush/Optional-auto-BPM-on-clip-playback-via-time-stretch.md) | 5 |  |
 
 ### Rejected
 | User | Title | Points | Tags |

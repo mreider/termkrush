@@ -2,13 +2,17 @@
 title: Tempo nudge controls
 type: feature
 created: "2026-06-04T09:15:06Z"
-modified: "2026-06-04T09:15:06Z"
+modified: "2026-06-06T19:59:38Z"
 author: Matt Reider
-status: unstarted
+status: accepted
 estimate: "2"
 epic: tempo
 tags: [tempo, tui]
 project: termkrush
+started: "2026-06-06T19:59:38Z"
+finished: "2026-06-06T19:59:38Z"
+delivered: "2026-06-06T19:59:38Z"
+accepted: "2026-06-06T19:59:38Z"
 ---
 
 ## Problem statement

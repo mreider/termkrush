@@ -128,3 +128,10 @@
 2026-06-06T09:06:35Z	Matt Reider	set-type	termkrush/Integration-tests-for-every-keyboard-command-end-to-end.md	chore
 2026-06-06T09:06:35Z	Matt Reider	set-type	termkrush/Awesome-UX-revamp-functional-great-looking-turntable-interface.md	feature
 2026-06-06T09:06:36Z	Matt Reider	estimate	termkrush/Awesome-UX-revamp-functional-great-looking-turntable-interface.md	8
+2026-06-06T09:07:17Z	Matt Reider	started	termkrush/Integration-tests-for-every-keyboard-command-end-to-end.md	
+2026-06-06T09:10:55Z	Matt Reider	accepted	termkrush/Integration-tests-for-every-keyboard-command-end-to-end.md	
+2026-06-06T09:10:55Z	Matt Reider	accepted	termkrush/Integration-tests-for-every-keyboard-command-end-to-end.md	
+2026-06-06T09:11:19Z	Matt Reider	started	termkrush/Bug-pressing-enter-does-not-load-a-track-load-path-untested-empty-crate-is-a-silent-no-op.md	
+2026-06-06T09:11:19Z	Matt Reider	finished	termkrush/Bug-pressing-enter-does-not-load-a-track-load-path-untested-empty-crate-is-a-silent-no-op.md	
+2026-06-06T09:11:19Z	Matt Reider	delivered	termkrush/Bug-pressing-enter-does-not-load-a-track-load-path-untested-empty-crate-is-a-silent-no-op.md	
+2026-06-06T09:11:19Z	Matt Reider	accepted	termkrush/Bug-pressing-enter-does-not-load-a-track-load-path-untested-empty-crate-is-a-silent-no-op.md	Root cause: empty crate (crate_root unset) -> enter had nothing to select; compounded by the load path never being integration-tested. Fixed: load step lifted to testable apply_load_action + proven e2e (enter decodes+loads real fixture; loaded track plays non-silent), empty-crate now shows actionable guidance, empty-enter is a safe no-op. No new code beyond the integration-tests chore + crate-truncation bug + config; this verifies/closes it. 96 lib tests green.

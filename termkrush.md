@@ -69,8 +69,6 @@
 |  | [Clip pads trigger samples over the mix](termkrush/Clip-pads-trigger-samples-over-the-mix.md) | 5 |  |
 |  | [Lower-corner 8-bit DJ cat that bobs to the BPM](termkrush/Lower-corner-8-bit-DJ-cat-that-bobs-to-the-BPM.md) | 3 |  |
 |  | [Awesome UX revamp functional great-looking turntable interface](termkrush/Awesome-UX-revamp-functional-great-looking-turntable-interface.md) | 8 |  |
-|  | [Bug: pressing enter does not load a track (load path untested, empty crate is a silent no-op)](termkrush/Bug-pressing-enter-does-not-load-a-track-load-path-untested-empty-crate-is-a-silent-no-op.md) |  |  |
-|  | [Integration tests for every keyboard command end-to-end](termkrush/Integration-tests-for-every-keyboard-command-end-to-end.md) |  |  |
 | Total Points | | 95 | |
 
 ### Started
@@ -119,6 +117,8 @@
 |  | [Per-deck track switching from the loaded list](termkrush/Per-deck-track-switching-from-the-loaded-list.md) | 3 |  |
 |  | [Crossfader between the turntables](termkrush/Crossfader-between-the-turntables.md) | 2 |  |
 |  | [Bug: crate panel text truncated (empty-state message and long track names cut off at panel width)](termkrush/Bug-crate-panel-text-truncated-empty-state-message-and-long-track-names-cut-off-at-panel-width.md) |  |  |
+|  | [Bug: pressing enter does not load a track (load path untested, empty crate is a silent no-op)](termkrush/Bug-pressing-enter-does-not-load-a-track-load-path-untested-empty-crate-is-a-silent-no-op.md) |  |  |
+|  | [Integration tests for every keyboard command end-to-end](termkrush/Integration-tests-for-every-keyboard-command-end-to-end.md) |  |  |
 
 ### Rejected
 | User | Title | Points | Tags |

@@ -160,3 +160,31 @@
 2026-06-06T13:35:05Z	Matt Reider	accepted	termkrush/Global-backlog-work-gate-block-edits-in-any-am-repo-when-no-story-is-started-cwd-independent-hook.md	Generalized cwd-independent work-gate (am-work-gate.sh): keys off the edited file's .am repo, blocks Edit/Write with no started story, ignores non-am + bare-.am repos. Installed into global ~/.claude/settings.json so it fires regardless of launch dir (the reason the per-repo gate never enforced for sessions run from ~/chats). 7 scenarios verified. Binary productization deferred.
 2026-06-06T13:55:23Z	Matt Reider	accepted	termkrush/Bug-logging-crash-line-test-asserts-unix-path-separator-fails-on-Windows-CI.md	Cleared a stale finished bug (predated autonomous mode). Fix is in; full suite green locally (128 tests) and CI matrix covers Windows. No further code change.
 2026-06-06T14:18:34Z	Matt Reider	accepted	termkrush/Awesome-UX-revamp-functional-great-looking-turntable-interface.md	Accepting the functional pass: right-sized crossfader, ellipsized/no-cut text, clear empty state. The manual crossfader and the overall layout are now SUPERSEDED by the clip-centric redesign — auto-fade replaces the crossfader, and a uniform equal-box grid (decks/clips/DJ) replaces the layout. Those land as the new clips/transitions/ux stories. The text-legibility wins stand.
+2026-06-06T14:19:26Z	Matt Reider	created	termkrush/ESC-opens-a-quit-confirmation-modal.md	target=priority position=bottom
+2026-06-06T14:19:26Z	Matt Reider	created	termkrush/Auto-fade-and-hard-cut-between-decks-replacing-the-manual-crossfader.md	target=priority position=bottom
+2026-06-06T14:19:26Z	Matt Reider	created	termkrush/Record-a-clip-from-a-deck-by-marking-in-and-out.md	target=priority position=bottom
+2026-06-06T14:19:27Z	Matt Reider	created	termkrush/Clip-buttons-assign-clips-and-trigger-straight-playback.md	target=priority position=bottom
+2026-06-06T14:19:27Z	Matt Reider	created	termkrush/Uniform-grid-layout-with-equal-sized-boxes-for-decks-clips-and-DJ.md	target=priority position=bottom
+2026-06-06T14:19:27Z	Matt Reider	created	termkrush/Clip-timeline-view-with-precise-non-destructive-trim.md	target=priority position=bottom
+2026-06-06T14:19:27Z	Matt Reider	created	termkrush/Beat-synced-clip-patterns-cut-and-baby-scratch.md	target=priority position=bottom
+2026-06-06T14:19:27Z	Matt Reider	created	termkrush/More-clip-patterns-transformer-stutter-warble-and-reverse.md	target=priority position=bottom
+2026-06-06T14:19:27Z	Matt Reider	created	termkrush/Optional-auto-BPM-on-clip-playback-via-time-stretch.md	target=priority position=bottom
+2026-06-06T14:19:27Z	Matt Reider	chore	termkrush/Clip-engine-test-harness-for-record-trim-patterns-and-stretch.md	target=priority position=top
+2026-06-06T14:19:42Z	Matt Reider	set-type	termkrush/ESC-opens-a-quit-confirmation-modal.md	feature
+2026-06-06T14:19:42Z	Matt Reider	estimate	termkrush/ESC-opens-a-quit-confirmation-modal.md	2
+2026-06-06T14:19:42Z	Matt Reider	set-type	termkrush/Auto-fade-and-hard-cut-between-decks-replacing-the-manual-crossfader.md	feature
+2026-06-06T14:19:42Z	Matt Reider	estimate	termkrush/Auto-fade-and-hard-cut-between-decks-replacing-the-manual-crossfader.md	5
+2026-06-06T14:19:42Z	Matt Reider	set-type	termkrush/Record-a-clip-from-a-deck-by-marking-in-and-out.md	feature
+2026-06-06T14:19:42Z	Matt Reider	estimate	termkrush/Record-a-clip-from-a-deck-by-marking-in-and-out.md	5
+2026-06-06T14:19:43Z	Matt Reider	set-type	termkrush/Clip-buttons-assign-clips-and-trigger-straight-playback.md	feature
+2026-06-06T14:19:43Z	Matt Reider	estimate	termkrush/Clip-buttons-assign-clips-and-trigger-straight-playback.md	5
+2026-06-06T14:19:43Z	Matt Reider	set-type	termkrush/Uniform-grid-layout-with-equal-sized-boxes-for-decks-clips-and-DJ.md	feature
+2026-06-06T14:19:43Z	Matt Reider	estimate	termkrush/Uniform-grid-layout-with-equal-sized-boxes-for-decks-clips-and-DJ.md	5
+2026-06-06T14:19:43Z	Matt Reider	set-type	termkrush/Clip-timeline-view-with-precise-non-destructive-trim.md	feature
+2026-06-06T14:19:43Z	Matt Reider	estimate	termkrush/Clip-timeline-view-with-precise-non-destructive-trim.md	5
+2026-06-06T14:19:43Z	Matt Reider	set-type	termkrush/Beat-synced-clip-patterns-cut-and-baby-scratch.md	feature
+2026-06-06T14:19:43Z	Matt Reider	estimate	termkrush/Beat-synced-clip-patterns-cut-and-baby-scratch.md	5
+2026-06-06T14:19:44Z	Matt Reider	set-type	termkrush/More-clip-patterns-transformer-stutter-warble-and-reverse.md	feature
+2026-06-06T14:19:44Z	Matt Reider	estimate	termkrush/More-clip-patterns-transformer-stutter-warble-and-reverse.md	5
+2026-06-06T14:19:44Z	Matt Reider	set-type	termkrush/Optional-auto-BPM-on-clip-playback-via-time-stretch.md	feature
+2026-06-06T14:19:44Z	Matt Reider	estimate	termkrush/Optional-auto-BPM-on-clip-playback-via-time-stretch.md	5

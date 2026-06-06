@@ -57,8 +57,8 @@ jog/scratch the focused deck · `Start` quit · `Back` help.
 | `j`            | primary — deck play/pause · clip trigger |
 | `k`            | secondary — deck cue/stop · on a **pad**: assign the latest recorded clip |
 | `l` / `;`      | on a **deck**: mark-in / mark-out → records that region as a clip; on a **pad**: `l` assigns the highlighted crate track |
-| `w` / `s`      | value — deck volume · clips pick slot    |
-| `a` / `d`      | jog/scrub the focused deck (`shift` = coarse) |
+| `w` / `s`      | value — deck volume · on a **pad**: trim the out-point ± (`shift` = fine) |
+| `a` / `d`      | deck: jog/scrub (`shift` = coarse) · on a **pad**: trim the in-point ∓ (non-destructive) |
 | `g` / `h`      | hard-cut the mix to deck A / deck B (instant) |
 | `G` / `H`      | auto-fade to deck A / deck B over the set duration |
 | `space`        | cycle the auto-fade duration (1 / 2 / 4 / 8 s) |

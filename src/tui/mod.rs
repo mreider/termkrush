@@ -620,21 +620,57 @@ impl App {
 
     // ---- the context-sensitive value keys (w / s): deck volume ----
 
-    fn value_up(&mut self) -> Action {
+    fn value_up(&mut self, fine: bool) -> Action {
         match self.focus {
             Focus::Deck(i) => {
                 self.mixer.deck_mut(i).nudge_gain(GAIN_NUDGE);
                 Action::DeckGain
             }
+            Focus::Pad(i) => {
+                self.mixer.nudge_pad_out(i, Self::trim_step(fine));
+                Action::Mark
+            }
             _ => Action::None,
         }
     }
 
-    fn value_down(&mut self) -> Action {
+    fn value_down(&mut self, fine: bool) -> Action {
         match self.focus {
             Focus::Deck(i) => {
                 self.mixer.deck_mut(i).nudge_gain(-GAIN_NUDGE);
                 Action::DeckGain
+            }
+            Focus::Pad(i) => {
+                self.mixer.nudge_pad_out(i, -Self::trim_step(fine));
+                Action::Mark
+            }
+            _ => Action::None,
+        }
+    }
+
+    /// Trim nudge in frames: ~0.1s coarse, ~0.01s fine (44.1k-ish).
+    fn trim_step(fine: bool) -> i64 {
+        if fine {
+            441
+        } else {
+            4410
+        }
+    }
+
+    /// `a`/`d` — jog. On a deck it scrubs the playhead; on a pad it nudges
+    /// the trim in-point (non-destructive). `coarse` = the larger step.
+    fn jog(&mut self, forward: bool, coarse: bool) -> Action {
+        let sign = if forward { 1.0 } else { -1.0 };
+        match self.focus {
+            Focus::Deck(_) => {
+                let amt = if coarse { SEEK_FAR } else { SEEK_SCRUB };
+                self.focused_mut().seek_by(sign * amt);
+                Action::Seek
+            }
+            Focus::Pad(i) => {
+                let d = Self::trim_step(!coarse) * if forward { 1 } else { -1 };
+                self.mixer.nudge_pad_in(i, d);
+                Action::Mark
             }
             _ => Action::None,
         }
@@ -767,8 +803,6 @@ impl App {
         // Keys are chosen by finger position, not by what letter the action
         // starts with. See `keymap` docs / the help overlay.
         let shift = key.modifiers.contains(KeyModifiers::SHIFT);
-        // Jog step for a/d: fine by default, a coarse seek with Shift.
-        let jog_amt = if shift { SEEK_FAR } else { SEEK_SCRUB };
         match (key.code, key.modifiers) {
             // ---- global / out of the play cluster ----
             // `q` no longer quits outright — it opens the confirm modal, so a
@@ -801,19 +835,14 @@ impl App {
             (KeyCode::Char(';'), _) => self.act_mark_out(),
 
             // ---- select / value (left hand) ----
-            // Deck focused: w/s = volume. Clips focused: w/s = pick the slot.
-            (KeyCode::Char('w'), _) => self.value_up(),
-            (KeyCode::Char('s'), _) => self.value_down(),
+            // Deck: w/s = volume. Pad: w/s = trim out-point ± (shift = fine).
+            (KeyCode::Char('w'), _) => self.value_up(shift),
+            (KeyCode::Char('s'), _) => self.value_down(shift),
 
-            // ---- jog / scrub the focused deck (left hand); Shift = coarse ----
-            (KeyCode::Char('a'), _) => {
-                self.focused_mut().seek_by(-jog_amt);
-                Action::Seek
-            }
-            (KeyCode::Char('d'), _) => {
-                self.focused_mut().seek_by(jog_amt);
-                Action::Seek
-            }
+            // ---- jog (left hand); shift = coarse ----
+            // Deck: scrub. Pad: trim in-point ∓.
+            (KeyCode::Char('a'), _) => self.jog(false, shift),
+            (KeyCode::Char('d'), _) => self.jog(true, shift),
 
             // ---- deck transitions — between the hands (index inner reach) ----
             // lowercase = instant hard cut; Shift = hands-free auto-fade over
@@ -1133,26 +1162,45 @@ fn dj_lines(app: &App) -> Vec<Line<'static>> {
 
 /// One sampler-pad cell: number + assigned/empty glyph + its BPM. Focused
 /// (amber) when the Clip bank is focused and this is the selected slot.
+/// A `[░░████░░]` bar showing the trimmed region `[in, out)` over the clip.
+fn trim_bar(inp: usize, out: usize, len: usize, width: usize) -> String {
+    if len == 0 || width == 0 {
+        return "[]".into();
+    }
+    let lo = (inp * width / len).min(width);
+    let hi = (out * width / len).min(width);
+    let mut s = String::with_capacity(width + 2);
+    s.push('[');
+    for i in 0..width {
+        s.push(if i >= lo && i < hi { '█' } else { '░' });
+    }
+    s.push(']');
+    s
+}
+
 fn draw_pad_cell(f: &mut Frame, area: Rect, app: &App, pad: usize) {
-    let focused = app.clips_focused() && app.clip_sel() == pad;
-    let glyph = if app.mixer.pad_loaded(pad) {
-        '●'
+    let focused = app.focus_cell() == Focus::Pad(pad);
+    let loaded = app.mixer.pad_loaded(pad);
+    let glyph = if loaded { '●' } else { '·' };
+    // When focused with a clip, show the trim timeline; otherwise the BPM.
+    let line2 = if focused && loaded {
+        let (inp, out) = app.mixer.pad_trim(pad);
+        let len = app.mixer.pad_clip_frames(pad);
+        let w = (area.width as usize).saturating_sub(6).clamp(4, 12);
+        format!("  {}", trim_bar(inp, out, len, w))
     } else {
-        '·'
+        let bpm = app
+            .mixer
+            .pad_bpm(pad)
+            .map(|b| format!("{b:.0} bpm"))
+            .unwrap_or_else(|| "-- bpm".into());
+        format!("  {bpm}")
     };
-    let bpm = app
-        .mixer
-        .pad_bpm(pad)
-        .map(|b| format!("{b:.0} bpm"))
-        .unwrap_or_else(|| "-- bpm".into());
     draw_cell(
         f,
         area,
         &format!("Pad {}", pad + 1),
-        vec![
-            Line::from(format!("  {glyph}")),
-            Line::from(format!("  {bpm}")),
-        ],
+        vec![Line::from(format!("  {glyph}")), Line::from(line2)],
         focused,
     );
 }
@@ -1393,7 +1441,7 @@ fn draw_help(f: &mut Frame, area: Rect) {
     f.render_widget(Clear, popup);
     // Keys are by finger position: left hand = deck A, right hand = deck B.
     let help = Paragraph::new(
-        "Keys  —  focus a target, then act\n\n  focus       tab + arrows  (every cell; crate is left)\n  act         j play/trig  k cue/assign-rec  l mark-in/assign-crate  ; mark-out\n  value       w / s     (deck: volume   clips: pick slot)\n  jog         a / d     (scrub focused deck; shift = coarse)\n\n  transition  g/h cut A/B   G/H auto-fade   space dur\n  master      [ / ]      tempo , / . (deck varispeed)\n  clips       1-7 trigger   r record live mix\n\n  crate   / filter   ↑/↓ pick   enter load\n          \\ load demo   z hide crate\n  ?  help   esc/q quit   C-c force",
+        "Keys  —  focus a target, then act\n\n  focus       tab + arrows  (every cell; crate is left)\n  act         j play/trig  k cue/assign-rec  l mark-in/assign-crate  ; mark-out\n  value       w / s     (deck volume · pad trim out)\n  jog         a / d     (deck scrub · pad trim in; shift = fine)\n\n  transition  g/h cut A/B   G/H auto-fade   space dur\n  master      [ / ]      tempo , / . (deck varispeed)\n  clips       1-7 trigger   r record live mix\n\n  crate   / filter   ↑/↓ pick   enter load\n          \\ load demo   z hide crate\n  ?  help   esc/q quit   C-c force",
     )
     .block(
         Block::bordered()
@@ -2738,6 +2786,21 @@ mod tests {
         // Arrow right moves to Pad 1 (the other column).
         app.on_key(KeyEvent::new(KeyCode::Right, KeyModifiers::NONE));
         assert_eq!(app.focus_cell(), Focus::Pad(1));
+    }
+
+    #[test]
+    fn focused_pad_a_d_w_s_trim_the_clip_nondestructively() {
+        let mut app = App::new();
+        app.mixer.assign_pad(0, vec![0.5; 20_000]); // 10_000 frames
+        focus_first_pad(&mut app); // Pad 0
+        let (in0, out0) = app.mixer.pad_trim(0);
+        assert_eq!((in0, out0), (0, 10_000));
+        assert_eq!(app.on_key(key('d')), Action::Mark); // in-point forward
+        assert!(app.mixer.pad_trim(0).0 > 0);
+        assert_eq!(app.on_key(key('s')), Action::Mark); // out-point in
+        assert!(app.mixer.pad_trim(0).1 < 10_000);
+        // Non-destructive: the clip is still its full length.
+        assert_eq!(app.mixer.pad_clip_frames(0), 10_000);
     }
 
     #[test]

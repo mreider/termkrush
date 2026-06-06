@@ -23,6 +23,7 @@ pub const PADS: usize = 7;
 struct SampleVoice {
     clip: Arc<Vec<f32>>, // interleaved stereo at the mix rate
     pos: usize,          // sample index into `clip`
+    end: usize,          // stop at this sample index (trim out-point)
 }
 
 /// Allowed master gain range: silence up to +3.5 dB of headroom.
@@ -74,6 +75,9 @@ pub struct Mixer {
     pads: [Option<Arc<Vec<f32>>>; PADS],
     /// Manually-set BPM per pad (for later beat-sync / auto-bpm).
     pad_bpm: [Option<f32>; PADS],
+    /// Non-destructive trim bounds per pad, in frames `(in, out)`. The clip
+    /// samples are never modified; triggering plays only `[in, out)`.
+    pad_trim: [(usize, usize); PADS],
     /// Currently-sounding one-shot voices, summed atop the deck mix.
     voices: Vec<SampleVoice>,
     /// When armed, `fill_mix` appends each block of master output here so the
@@ -103,6 +107,7 @@ impl Mixer {
             scratch_b: Vec::new(),
             pads: Default::default(),
             pad_bpm: Default::default(),
+            pad_trim: Default::default(),
             voices: Vec::new(),
             recording: false,
             record_buf: Vec::new(),
@@ -129,8 +134,47 @@ impl Mixer {
     /// Assign a decoded clip (interleaved stereo at the mix rate) to pad `i`.
     pub fn assign_pad(&mut self, i: usize, clip: Vec<f32>) {
         if i < PADS {
+            let frames = clip.len() / 2;
             self.pads[i] = Some(Arc::new(clip));
+            self.pad_trim[i] = (0, frames); // full clip by default
         }
+    }
+
+    /// Pad `i`'s trim bounds in frames `(in, out)`.
+    pub fn pad_trim(&self, i: usize) -> (usize, usize) {
+        self.pad_trim.get(i).copied().unwrap_or((0, 0))
+    }
+
+    /// Clip length (frames) on pad `i`, 0 if empty.
+    pub fn pad_clip_frames(&self, i: usize) -> usize {
+        self.pads
+            .get(i)
+            .and_then(|p| p.as_ref())
+            .map(|c| c.len() / 2)
+            .unwrap_or(0)
+    }
+
+    /// Non-destructively move pad `i`'s in-point by `delta` frames, clamped
+    /// to `[0, out-1]`. The samples are untouched — only playback bounds.
+    pub fn nudge_pad_in(&mut self, i: usize, delta: i64) {
+        if i >= PADS {
+            return;
+        }
+        let (inp, out) = self.pad_trim[i];
+        let inp = (inp as i64 + delta).clamp(0, out as i64 - 1).max(0) as usize;
+        self.pad_trim[i].0 = inp;
+    }
+
+    /// Non-destructively move pad `i`'s out-point by `delta` frames, clamped
+    /// to `[in+1, clip_len]`.
+    pub fn nudge_pad_out(&mut self, i: usize, delta: i64) {
+        if i >= PADS {
+            return;
+        }
+        let len = self.pad_clip_frames(i) as i64;
+        let (inp, out) = self.pad_trim[i];
+        let out = (out as i64 + delta).clamp(inp as i64 + 1, len.max(inp as i64 + 1)) as usize;
+        self.pad_trim[i].1 = out;
     }
 
     /// Manually nudge pad `i`'s BPM by `delta` (from 120 if unset), clamped.
@@ -162,10 +206,14 @@ impl Mixer {
     /// clip, summed atop whatever the decks are playing. No-op if the pad
     /// is empty. Overlapping triggers stack (polyphonic).
     pub fn trigger_pad(&mut self, i: usize) {
+        let (inp, out) = self.pad_trim.get(i).copied().unwrap_or((0, 0));
         if let Some(Some(clip)) = self.pads.get(i) {
+            let end = (out * 2).min(clip.len());
+            let pos = (inp * 2).min(end);
             self.voices.push(SampleVoice {
                 clip: Arc::clone(clip),
-                pos: 0,
+                pos,
+                end,
             });
         }
     }
@@ -266,13 +314,13 @@ impl Mixer {
     /// advancing its position; voices that reach their end are removed.
     fn mix_voices(&mut self, out: &mut [f32]) {
         self.voices.retain_mut(|v| {
-            let remaining = v.clip.len().saturating_sub(v.pos);
+            let remaining = v.end.saturating_sub(v.pos);
             let n = out.len().min(remaining);
             for (o, s) in out.iter_mut().zip(v.clip[v.pos..v.pos + n].iter()) {
                 *o += *s;
             }
             v.pos += n;
-            v.pos < v.clip.len() // keep while not finished
+            v.pos < v.end // keep until the trim out-point
         });
     }
 
@@ -585,6 +633,36 @@ mod tests {
             rec.iter().any(|&s| s.abs() > 0.01),
             "captured the live deck + pad audio"
         );
+    }
+
+    #[test]
+    fn pad_trim_bounds_playback_non_destructively() {
+        let mut m = Mixer::new();
+        m.assign_pad(0, vec![0.5; 200]); // 100 frames; full trim by default
+        assert_eq!(m.pad_trim(0), (0, 100));
+        assert_eq!(m.pad_clip_frames(0), 100);
+        m.nudge_pad_in(0, 20); // (20, 100)
+        m.nudge_pad_out(0, -70); // (20, 30) → 10 frames
+        assert_eq!(m.pad_trim(0), (20, 30));
+
+        m.trigger_pad(0);
+        m.fill_mix(&mut [0.0f32; 8]); // 4 of the 10 frames
+        assert_eq!(m.active_voices(), 1);
+        m.fill_mix(&mut [0.0f32; 100]); // drains the rest (< the buffer)
+        assert_eq!(m.active_voices(), 0, "voice ends at the trim out-point");
+
+        // The underlying clip is untouched — trimming only set bounds.
+        assert_eq!(m.pad_clip_frames(0), 100);
+    }
+
+    #[test]
+    fn pad_trim_clamps() {
+        let mut m = Mixer::new();
+        m.assign_pad(0, vec![0.0; 200]); // 100 frames
+        m.nudge_pad_in(0, 1000); // can't reach/pass out
+        assert_eq!(m.pad_trim(0).0, 99);
+        m.nudge_pad_out(0, 1000); // can't pass the clip end
+        assert_eq!(m.pad_trim(0).1, 100);
     }
 
     #[test]

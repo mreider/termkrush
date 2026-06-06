@@ -2,12 +2,16 @@
 title: Clip timeline view with precise non destructive trim
 type: feature
 created: "2026-06-06T14:19:27Z"
-modified: "2026-06-06T14:20:49Z"
+modified: "2026-06-06T19:37:34Z"
 author: Matt Reider
-status: unstarted
+status: accepted
 estimate: "5"
 epic: clips
 project: termkrush
+started: "2026-06-06T19:32:50Z"
+finished: "2026-06-06T19:37:34Z"
+delivered: "2026-06-06T19:37:34Z"
+accepted: "2026-06-06T19:37:34Z"
 ---
 
 ## Intent

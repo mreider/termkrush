@@ -2,12 +2,16 @@
 title: Resample the live mix into a pad record whatever is playing
 type: feature
 created: "2026-06-06T18:48:53Z"
-modified: "2026-06-06T18:48:53Z"
+modified: "2026-06-06T19:29:47Z"
 author: Matt Reider
-status: unstarted
+status: accepted
 estimate: "5"
 epic: clips
 project: termkrush
+started: "2026-06-06T19:27:32Z"
+finished: "2026-06-06T19:29:46Z"
+delivered: "2026-06-06T19:29:47Z"
+accepted: "2026-06-06T19:29:47Z"
 ---
 
 ## Intent

@@ -63,6 +63,7 @@ jog/scratch the focused deck · `Start` quit · `Back` help.
 | `G` / `H`      | auto-fade to deck A / deck B over the set duration |
 | `space`        | cycle the auto-fade duration (1 / 2 / 4 / 8 s) |
 | `1`–`7`        | trigger clip pads directly              |
+| `r`            | resample the live mix (arm/disarm) → a clip on the focused pad, else the recordings stash |
 | `,` / `.`      | tempo: varispeed the focused **deck** ∓1% (`shift` = ∓0.1%) — pitch rides with speed, effective BPM = base × speed; on a **pad**, nudge its stored BPM |
 | `[` / `]`      | master volume down / up                 |
 | `/`            | filter the crate; `↑`/`↓` pick; `enter` load |

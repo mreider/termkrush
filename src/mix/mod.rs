@@ -76,6 +76,10 @@ pub struct Mixer {
     pad_bpm: [Option<f32>; PADS],
     /// Currently-sounding one-shot voices, summed atop the deck mix.
     voices: Vec<SampleVoice>,
+    /// When armed, `fill_mix` appends each block of master output here so the
+    /// live mix (decks + active pads) can be resampled into a clip.
+    recording: bool,
+    record_buf: Vec<f32>,
 }
 
 impl Default for Mixer {
@@ -100,7 +104,26 @@ impl Mixer {
             pads: Default::default(),
             pad_bpm: Default::default(),
             voices: Vec::new(),
+            recording: false,
+            record_buf: Vec::new(),
         }
+    }
+
+    /// Arm the live-mix recorder: subsequent `fill_mix` output is captured.
+    pub fn arm_record(&mut self) {
+        self.record_buf.clear();
+        self.recording = true;
+    }
+
+    /// `true` while the live mix is being captured.
+    pub fn is_recording(&self) -> bool {
+        self.recording
+    }
+
+    /// Disarm and return the captured master output (interleaved stereo).
+    pub fn take_recording(&mut self) -> Vec<f32> {
+        self.recording = false;
+        std::mem::take(&mut self.record_buf)
     }
 
     /// Assign a decoded clip (interleaved stereo at the mix rate) to pad `i`.
@@ -231,6 +254,12 @@ impl Mixer {
         self.mix_voices(out);
 
         self.apply(out);
+
+        // Capture the final master output when armed (post-everything, so a
+        // resample includes the decks AND any playing pads — overdub).
+        if self.recording {
+            self.record_buf.extend_from_slice(out);
+        }
     }
 
     /// Add each active voice's next block into `out` (interleaved stereo),
@@ -534,6 +563,27 @@ mod tests {
         assert!(
             buf.iter().all(|&s| (s - 0.5).abs() < 1e-4),
             "two voices sum"
+        );
+    }
+
+    #[test]
+    fn live_mix_recorder_captures_master_output() {
+        let mut m = Mixer::new();
+        m.deck_mut(0).load(track(20_000, 0.5));
+        m.deck_mut(0).play();
+        m.assign_pad(0, vec![0.3; 64]);
+        m.trigger_pad(0); // a pad voice plays too → overdub into the capture
+        m.arm_record();
+        assert!(m.is_recording());
+        let mut buf = vec![0.0f32; 256];
+        m.fill_mix(&mut buf);
+        m.fill_mix(&mut buf);
+        let rec = m.take_recording();
+        assert!(!m.is_recording());
+        assert_eq!(rec.len(), 512, "two 256-sample blocks captured");
+        assert!(
+            rec.iter().any(|&s| s.abs() > 0.01),
+            "captured the live deck + pad audio"
         );
     }
 

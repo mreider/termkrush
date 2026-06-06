@@ -133,6 +133,7 @@ pub enum Action {
     AssignPad,
     Bpm,
     Mark,
+    Record,
 }
 
 /// A focusable cell of the control surface (plus the crate browser on the
@@ -570,6 +571,28 @@ impl App {
         &self.recordings
     }
 
+    /// `r` — toggle the live-mix recorder. Arming captures the master output
+    /// (decks + active pads). Disarming turns the capture into a clip: onto
+    /// the focused pad if one is focused, else into the recordings stash.
+    fn toggle_record(&mut self) -> Action {
+        if self.mixer.is_recording() {
+            let samples = self.mixer.take_recording();
+            if samples.len() >= 2 {
+                let bpm = self.mixer.deck(self.active_deck()).bpm();
+                if let Focus::Pad(i) = self.focus {
+                    self.mixer.assign_pad(i, samples);
+                    self.mixer.set_pad_bpm(i, bpm);
+                } else {
+                    let name = format!("Mix resample {}", self.recordings.len() + 1);
+                    self.recordings.push(Clip::new(samples, bpm, name));
+                }
+            }
+        } else {
+            self.mixer.arm_record();
+        }
+        Action::Record
+    }
+
     /// Whether deck `i` is armed (an in-point is set, awaiting mark-out).
     fn recording(&self, i: usize) -> bool {
         self.record_in.get(i).map(|m| m.is_some()).unwrap_or(false)
@@ -844,6 +867,7 @@ impl App {
             (KeyCode::Enter, _) => self.load_selected(),
             (KeyCode::Char('z'), _) => self.crate_collapse_toggle(),
             (KeyCode::Char('\\'), _) => Action::OpenFile, // load demo into focused deck
+            (KeyCode::Char('r'), _) => self.toggle_record(), // resample the live mix
 
             // ---- direct clip triggers (quick, always live) ----
             (KeyCode::Char(c @ '1'..='7'), _) => {
@@ -982,10 +1006,15 @@ pub fn draw(f: &mut Frame, app: &App) {
     // Row 1 — mixer: soft (auto-fade) | hard (cut + master).
     let r = split2(grid_rows[1]);
     let m = app.mixer.master_gain();
+    let soft_title = if app.mixer.is_recording() {
+        "Mix · soft  ●REC"
+    } else {
+        "Mix · soft"
+    };
     draw_cell(
         f,
         r[0],
-        "Mix · soft",
+        soft_title,
         vec![
             Line::from(blend_state(app)),
             Line::from(format!("auto-fade {:.0}s", app.fade_secs())),
@@ -1343,7 +1372,7 @@ fn draw_help(f: &mut Frame, area: Rect) {
     f.render_widget(Clear, popup);
     // Keys are by finger position: left hand = deck A, right hand = deck B.
     let help = Paragraph::new(
-        "Keys  —  focus a target, then act\n\n  focus       tab + arrows  (every cell; crate is left)\n  act         j play/trig  k cue/assign-rec  l mark-in/assign-crate  ; mark-out\n  value       w / s     (deck: volume   clips: pick slot)\n  jog         a / d     (scrub focused deck; shift = coarse)\n\n  transition  g/h cut A/B   G/H auto-fade   space dur\n  master      [ / ]      tempo , / . (deck varispeed)\n  clips       1-4 trigger\n\n  crate   / filter   ↑/↓ pick   enter load\n          \\ load demo   z hide crate\n  ?  help   esc/q quit   C-c force",
+        "Keys  —  focus a target, then act\n\n  focus       tab + arrows  (every cell; crate is left)\n  act         j play/trig  k cue/assign-rec  l mark-in/assign-crate  ; mark-out\n  value       w / s     (deck: volume   clips: pick slot)\n  jog         a / d     (scrub focused deck; shift = coarse)\n\n  transition  g/h cut A/B   G/H auto-fade   space dur\n  master      [ / ]      tempo , / . (deck varispeed)\n  clips       1-7 trigger   r record live mix\n\n  crate   / filter   ↑/↓ pick   enter load\n          \\ load demo   z hide crate\n  ?  help   esc/q quit   C-c force",
     )
     .block(
         Block::bordered()
@@ -2226,6 +2255,20 @@ mod tests {
             .samples
             .iter()
             .all(|&s| (s - 0.5).abs() < 1e-6));
+    }
+
+    #[test]
+    fn r_records_the_live_mix_into_the_stash() {
+        let mut app = loaded_app(); // deck A loaded + focused
+        app.mixer.deck_mut(0).play();
+        assert_eq!(app.on_key(key('r')), Action::Record); // arm
+        assert!(app.mixer.is_recording());
+        app.mixer.fill_mix(&mut [0.0f32; 256]); // the pump captures a block
+        assert_eq!(app.on_key(key('r')), Action::Record); // disarm → stashed
+        assert!(!app.mixer.is_recording());
+        // Deck A is focused (not a pad), so it lands in the recordings stash.
+        assert_eq!(app.recordings().len(), 1);
+        assert!(!app.recordings()[0].samples.is_empty());
     }
 
     #[test]

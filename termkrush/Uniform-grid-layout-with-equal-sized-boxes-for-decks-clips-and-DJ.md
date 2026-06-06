@@ -2,44 +2,37 @@
 title: Uniform grid layout with equal sized boxes for decks clips and DJ
 type: feature
 created: "2026-06-06T14:19:27Z"
-modified: "2026-06-06T15:47:41Z"
+modified: "2026-06-06T17:37:27Z"
 author: Matt Reider
-status: unstarted
+status: started
 estimate: "5"
 epic: ux
 project: termkrush
+started: "2026-06-06T17:37:27Z"
 ---
 
-## Intent
-The screen IS the control model: a 2-column grid of equal-sized cells you navigate, where one shared action cluster operates whichever cell is focused. No wasted space, no distinct controls per area. Supersedes the controls-refactor's 3-target Tab and the old mixer/pads layout.
+## Intent (render half)
+Lay the screen out as a 2-column grid of equal-sized cells. This story is the **render**; the tab/arrow navigation + per-cell action dispatch is its own follow-up.
 
 ## Layout (12 equal cells, 2 columns)
 ```
 [ Deck A ]   [ Deck B ]
-[ Mix·soft]  [ Mix·hard]    soft = auto-fade column, hard = hard-cut column
+[ Mix·soft]  [ Mix·hard]
 [ Pad 1 ]    [ Pad 2 ]
 [ Pad 3 ]    [ Pad 4 ]
 [ Pad 5 ]    [ Pad 6 ]
 [ Pad 7 ]    [ DJ ]
 ```
-- Pads grow from 4 -> 7 (engine PADS + grid). DJ is a placeholder tile here; the bobbing cat is its own story.
-- Mixer is two cells: soft (timed auto-fade) and hard (instant cut).
-
-## Navigation + control
-- **Tab** steps cell-to-cell (wraps Deck A -> ... -> DJ -> Deck A).
-- **Arrows** move the focus box spatially across the two columns (up/down/left/right).
-- **One action cluster** acts on the focused cell, context-sensitive:
-  - Deck: play/pause, cue, jog, volume.
-  - Mix·soft: auto-fade to A / to B (duration cycle); Mix·hard: hard-cut to A / B.
-  - Pad: assign highlighted crate clip / trigger / (pattern later).
-  - DJ: placeholder.
+- Pad bank grows 4 -> 7 (engine PADS + grid); direct triggers become 1-7.
+- Mixer becomes two cells: soft (auto-fade) + hard (hard-cut), each showing its state.
+- DJ is a placeholder tile (the bobbing cat is its own story).
 
 ## Acceptance
-- [ ] All cells render as equal-sized boxes in a responsive 2-column grid; holds at 100x30+, degrades gracefully smaller.
-- [ ] Tab cycles every cell; arrows navigate the grid 2D; focused cell is unmistakable.
-- [ ] The shared action cluster drives the focused cell with no per-area key duplication.
-- [ ] Mixer split into soft/hard cells; pad bank is 7 + a DJ placeholder tile.
-- [ ] Tests: focus navigation (tab + arrows) and per-cell context dispatch; grid golden snapshot.
+- [ ] All 12 cells render as equal-sized boxes in a responsive 2-column grid; holds at 100x30+, degrades gracefully smaller.
+- [ ] Decks, mixer soft/hard, 7 pads, DJ placeholder all present; no truncation/overlap.
+- [ ] The currently-focused cell is visibly highlighted (using the existing focus state).
+- [ ] PADS = 7; `1`-`7` trigger; pad cells show number + filled/empty + bpm.
+- [ ] Grid golden-snapshot test; existing render tests updated.
 
-## Notes
-This is the keyboard nav model the Xbox story maps onto (left stick / d-pad = move the focus box; face buttons = the cluster). Build before Xbox.
+## Follow-up
+Tab/arrow focus navigation across all cells + shared per-cell action dispatch — separate story.

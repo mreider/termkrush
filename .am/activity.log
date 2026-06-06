@@ -213,3 +213,11 @@
 2026-06-06T17:13:21Z	Matt Reider	finished	termkrush/Manually-set-and-nudge-BPM-per-deck-and-pad-display-and-correct.md	
 2026-06-06T17:13:21Z	Matt Reider	delivered	termkrush/Manually-set-and-nudge-BPM-per-deck-and-pad-display-and-correct.md	
 2026-06-06T17:13:21Z	Matt Reider	accepted	termkrush/Manually-set-and-nudge-BPM-per-deck-and-pad-display-and-correct.md	Manual BPM control: ,/. nudge the focused deck's BPM by 1 (shift 0.1) from a 120 default, clamped 40-240; a manual value LOCKS so async detection won't clobber it. In Clips focus, ,/. nudge the selected pad's BPM (stored for later auto-bpm/patterns); mixer panel shows 'slot N · NNN bpm'. No playback-speed change yet — that's the time-stretch story. Deck nudge_bpm + bpm_locked; Mixer pad_bpm + nudge_pad_bpm. README/help updated. 111 lib + all suites green; fmt/clippy clean.
+2026-06-06T17:36:04Z	Matt Reider	created	termkrush/Varispeed-nudge-deck-playback-speed-pitch-rides-along-driven-by-the-BPM-keys.md	target=priority position=bottom
+2026-06-06T17:36:04Z	Matt Reider	set-type	termkrush/Varispeed-nudge-deck-playback-speed-pitch-rides-along-driven-by-the-BPM-keys.md	feature
+2026-06-06T17:36:05Z	Matt Reider	estimate	termkrush/Varispeed-nudge-deck-playback-speed-pitch-rides-along-driven-by-the-BPM-keys.md	3
+2026-06-06T17:37:27Z	Matt Reider	estimate	termkrush/Uniform-grid-layout-with-equal-sized-boxes-for-decks-clips-and-DJ.md	5
+2026-06-06T17:37:27Z	Matt Reider	created	termkrush/Grid-focus-navigation-tab-and-arrows-with-per-cell-action-dispatch.md	target=priority position=bottom
+2026-06-06T17:37:27Z	Matt Reider	set-type	termkrush/Grid-focus-navigation-tab-and-arrows-with-per-cell-action-dispatch.md	feature
+2026-06-06T17:37:27Z	Matt Reider	estimate	termkrush/Grid-focus-navigation-tab-and-arrows-with-per-cell-action-dispatch.md	5
+2026-06-06T17:37:27Z	Matt Reider	started	termkrush/Uniform-grid-layout-with-equal-sized-boxes-for-decks-clips-and-DJ.md	

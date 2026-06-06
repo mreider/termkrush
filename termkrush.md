@@ -75,13 +75,16 @@
 |  | [More clip patterns transformer stutter warble and reverse](termkrush/More-clip-patterns-transformer-stutter-warble-and-reverse.md) | 5 |  |
 |  | [Optional auto BPM on clip playback via time stretch](termkrush/Optional-auto-BPM-on-clip-playback-via-time-stretch.md) | 5 |  |
 |  | [Record a clip from a deck by marking in and out](termkrush/Record-a-clip-from-a-deck-by-marking-in-and-out.md) | 5 |  |
-|  | [Uniform grid layout with equal sized boxes for decks clips and DJ](termkrush/Uniform-grid-layout-with-equal-sized-boxes-for-decks-clips-and-DJ.md) | 5 |  |
 |  | [Xbox controller support as the primary input mapped down to keyboard](termkrush/Xbox-controller-support-as-the-primary-input-mapped-down-to-keyboard.md) | 5 |  |
-| Total Points | | 127 | |
+|  | [Grid focus navigation tab and arrows with per cell action dispatch](termkrush/Grid-focus-navigation-tab-and-arrows-with-per-cell-action-dispatch.md) | 5 |  |
+|  | [Varispeed nudge deck playback speed pitch rides along driven by the BPM keys](termkrush/Varispeed-nudge-deck-playback-speed-pitch-rides-along-driven-by-the-BPM-keys.md) | 3 |  |
+| Total Points | | 130 | |
 
 ### Started
 | User | Title | Points | Tags |
 |---|---|:---:|---|
+|  | [Uniform grid layout with equal sized boxes for decks clips and DJ](termkrush/Uniform-grid-layout-with-equal-sized-boxes-for-decks-clips-and-DJ.md) | 5 |  |
+| Total Points | | 5 | |
 
 ### Finished
 | User | Title | Points | Tags |

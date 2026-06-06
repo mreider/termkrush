@@ -15,7 +15,8 @@
 //! tagline, near-black background.
 
 use std::io::{self, Stdout};
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
+use std::sync::mpsc::Sender;
 use std::time::Duration;
 
 use ratatui::crossterm::event::{self, Event, KeyCode, KeyEvent, KeyEventKind, KeyModifiers};
@@ -26,7 +27,7 @@ use ratatui::crossterm::terminal::{
 use ratatui::prelude::*;
 use ratatui::widgets::{Block, Clear, List, ListItem, ListState, Paragraph, Wrap};
 
-use crate::audio::AudioOutput;
+use crate::audio::{AudioOutput, DecodedAudio};
 use crate::config::Config;
 use crate::deck::{Deck, DeckState};
 use crate::library::Crate;
@@ -56,6 +57,52 @@ pub const BG: Color = Color::Rgb(0x06, 0x09, 0x07);
 
 /// Redraw cap: poll for input up to this long, giving ~30 Hz when idle.
 const FRAME: Duration = Duration::from_millis(33);
+
+/// Where a freshly-decoded track is headed.
+#[derive(Debug, Clone, Copy)]
+enum LoadTarget {
+    Deck(usize),
+    Pad(usize),
+}
+
+/// A decoded track handed from a background decode thread back to the UI
+/// loop. Decoding + resampling a full track is slow, so it runs off the
+/// event-loop thread and the result is applied here — the UI never freezes.
+struct Decoded {
+    target: LoadTarget,
+    track: DecodedAudio,
+    path: PathBuf,
+    bpm: Option<f32>,
+}
+
+/// Decode `path` (and optionally detect its BPM) on a background thread,
+/// posting the result to `tx`. Never blocks the caller.
+fn spawn_decode(
+    target: LoadTarget,
+    path: PathBuf,
+    target_rate: u32,
+    detect: bool,
+    tx: Sender<Decoded>,
+) {
+    std::thread::spawn(
+        move || match crate::audio::decode_file(&path, target_rate) {
+            Ok(track) => {
+                let bpm = if detect {
+                    crate::audio::detect_bpm(&track.samples, track.channels, track.sample_rate)
+                } else {
+                    None
+                };
+                let _ = tx.send(Decoded {
+                    target,
+                    track,
+                    path,
+                    bpm,
+                });
+            }
+            Err(e) => tracing::error!(error = %e, path = %path.display(), "decode failed"),
+        },
+    );
+}
 
 /// What an input event asks the app to do. Deck transport is applied
 /// directly to deck A (left-hand keys) or deck B (right-hand keys) inside
@@ -110,6 +157,9 @@ pub struct App {
     /// Set when the user assigns a clip to a sampler pad; the event loop
     /// decodes it (I/O) and clears it. `(pad index, path)`.
     pending_pad_assign: Option<(usize, PathBuf)>,
+    /// Per-deck "a track is decoding in the background" flag, for the
+    /// `loading…` indicator. Cleared when the decoded track arrives.
+    loading: [bool; DECKS],
 }
 
 /// How many recently-loaded tracks the "Loaded" shortlist keeps.
@@ -180,6 +230,35 @@ impl App {
     /// pad). The event loop decodes it and assigns it to the mixer.
     pub fn take_pending_pad_assign(&mut self) -> Option<(usize, PathBuf)> {
         self.pending_pad_assign.take()
+    }
+
+    /// Apply a background-decoded track: onto a deck (with BPM + recents,
+    /// clearing the loading flag) or onto a sampler pad.
+    fn place_decoded(&mut self, d: Decoded) {
+        match d.target {
+            LoadTarget::Deck(i) => {
+                let name = d
+                    .path
+                    .file_name()
+                    .and_then(|n| n.to_str())
+                    .unwrap_or("track")
+                    .to_string();
+                self.mixer.deck_mut(i).load_named(d.track, name);
+                if let Some(b) = d.bpm {
+                    self.mixer.deck_mut(i).set_bpm(b);
+                }
+                self.note_loaded(d.path);
+                if i < DECKS {
+                    self.loading[i] = false;
+                }
+            }
+            LoadTarget::Pad(i) => self.mixer.assign_pad(i, d.track.samples),
+        }
+    }
+
+    /// Whether deck `i` is currently decoding a track in the background.
+    fn is_loading(&self, i: usize) -> bool {
+        self.loading.get(i).copied().unwrap_or(false)
     }
 
     fn sel_down(&mut self) {
@@ -497,6 +576,7 @@ pub fn draw(f: &mut Frame, app: &App) {
             DECK_LABELS[i],
             app.mixer.deck(i),
             app.focus() == i,
+            app.is_loading(i),
         );
     }
 
@@ -690,7 +770,14 @@ fn deck_border(focused: bool) -> Color {
 /// A deck panel: track name, transport glyph + state + gain, a
 /// proportional position bar, and `elapsed / total`. The focused deck has
 /// an amber border and a `▸` marker; unfocused decks are dim.
-fn draw_deck_panel(f: &mut Frame, area: Rect, label: &str, deck: &Deck, focused: bool) {
+fn draw_deck_panel(
+    f: &mut Frame,
+    area: Rect,
+    label: &str,
+    deck: &Deck,
+    focused: bool,
+    loading: bool,
+) {
     let border = deck_border(focused);
     let marker = if focused { "▸ " } else { "  " };
     // Show the detected tempo in the title once analysis completes.
@@ -703,7 +790,11 @@ fn draw_deck_panel(f: &mut Frame, area: Rect, label: &str, deck: &Deck, focused:
     // The name sits to the right of the 5-wide platter (+2 spaces); ellipsize
     // it to what's left so long track titles don't get hard-truncated.
     let name_w = (area.width.saturating_sub(2) as usize).saturating_sub(7);
-    let name = ellipsize(deck.display_name().unwrap_or("— no track —"), name_w);
+    let name = if loading {
+        "⏳ loading…".to_string()
+    } else {
+        ellipsize(deck.display_name().unwrap_or("— no track —"), name_w)
+    };
     let state_word = match deck.state() {
         DeckState::Empty => "empty",
         DeckState::Loaded => "loaded",
@@ -953,8 +1044,8 @@ fn event_loop(terminal: &mut Term) -> io::Result<()> {
     let target_rate = audio_out.as_ref().map(|o| o.sample_rate).unwrap_or(44_100);
     let mut scratch: Vec<f32> = Vec::new();
 
-    // Background BPM detection posts (deck index, bpm) back to the UI loop.
-    let (bpm_tx, bpm_rx) = std::sync::mpsc::channel::<(usize, f32)>();
+    // Background decode threads post finished tracks (with BPM) back here.
+    let (load_tx, load_rx) = std::sync::mpsc::channel::<Decoded>();
 
     tracing::info!("tui event loop started");
     while !app.should_quit {
@@ -963,12 +1054,12 @@ fn event_loop(terminal: &mut Term) -> io::Result<()> {
         if event::poll(FRAME)? {
             let ev = event::read()?;
             let action = app.on_event(&ev);
-            apply_load_action(&mut app, action, target_rate, &bpm_tx);
-            apply_pad_assign(&mut app, action, target_rate);
+            apply_load_action(&mut app, action, target_rate, &load_tx);
+            apply_pad_assign(&mut app, action, target_rate, &load_tx);
         }
-        // Apply any completed background BPM detections.
-        while let Ok((idx, bpm)) = bpm_rx.try_recv() {
-            app.mixer.deck_mut(idx).set_bpm(bpm);
+        // Apply any tracks that finished decoding in the background.
+        while let Ok(decoded) = load_rx.try_recv() {
+            app.place_decoded(decoded);
         }
         // Top up the output ring from the mixed decks. Done here in the UI
         // loop (not a separate thread) so the realtime cpal callback stays
@@ -1022,7 +1113,7 @@ fn apply_load_action(
     app: &mut App,
     action: Action,
     target_rate: u32,
-    bpm_tx: &std::sync::mpsc::Sender<(usize, f32)>,
+    load_tx: &Sender<Decoded>,
 ) -> bool {
     let focus = app.focus();
     let path = match action {
@@ -1033,77 +1124,43 @@ fn apply_load_action(
         },
         _ => return false,
     };
-    let loaded = load_into(&mut app.mixer, focus, &path, target_rate, bpm_tx);
-    if loaded {
-        app.note_loaded(path);
-    }
-    loaded
+    // Decode off the UI thread so a long track / resample never freezes
+    // input; the deck shows `loading…` until the result arrives.
+    app.loading[focus] = true;
+    spawn_decode(
+        LoadTarget::Deck(focus),
+        path,
+        target_rate,
+        true,
+        load_tx.clone(),
+    );
+    true
 }
 
 /// Carry out an `AssignPad` action: decode the pending clip and assign it
 /// to its sampler pad. Returns whether a clip was assigned. Lifted out of
 /// the event loop so it's testable.
-fn apply_pad_assign(app: &mut App, action: Action, target_rate: u32) -> bool {
+fn apply_pad_assign(
+    app: &mut App,
+    action: Action,
+    target_rate: u32,
+    load_tx: &Sender<Decoded>,
+) -> bool {
     if action != Action::AssignPad {
         return false;
     }
     let Some((pad, path)) = app.take_pending_pad_assign() else {
         return false;
     };
-    match crate::audio::decode_file(&path, target_rate) {
-        Ok(track) => {
-            tracing::info!(pad, path = %path.display(), "pad: assigned clip");
-            app.mixer.assign_pad(pad, track.samples);
-            true
-        }
-        Err(e) => {
-            tracing::error!(error = %e, path = %path.display(), "pad: failed to load clip");
-            false
-        }
-    }
-}
-
-/// Decode `path` at the output rate, load it into deck `idx`, and kick off
-/// background BPM detection that posts its result back via `bpm_tx`.
-/// Returns `true` on a successful load. A decode failure is logged, not
-/// fatal, so the UI keeps running.
-fn load_into(
-    mixer: &mut Mixer,
-    idx: usize,
-    path: &Path,
-    target_rate: u32,
-    bpm_tx: &std::sync::mpsc::Sender<(usize, f32)>,
-) -> bool {
-    match crate::audio::decode_file(path, target_rate) {
-        Ok(track) => {
-            tracing::info!(path = %path.display(), frames = track.frames(), "deck: loaded track");
-
-            // Detect tempo off the UI thread on a clone of the samples, so a
-            // ~0.5s analysis never blocks playback or redraw.
-            let (samples, ch, sr) = (track.samples.clone(), track.channels, track.sample_rate);
-            let tx = bpm_tx.clone();
-            std::thread::spawn(move || {
-                if let Some(bpm) = crate::audio::detect_bpm(&samples, ch, sr) {
-                    tracing::info!(deck = idx, bpm, "bpm: detected");
-                    let _ = tx.send((idx, bpm));
-                } else {
-                    tracing::info!(deck = idx, "bpm: no tempo detected");
-                }
-            });
-
-            let name = path
-                .file_name()
-                .and_then(|n| n.to_str())
-                .unwrap_or("track")
-                .to_string();
-            mixer.deck_mut(idx).load_named(track, name);
-            true
-        }
-        Err(e) => {
-            tracing::error!(error = %e, path = %path.display(), "deck: failed to load track");
-            false
-        }
-    }
+    // Decode off-thread too — a long clip shouldn't freeze the UI either.
+    spawn_decode(
+        LoadTarget::Pad(pad),
+        path,
+        target_rate,
+        false,
+        load_tx.clone(),
+    );
+    true
 }
 
 /// The `o` quick-demo track path: `TERMKRUSH_DEMO_TRACK` if set, else the
@@ -1817,7 +1874,7 @@ mod tests {
 
     /// A real, decodable fixture on disk (the committed CC0 sine WAV).
     fn fixture_wav() -> PathBuf {
-        Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/sine_a440_10s.wav")
+        std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/sine_a440_10s.wav")
     }
 
     /// An app whose crate holds one real fixture track (so a load actually
@@ -1831,15 +1888,27 @@ mod tests {
         app
     }
 
+    /// Drive a load/assign action to completion: kick off the background
+    /// decode, wait for the result, and apply it — the async path the event
+    /// loop runs, collapsed to synchronous for the test.
+    fn drive_action(app: &mut App, action: Action) {
+        let (tx, rx) = std::sync::mpsc::channel();
+        let kicked = apply_load_action(app, action, 44_100, &tx)
+            || apply_pad_assign(app, action, 44_100, &tx);
+        assert!(kicked, "action should kick off a background decode");
+        drop(tx); // leave only the decode thread's sender
+        if let Ok(d) = rx.recv() {
+            app.place_decoded(d);
+        }
+    }
+
     #[test]
     fn enter_loads_the_selected_track_end_to_end() {
         let mut app = app_with_real_crate();
-        let (tx, _rx) = std::sync::mpsc::channel();
         let act = app.on_key(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE));
         assert_eq!(act, Action::LoadSelected, "enter signals a load");
-        // This is the step the old tests never ran: decode + land on the deck.
-        let loaded = apply_load_action(&mut app, act, 44_100, &tx);
-        assert!(loaded, "enter must decode + load the selected track");
+        // Decode (off-thread) + land on the deck — the step old tests skipped.
+        drive_action(&mut app, act);
         assert_eq!(app.mixer.deck(0).state(), DeckState::Loaded);
         assert!(app
             .mixer
@@ -1852,12 +1921,34 @@ mod tests {
     }
 
     #[test]
-    fn loaded_track_produces_audible_output_when_played() {
-        // The whole chain: select → enter → decode → load → play → mix.
+    fn enter_is_non_blocking_sets_loading_then_clears_it() {
+        // The freeze fix: enter must not decode on the calling thread — it
+        // flags the deck as loading and returns immediately.
         let mut app = app_with_real_crate();
-        let (tx, _rx) = std::sync::mpsc::channel();
+        let (tx, rx) = std::sync::mpsc::channel();
         let act = app.on_key(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE));
-        apply_load_action(&mut app, act, 44_100, &tx);
+        assert!(apply_load_action(&mut app, act, 44_100, &tx));
+        assert!(
+            app.is_loading(0),
+            "deck shows loading while decoding off-thread"
+        );
+        assert_eq!(
+            app.mixer.deck(0).state(),
+            DeckState::Empty,
+            "not loaded synchronously"
+        );
+        drop(tx);
+        app.place_decoded(rx.recv().unwrap());
+        assert!(!app.is_loading(0), "loading clears once the decode lands");
+        assert_eq!(app.mixer.deck(0).state(), DeckState::Loaded);
+    }
+
+    #[test]
+    fn loaded_track_produces_audible_output_when_played() {
+        // The whole chain: select → enter → (bg decode) → load → play → mix.
+        let mut app = app_with_real_crate();
+        let act = app.on_key(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE));
+        drive_action(&mut app, act);
         assert_eq!(app.on_key(key('f')), Action::PlayPause); // play deck A
         let mut buf = vec![0.0f32; 4096];
         app.mixer.fill_mix(&mut buf);
@@ -1944,10 +2035,7 @@ mod tests {
         let mut app = app_with_real_crate(); // crate holds the real WAV fixture
         let act = app.on_key(key('!')); // shift+1
         assert_eq!(act, Action::AssignPad);
-        assert!(
-            apply_pad_assign(&mut app, act, 44_100),
-            "assign should decode + bind the clip"
-        );
+        drive_action(&mut app, act); // decodes off-thread, then assigns
         assert!(app.mixer.pad_loaded(0), "pad 1 now holds a clip");
     }
 

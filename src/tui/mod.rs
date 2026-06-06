@@ -30,7 +30,7 @@ use crate::audio::AudioOutput;
 use crate::config::Config;
 use crate::deck::{Deck, DeckState};
 use crate::library::Crate;
-use crate::mix::{Mixer, DECKS};
+use crate::mix::{Mixer, DECKS, PADS};
 
 /// Display labels for the decks, indexed by deck number.
 const DECK_LABELS: [&str; DECKS] = ["A", "B"];
@@ -80,6 +80,8 @@ pub enum Action {
     Focus,
     Crossfade,
     ToggleCrate,
+    TriggerPad,
+    AssignPad,
 }
 
 /// UI state for the shell: the decks + master bus (owned by [`Mixer`]),
@@ -105,6 +107,9 @@ pub struct App {
     /// Recently loaded tracks (most-recent first), shown as the "Loaded"
     /// shortlist for quick re-assignment to a deck.
     recent: Vec<PathBuf>,
+    /// Set when the user assigns a clip to a sampler pad; the event loop
+    /// decodes it (I/O) and clears it. `(pad index, path)`.
+    pending_pad_assign: Option<(usize, PathBuf)>,
 }
 
 /// How many recently-loaded tracks the "Loaded" shortlist keeps.
@@ -169,6 +174,12 @@ impl App {
     /// The "Loaded" shortlist, most-recent first.
     pub fn recent(&self) -> &[PathBuf] {
         &self.recent
+    }
+
+    /// Take the pending pad assignment (set when a clip is assigned to a
+    /// pad). The event loop decodes it and assigns it to the mixer.
+    pub fn take_pending_pad_assign(&mut self) -> Option<(usize, PathBuf)> {
+        self.pending_pad_assign.take()
     }
 
     fn sel_down(&mut self) {
@@ -342,6 +353,29 @@ impl App {
             (KeyCode::Char('z'), _) => self.crate_collapse_toggle(),
             (KeyCode::Char('\\'), _) => Action::OpenFile, // load demo into focused deck
 
+            // ---- sampler pads: 1-4 trigger; !@#$ (shift+1-4) assign the
+            //      highlighted crate track to that pad ----
+            (KeyCode::Char(c @ '1'..='4'), _) => {
+                let pad = c.to_digit(10).unwrap() as usize - 1;
+                self.mixer.trigger_pad(pad);
+                Action::TriggerPad
+            }
+            (KeyCode::Char(c @ ('!' | '@' | '#' | '$')), _) => {
+                let pad = match c {
+                    '!' => 0,
+                    '@' => 1,
+                    '#' => 2,
+                    _ => 3,
+                };
+                match self.selected_path() {
+                    Some(p) => {
+                        self.pending_pad_assign = Some((pad, p));
+                        Action::AssignPad
+                    }
+                    None => Action::None,
+                }
+            }
+
             _ => Action::None,
         }
     }
@@ -449,7 +483,7 @@ pub fn draw(f: &mut Frame, app: &App) {
     // Mixer area: decks A | B side by side on top, the mixer row beneath.
     let stack = Layout::vertical([
         Constraint::Length(8), // decks row
-        Constraint::Length(4), // mixer row (crossfader + master)
+        Constraint::Length(5), // mixer row (crossfader + master + pads)
         Constraint::Min(0),
     ])
     .split(mixer_area);
@@ -475,6 +509,21 @@ pub fn draw(f: &mut Frame, app: &App) {
 
 /// The mixer row: a bordered panel with the crossfader fader graphic over
 /// the master readout, sitting beneath the two decks.
+/// `1● 2· 3· 4·` — each pad's number with `●` (clip assigned) or `·` (empty).
+fn pads_readout(app: &App) -> String {
+    (0..PADS)
+        .map(|i| {
+            format!(
+                "{}{} ",
+                i + 1,
+                if app.mixer.pad_loaded(i) { '●' } else { '·' }
+            )
+        })
+        .collect::<String>()
+        .trim_end()
+        .to_string()
+}
+
 fn draw_mixer_panel(f: &mut Frame, area: Rect, app: &App) {
     // A real crossfader has a short, centered throw — not a console-wide
     // rail. Size it to a tidy fixed width (odd, so the center detent lands
@@ -491,6 +540,11 @@ fn draw_mixer_panel(f: &mut Frame, area: Rect, app: &App) {
             "master {:.2}  {}",
             app.mixer.master_gain(),
             fmt_db(app.mixer.master_gain()),
+        )),
+        Line::from(format!(
+            "pads {}    voices {}",
+            pads_readout(app),
+            app.mixer.active_voices()
         )),
     ];
     let panel = Paragraph::new(lines)
@@ -800,8 +854,8 @@ fn fmt_clock(secs: f64) -> String {
 
 /// A centered help overlay (stub: lists the keys it knows so far).
 fn draw_help(f: &mut Frame, area: Rect) {
-    let w = 56.min(area.width);
-    let h = 22.min(area.height);
+    let w = 58.min(area.width);
+    let h = 23.min(area.height);
     let x = area.x + (area.width.saturating_sub(w)) / 2;
     let y = area.y + (area.height.saturating_sub(h)) / 2;
     let popup = Rect::new(x, y, w, h);
@@ -809,7 +863,7 @@ fn draw_help(f: &mut Frame, area: Rect) {
     f.render_widget(Clear, popup);
     // Keys are by finger position: left hand = deck A, right hand = deck B.
     let help = Paragraph::new(
-        "Keys  —  left hand = A,  right hand = B\n\n              DECK A        DECK B\n  play/pause    f             j\n  cue (stop)    d             k\n  volume +/-    w / s         o / l\n  seek -/+      e / r         i / u    (shift: far)\n\n  crossfader    g  ◄A   B►  h     space  center\n  master  -/+   [ / ]\n  fine scrub    , / .   (focused deck)\n\n  crate   tab focus   / filter   ↑/↓ pick   enter load\n          \\ load demo   z hide crate\n  ?  help     q / C-c  quit",
+        "Keys  —  left hand = A,  right hand = B\n\n              DECK A        DECK B\n  play/pause    f             j\n  cue (stop)    d             k\n  volume +/-    w / s         o / l\n  seek -/+      e / r         i / u    (shift: far)\n\n  crossfader    g  ◄A   B►  h     space  center\n  master  -/+   [ / ]\n  fine scrub    , / .   (focused deck)\n  pads          1-4 trigger   !@#$ assign selected\n\n  crate   tab focus   / filter   ↑/↓ pick   enter load\n          \\ load demo   z hide crate\n  ?  help     q / C-c  quit",
     )
     .block(
         Block::bordered()
@@ -910,6 +964,7 @@ fn event_loop(terminal: &mut Term) -> io::Result<()> {
             let ev = event::read()?;
             let action = app.on_event(&ev);
             apply_load_action(&mut app, action, target_rate, &bpm_tx);
+            apply_pad_assign(&mut app, action, target_rate);
         }
         // Apply any completed background BPM detections.
         while let Ok((idx, bpm)) = bpm_rx.try_recv() {
@@ -983,6 +1038,29 @@ fn apply_load_action(
         app.note_loaded(path);
     }
     loaded
+}
+
+/// Carry out an `AssignPad` action: decode the pending clip and assign it
+/// to its sampler pad. Returns whether a clip was assigned. Lifted out of
+/// the event loop so it's testable.
+fn apply_pad_assign(app: &mut App, action: Action, target_rate: u32) -> bool {
+    if action != Action::AssignPad {
+        return false;
+    }
+    let Some((pad, path)) = app.take_pending_pad_assign() else {
+        return false;
+    };
+    match crate::audio::decode_file(&path, target_rate) {
+        Ok(track) => {
+            tracing::info!(pad, path = %path.display(), "pad: assigned clip");
+            app.mixer.assign_pad(pad, track.samples);
+            true
+        }
+        Err(e) => {
+            tracing::error!(error = %e, path = %path.display(), "pad: failed to load clip");
+            false
+        }
+    }
 }
 
 /// Decode `path` at the output rate, load it into deck `idx`, and kick off
@@ -1815,6 +1893,8 @@ mod tests {
             ('.', Action::Seek),
             ('z', Action::ToggleCrate),
             ('\\', Action::OpenFile),
+            ('1', Action::TriggerPad),
+            ('4', Action::TriggerPad),
         ];
         for (k, want) in cases {
             assert_eq!(a.on_key(key(k)), want, "key {k:?} unmapped/wrong");
@@ -1846,5 +1926,42 @@ mod tests {
         assert_eq!(c.on_key(key('/')), Action::Filter);
 
         assert_eq!(a.on_key(key('q')), Action::Quit); // quit last
+    }
+
+    #[test]
+    fn number_keys_trigger_sampler_pads() {
+        let mut app = App::new();
+        app.mixer.assign_pad(0, vec![0.5; 32]);
+        assert_eq!(app.on_key(key('1')), Action::TriggerPad);
+        assert_eq!(app.mixer.active_voices(), 1, "pad 1 triggered a voice");
+        // An empty pad still maps but produces no voice.
+        assert_eq!(app.on_key(key('2')), Action::TriggerPad);
+        assert_eq!(app.mixer.active_voices(), 1);
+    }
+
+    #[test]
+    fn shift_number_assigns_selected_clip_to_a_pad() {
+        let mut app = app_with_real_crate(); // crate holds the real WAV fixture
+        let act = app.on_key(key('!')); // shift+1
+        assert_eq!(act, Action::AssignPad);
+        assert!(
+            apply_pad_assign(&mut app, act, 44_100),
+            "assign should decode + bind the clip"
+        );
+        assert!(app.mixer.pad_loaded(0), "pad 1 now holds a clip");
+    }
+
+    #[test]
+    fn pads_readout_reflects_assignment() {
+        let mut app = App::new();
+        let text = buffer_text(&render(&app, 100, 30));
+        assert!(text.contains("pads"), "pads readout missing:\n{text}");
+        assert!(text.contains("1·"), "empty pad 1 marker missing:\n{text}");
+        app.mixer.assign_pad(0, vec![0.5; 8]);
+        let text = buffer_text(&render(&app, 100, 30));
+        assert!(
+            text.contains("1●"),
+            "assigned pad 1 marker missing:\n{text}"
+        );
     }
 }

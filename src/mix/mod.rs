@@ -8,10 +8,22 @@
 //! the **master gain** to the mix. The crossfader and N-deck generality
 //! arrive with their own stories; the array makes adding those mechanical.
 
+use std::sync::Arc;
+
 use crate::deck::Deck;
 
 /// Number of decks the mixer drives (two-deck era).
 pub const DECKS: usize = 2;
+
+/// Number of sampler pads (clip triggers).
+pub const PADS: usize = 4;
+
+/// One playing sampler voice: a shared clip and a position into it.
+#[derive(Debug)]
+struct SampleVoice {
+    clip: Arc<Vec<f32>>, // interleaved stereo at the mix rate
+    pos: usize,          // sample index into `clip`
+}
 
 /// Allowed master gain range: silence up to +3.5 dB of headroom.
 pub const MASTER_MIN: f32 = 0.0;
@@ -53,6 +65,10 @@ pub struct Mixer {
     /// mix path does not allocate every block.
     scratch_a: Vec<f32>,
     scratch_b: Vec<f32>,
+    /// Clip assigned to each sampler pad (interleaved stereo), if any.
+    pads: [Option<Arc<Vec<f32>>>; PADS],
+    /// Currently-sounding one-shot voices, summed atop the deck mix.
+    voices: Vec<SampleVoice>,
 }
 
 impl Default for Mixer {
@@ -72,7 +88,38 @@ impl Mixer {
             xfade_smoothed: 0.0,
             scratch_a: Vec::new(),
             scratch_b: Vec::new(),
+            pads: Default::default(),
+            voices: Vec::new(),
         }
+    }
+
+    /// Assign a decoded clip (interleaved stereo at the mix rate) to pad `i`.
+    pub fn assign_pad(&mut self, i: usize, clip: Vec<f32>) {
+        if i < PADS {
+            self.pads[i] = Some(Arc::new(clip));
+        }
+    }
+
+    /// `true` if pad `i` has a clip assigned.
+    pub fn pad_loaded(&self, i: usize) -> bool {
+        i < PADS && self.pads[i].is_some()
+    }
+
+    /// Trigger pad `i`: start a new one-shot voice from the start of its
+    /// clip, summed atop whatever the decks are playing. No-op if the pad
+    /// is empty. Overlapping triggers stack (polyphonic).
+    pub fn trigger_pad(&mut self, i: usize) {
+        if let Some(Some(clip)) = self.pads.get(i) {
+            self.voices.push(SampleVoice {
+                clip: Arc::clone(clip),
+                pos: 0,
+            });
+        }
+    }
+
+    /// Number of sampler voices currently sounding.
+    pub fn active_voices(&self) -> usize {
+        self.voices.len()
     }
 
     /// Shared access to deck `i` (panics out of range — callers use `0..DECKS`).
@@ -132,7 +179,26 @@ impl Mixer {
         }
         self.xfade_smoothed = x;
 
+        // Sum the sampler voices on top of the deck mix — they play over
+        // whatever the decks are doing, independent of the crossfader.
+        // Finished one-shots are dropped.
+        self.mix_voices(out);
+
         self.apply(out);
+    }
+
+    /// Add each active voice's next block into `out` (interleaved stereo),
+    /// advancing its position; voices that reach their end are removed.
+    fn mix_voices(&mut self, out: &mut [f32]) {
+        self.voices.retain_mut(|v| {
+            let remaining = v.clip.len().saturating_sub(v.pos);
+            let n = out.len().min(remaining);
+            for (o, s) in out.iter_mut().zip(v.clip[v.pos..v.pos + n].iter()) {
+                *o += *s;
+            }
+            v.pos += n;
+            v.pos < v.clip.len() // keep while not finished
+        });
     }
 
     /// Set the target master gain, clamped to `[MASTER_MIN, MASTER_MAX]`.
@@ -375,5 +441,65 @@ mod tests {
         m.apply(&mut buf);
         // The tail is multiplied by the fully-ramped 0.5.
         assert!((buf[buf.len() - 1] - 0.5).abs() < 1e-4);
+    }
+
+    #[test]
+    fn pad_assign_trigger_and_one_shot_lifecycle() {
+        let mut m = Mixer::new();
+        assert!(!m.pad_loaded(0));
+        m.assign_pad(0, vec![0.5; 16]); // 8 stereo frames
+        assert!(m.pad_loaded(0));
+
+        m.trigger_pad(0);
+        assert_eq!(m.active_voices(), 1);
+
+        let mut buf = vec![0.0f32; 8]; // 4 frames — less than the clip
+        m.fill_mix(&mut buf);
+        assert!(
+            buf.iter().all(|&s| (s - 0.5).abs() < 1e-4),
+            "clip sums atop silent decks"
+        );
+        assert_eq!(m.active_voices(), 1, "voice still has tail");
+
+        m.fill_mix(&mut [0.0f32; 8]); // drain the remaining 4 frames
+        assert_eq!(m.active_voices(), 0, "one-shot freed at end of clip");
+    }
+
+    #[test]
+    fn pads_are_polyphonic() {
+        let mut m = Mixer::new();
+        m.assign_pad(0, vec![0.25; 64]);
+        m.trigger_pad(0);
+        m.trigger_pad(0);
+        assert_eq!(m.active_voices(), 2);
+        let mut buf = vec![0.0f32; 8];
+        m.fill_mix(&mut buf);
+        assert!(
+            buf.iter().all(|&s| (s - 0.5).abs() < 1e-4),
+            "two voices sum"
+        );
+    }
+
+    #[test]
+    fn triggering_empty_pad_is_a_noop() {
+        let mut m = Mixer::new();
+        m.trigger_pad(2);
+        assert_eq!(m.active_voices(), 0);
+    }
+
+    #[test]
+    fn pad_plays_over_a_playing_deck() {
+        let mut m = Mixer::new();
+        m.deck_mut(0).load(track(1000, 0.3));
+        m.deck_mut(0).play();
+        m.assign_pad(0, vec![0.4; 64]);
+        m.trigger_pad(0);
+        let mut buf = vec![0.0f32; 8];
+        m.fill_mix(&mut buf);
+        // deck 0.3 (centered xfade, unity) + pad 0.4 = 0.7 at unity master.
+        assert!(
+            buf.iter().all(|&s| (s - 0.7).abs() < 1e-4),
+            "sample plays over the deck"
+        );
     }
 }

@@ -35,7 +35,6 @@
 |  | [Phaser FX](termkrush/Phaser-FX.md) |  | [fx](.am/tags/fx.md) [icebox](.am/tags/icebox.md) |
 |  | [Pitch shift independent of tempo](termkrush/Pitch-shift-independent-of-tempo.md) |  | [dsp](.am/tags/dsp.md) [icebox](.am/tags/icebox.md) |
 |  | [Plugin or scripting interface](termkrush/Plugin-or-scripting-interface.md) |  | [extensibility](.am/tags/extensibility.md) [icebox](.am/tags/icebox.md) |
-|  | [Polish README for first release](termkrush/Polish-README-for-first-release.md) |  | [docs](.am/tags/docs.md) [release](.am/tags/release.md) |
 |  | [Pre-fade cue listen on second output](termkrush/Pre-fade-cue-listen-on-second-output.md) |  | [audio](.am/tags/audio.md) [icebox](.am/tags/icebox.md) [hardware](.am/tags/hardware.md) |
 |  | [Record TUI panel and indicator](termkrush/Record-TUI-panel-and-indicator.md) | 2 | [record](.am/tags/record.md) [tui](.am/tags/tui.md) |
 |  | [Refactor mixer for N decks](termkrush/Refactor-mixer-for-N-decks.md) | 5 | [architecture](.am/tags/architecture.md) [mix](.am/tags/mix.md) [multi-deck](.am/tags/multi-deck.md) |
@@ -137,6 +136,7 @@
 |  | [Sync deck BPM to reference deck](termkrush/Sync-deck-BPM-to-reference-deck.md) | 3 | [tempo](.am/tags/tempo.md) [sync](.am/tags/sync.md) |
 |  | [Manual cue points per deck](termkrush/Manual-cue-points-per-deck.md) | 3 | [deck](.am/tags/deck.md) [cue](.am/tags/cue.md) |
 |  | [Auto-fade transition over N bars](termkrush/Auto-fade-transition-over-N-bars.md) | 3 | [mix](.am/tags/mix.md) [sync](.am/tags/sync.md) |
+|  | [Polish README for first release](termkrush/Polish-README-for-first-release.md) |  | [docs](.am/tags/docs.md) [release](.am/tags/release.md) |
 
 ### Rejected
 | User | Title | Points | Tags |

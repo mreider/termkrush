@@ -524,15 +524,20 @@ impl App {
         Action::None
     }
 
-    /// Nudge the focused cell's BPM (deck, or focused pad).
-    fn nudge_bpm(&mut self, delta: f32) -> Action {
+    /// `,`/`.` — tempo of the focused cell. On a deck it nudges varispeed
+    /// (pitch rides; effective BPM = base × speed); on a pad it nudges the
+    /// pad's stored BPM. `fine` = a tenth of the step.
+    fn nudge_tempo(&mut self, up: bool, fine: bool) -> Action {
+        let sign = if up { 1.0 } else { -1.0 };
         match self.focus {
             Focus::Deck(i) => {
-                self.mixer.deck_mut(i).nudge_bpm(delta);
+                let step = if fine { 0.001 } else { 0.01 }; // 0.1% / 1% per press
+                self.mixer.deck_mut(i).nudge_speed(sign * step);
                 Action::Bpm
             }
             Focus::Pad(i) => {
-                self.mixer.nudge_pad_bpm(i, delta);
+                let step = if fine { 0.1 } else { 1.0 };
+                self.mixer.nudge_pad_bpm(i, sign * step);
                 Action::Bpm
             }
             _ => Action::None,
@@ -771,8 +776,8 @@ impl App {
             }
 
             // ---- BPM of the focused target: ,/. nudge ∓1 (shift = ∓0.1) ----
-            (KeyCode::Char(','), _) => self.nudge_bpm(if shift { -0.1 } else { -1.0 }),
-            (KeyCode::Char('.'), _) => self.nudge_bpm(if shift { 0.1 } else { 1.0 }),
+            (KeyCode::Char(','), _) => self.nudge_tempo(false, shift),
+            (KeyCode::Char('.'), _) => self.nudge_tempo(true, shift),
 
             // ---- focus + crate browser ----
             (KeyCode::Tab, _) => self.cycle_target(),
@@ -1275,7 +1280,7 @@ fn draw_help(f: &mut Frame, area: Rect) {
     f.render_widget(Clear, popup);
     // Keys are by finger position: left hand = deck A, right hand = deck B.
     let help = Paragraph::new(
-        "Keys  —  focus a target, then act\n\n  focus       tab + arrows  (every cell; crate is left)\n  act         j primary   k cue/2nd   l mark·assign   ; alt\n  value       w / s     (deck: volume   clips: pick slot)\n  jog         a / d     (scrub focused deck; shift = coarse)\n\n  transition  g/h cut A/B   G/H auto-fade   space dur\n  master      [ / ]      bpm  , / .  (shift = .1)\n  clips       1-4 trigger\n\n  crate   / filter   ↑/↓ pick   enter load\n          \\ load demo   z hide crate\n  ?  help   esc/q quit   C-c force",
+        "Keys  —  focus a target, then act\n\n  focus       tab + arrows  (every cell; crate is left)\n  act         j primary   k cue/2nd   l mark·assign   ; alt\n  value       w / s     (deck: volume   clips: pick slot)\n  jog         a / d     (scrub focused deck; shift = coarse)\n\n  transition  g/h cut A/B   G/H auto-fade   space dur\n  master      [ / ]      tempo , / . (deck varispeed)\n  clips       1-4 trigger\n\n  crate   / filter   ↑/↓ pick   enter load\n          \\ load demo   z hide crate\n  ?  help   esc/q quit   C-c force",
     )
     .block(
         Block::bordered()
@@ -2111,16 +2116,19 @@ mod tests {
     }
 
     #[test]
-    fn comma_period_nudge_focused_deck_bpm_and_lock_survives_detection() {
-        let mut app = app_with_track(2000, 100); // deck A focused, no BPM yet
-                                                 // `.` nudges up from the 120 default; `,` down; shift = fine.
+    fn comma_period_varispeed_the_focused_deck() {
+        let mut app = app_with_track(2000, 100); // deck A focused
+        app.mixer.deck_mut(0).set_bpm(120.0); // detected base
+                                              // `.` speeds up 1% → effective BPM = 120 × 1.01 = 121.2.
         assert_eq!(app.on_key(key('.')), Action::Bpm);
-        assert_eq!(app.mixer.deck(0).bpm(), Some(121.0));
+        assert!((app.mixer.deck(0).speed() - 1.01).abs() < 1e-6);
+        assert!((app.mixer.deck(0).bpm().unwrap() - 121.2).abs() < 1e-3);
+        // shift = fine (0.1%); `,` slows.
         app.on_key(KeyEvent::new(KeyCode::Char(','), KeyModifiers::SHIFT));
-        assert_eq!(app.mixer.deck(0).bpm(), Some(120.9));
-        // A later async detection must NOT clobber the manual value.
-        app.mixer.deck_mut(0).set_bpm(174.0);
-        assert_eq!(app.mixer.deck(0).bpm(), Some(120.9), "manual BPM is locked");
+        assert!((app.mixer.deck(0).speed() - 1.009).abs() < 1e-6);
+        // Detection updating the base flows through (effective tracks speed).
+        app.mixer.deck_mut(0).set_bpm(100.0);
+        assert!((app.mixer.deck(0).bpm().unwrap() - 100.9).abs() < 1e-3);
     }
 
     /// Move focus from Deck A down to Pad 0 (Deck A → MixSoft → Pad 0).

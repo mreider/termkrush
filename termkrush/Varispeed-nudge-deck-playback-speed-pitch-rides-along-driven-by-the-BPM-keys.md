@@ -2,12 +2,16 @@
 title: Varispeed nudge deck playback speed pitch rides along driven by the BPM keys
 type: feature
 created: "2026-06-06T17:36:04Z"
-modified: "2026-06-06T17:36:05Z"
+modified: "2026-06-06T19:16:51Z"
 author: Matt Reider
-status: unstarted
+status: accepted
 estimate: "3"
 epic: tempo
 project: termkrush
+started: "2026-06-06T19:12:41Z"
+finished: "2026-06-06T19:16:50Z"
+delivered: "2026-06-06T19:16:50Z"
+accepted: "2026-06-06T19:16:51Z"
 ---
 
 ## Intent

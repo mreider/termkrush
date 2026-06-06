@@ -34,8 +34,12 @@ pub enum DeckState {
 #[derive(Debug)]
 pub struct Deck {
     track: Option<DecodedAudio>,
-    /// Playhead in stereo frames into `track.samples`.
-    pos: usize,
+    /// Playhead in stereo frames into `track.samples`. Fractional so the
+    /// deck can play at non-unity `speed` (varispeed) via interpolation.
+    pos: f64,
+    /// Varispeed multiplier: 1.0 = native; >1 faster (and higher-pitched),
+    /// <1 slower. Pitch rides with speed (the easy, record-on-a-platter way).
+    speed: f32,
     state: DeckState,
     /// Target linear output gain (what the dB readout shows). Set by
     /// [`set_gain`](Self::set_gain); `fill` ramps toward it.
@@ -46,18 +50,15 @@ pub struct Deck {
     /// Source display name (e.g. file name), used when the track carries
     /// no ID3 title. See [`display_name`](Self::display_name).
     name: Option<String>,
-    /// Detected tempo in BPM, filled in asynchronously after load.
+    /// Detected *base* tempo in BPM (native), filled in asynchronously after
+    /// load. The effective tempo reported by [`bpm`](Self::bpm) is this times
+    /// the varispeed `speed`.
     bpm: Option<f32>,
-    /// Set once the user manually adjusts the BPM, so a later async
-    /// detection result does not overwrite their value.
-    bpm_locked: bool,
 }
 
-/// Musical BPM range a manual nudge is clamped to.
-pub const MIN_BPM: f32 = 40.0;
-pub const MAX_BPM: f32 = 240.0;
-/// BPM assumed as the starting point when nudging with none set yet.
-const DEFAULT_BPM: f32 = 120.0;
+/// Varispeed range: half to double speed (±1 octave of pitch).
+pub const SPEED_MIN: f32 = 0.5;
+pub const SPEED_MAX: f32 = 2.0;
 
 /// Allowed gain range: silence up to +3.5 dB of headroom (1.5x linear).
 pub const GAIN_MIN: f32 = 0.0;
@@ -79,13 +80,13 @@ impl Deck {
     pub fn new() -> Self {
         Deck {
             track: None,
-            pos: 0,
+            pos: 0.0,
+            speed: 1.0,
             state: DeckState::Empty,
             gain: 1.0,
             smoothed_gain: 1.0,
             name: None,
             bpm: None,
-            bpm_locked: false,
         }
     }
 
@@ -105,33 +106,35 @@ impl Deck {
     /// [`DeckState::Loaded`] (ready, not playing). Replaces any prior track.
     pub fn load(&mut self, track: DecodedAudio) {
         self.track = Some(track);
-        self.pos = 0;
+        self.pos = 0.0;
+        self.speed = 1.0;
         self.state = DeckState::Loaded;
         self.name = None;
         self.bpm = None;
-        self.bpm_locked = false;
     }
 
-    /// Record the detected tempo (BPM). Set asynchronously once background
-    /// analysis finishes; ignored if no track is loaded or the user has
-    /// manually locked the BPM.
+    /// Record the detected *base* tempo (BPM), set asynchronously once
+    /// analysis finishes; ignored with no track loaded.
     pub fn set_bpm(&mut self, bpm: f32) {
-        if self.track.is_some() && !self.bpm_locked {
+        if self.track.is_some() {
             self.bpm = Some(bpm);
         }
     }
 
-    /// Manually nudge the BPM by `delta` (from 120 if none yet), clamped to
-    /// the musical range. Locks the value so detection won't overwrite it.
-    pub fn nudge_bpm(&mut self, delta: f32) {
-        let next = (self.bpm.unwrap_or(DEFAULT_BPM) + delta).clamp(MIN_BPM, MAX_BPM);
-        self.bpm = Some(next);
-        self.bpm_locked = true;
+    /// Nudge the varispeed multiplier by `delta`, clamped. Pitch and tempo
+    /// rise/fall together; the effective BPM ([`bpm`](Self::bpm)) follows.
+    pub fn nudge_speed(&mut self, delta: f32) {
+        self.speed = (self.speed + delta).clamp(SPEED_MIN, SPEED_MAX);
     }
 
-    /// Detected (or manually-set) tempo in BPM, if any.
+    /// The current varispeed multiplier (1.0 = native).
+    pub fn speed(&self) -> f32 {
+        self.speed
+    }
+
+    /// Effective tempo in BPM = detected base × varispeed, if a base is known.
     pub fn bpm(&self) -> Option<f32> {
-        self.bpm
+        self.bpm.map(|b| b * self.speed)
     }
 
     /// Like [`load`](Self::load), but also records a display name (the
@@ -171,7 +174,7 @@ impl Deck {
     pub fn stop(&mut self) {
         if self.track.is_some() {
             self.state = DeckState::Stopped;
-            self.pos = 0;
+            self.pos = 0.0;
         }
     }
 
@@ -189,9 +192,9 @@ impl Deck {
         };
         let total = track.frames();
         let rate = track.sample_rate.max(1) as f64;
-        let frame = (secs.max(0.0) * rate).round() as usize;
-        if frame >= total {
-            self.pos = total; // clamp to EOF
+        let frame = secs.max(0.0) * rate;
+        if frame as usize >= total {
+            self.pos = total as f64; // clamp to EOF
             self.state = DeckState::Stopped;
         } else {
             self.pos = frame;
@@ -227,31 +230,42 @@ impl Deck {
         };
 
         let total = track.frames();
-        let avail = total.saturating_sub(self.pos);
-        let n = frames_out.min(avail);
+        let step = self.speed as f64;
 
         let target = self.gain;
         let mut g = self.smoothed_gain;
-        for i in 0..n {
+        let mut n = 0; // output frames actually drawn from the track
+        for i in 0..frames_out {
+            let p0 = self.pos as usize;
+            if p0 >= total {
+                break;
+            }
             // Ramp the applied gain toward the target by at most one step.
             if g < target {
                 g = (g + GAIN_RAMP_STEP).min(target);
             } else if g > target {
                 g = (g - GAIN_RAMP_STEP).max(target);
             }
-            let src = (self.pos + i) * 2;
-            out[i * 2] = track.samples[src] * g;
-            out[i * 2 + 1] = track.samples[src + 1] * g;
+            // Linear interpolation between adjacent frames for varispeed; the
+            // final frame interpolates with itself (p1 clamped).
+            let p1 = (p0 + 1).min(total - 1);
+            let frac = (self.pos - p0 as f64) as f32;
+            let a = p0 * 2;
+            let b = p1 * 2;
+            out[i * 2] = (track.samples[a] * (1.0 - frac) + track.samples[b] * frac) * g;
+            out[i * 2 + 1] =
+                (track.samples[a + 1] * (1.0 - frac) + track.samples[b + 1] * frac) * g;
+            self.pos += step;
+            n += 1;
         }
         self.smoothed_gain = g;
         // Silence the remainder (end-of-track underrun, or an over-long buffer).
         out[n * 2..].iter_mut().for_each(|s| *s = 0.0);
 
-        self.pos += n;
-        if self.pos >= total {
+        if self.pos as usize >= total {
             // Track finished: halt and rewind so the next play restarts it.
             self.state = DeckState::Stopped;
-            self.pos = 0;
+            self.pos = 0.0;
         }
         n
     }
@@ -266,15 +280,15 @@ impl Deck {
         self.state == DeckState::Playing
     }
 
-    /// Playhead position in stereo frames.
+    /// Playhead position in stereo frames (floored).
     pub fn position_frames(&self) -> usize {
-        self.pos
+        self.pos as usize
     }
 
     /// Playhead position in seconds (0 with no track).
     pub fn position_secs(&self) -> f64 {
         match &self.track {
-            Some(t) if t.sample_rate > 0 => self.pos as f64 / t.sample_rate as f64,
+            Some(t) if t.sample_rate > 0 => self.pos / t.sample_rate as f64,
             _ => 0.0,
         }
     }
@@ -415,6 +429,28 @@ mod tests {
         // End-of-track rewound and stopped.
         assert_eq!(d.state(), DeckState::Stopped);
         assert_eq!(d.position_frames(), 0);
+    }
+
+    #[test]
+    fn varispeed_consumes_source_faster_and_stays_finite() {
+        let rate = 1000;
+        let mut d = Deck::new();
+        d.load(track(rate as usize, 0.3, rate)); // 1s = 1000 frames
+        d.nudge_speed(1.0); // 1.0 + 1.0 clamped to the 2.0 max
+        assert!((d.speed() - 2.0).abs() < 1e-6);
+        d.play();
+        let mut buf = vec![0.0f32; 200]; // 100 output frames
+        let n = d.fill(&mut buf);
+        assert_eq!(n, 100, "produced 100 output frames");
+        // At 2x, ~200 source frames were consumed for 100 output frames.
+        assert!(
+            (d.position_frames() as i64 - 200).abs() <= 1,
+            "advanced ~2x source"
+        );
+        assert!(
+            buf.iter().all(|s| s.is_finite()),
+            "varispeed output is finite"
+        );
     }
 
     #[test]

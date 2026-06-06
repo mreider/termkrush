@@ -66,10 +66,9 @@
 |  | [V0.5.0 more decks](termkrush/v050-more-decks.md) |  |  |
 |  | [V0.6.0 record](termkrush/v060-record.md) |  |  |
 |  | [Yt-dlp shell-out for media URLs](termkrush/yt-dlp-shell-out-for-media-URLs.md) | 3 | [download](.am/tags/download.md) [yt-dlp](.am/tags/yt-dlp.md) |
-|  | [Beat synced clip patterns cut and baby scratch](termkrush/Beat-synced-clip-patterns-cut-and-baby-scratch.md) | 5 |  |
 |  | [More clip patterns transformer stutter warble and reverse](termkrush/More-clip-patterns-transformer-stutter-warble-and-reverse.md) | 5 |  |
 |  | [Optional auto BPM on clip playback via time stretch](termkrush/Optional-auto-BPM-on-clip-playback-via-time-stretch.md) | 5 |  |
-| Total Points | | 94 | |
+| Total Points | | 89 | |
 
 ### Started
 | User | Title | Points | Tags |
@@ -137,6 +136,7 @@
 |  | [Resample the live mix into a pad record whatever is playing](termkrush/Resample-the-live-mix-into-a-pad-record-whatever-is-playing.md) | 5 |  |
 |  | [Lower-corner 8-bit DJ cat that bobs to the BPM](termkrush/Lower-corner-8-bit-DJ-cat-that-bobs-to-the-BPM.md) | 3 |  |
 |  | [Clip timeline view with precise non destructive trim](termkrush/Clip-timeline-view-with-precise-non-destructive-trim.md) | 5 |  |
+|  | [Beat synced clip patterns cut and baby scratch](termkrush/Beat-synced-clip-patterns-cut-and-baby-scratch.md) | 5 |  |
 
 ### Rejected
 | User | Title | Points | Tags |

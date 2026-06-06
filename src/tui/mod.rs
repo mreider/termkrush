@@ -14,6 +14,7 @@
 //! Colors follow the CRT palette from the design: amber wordmark, green
 //! tagline, near-black background.
 
+use std::collections::HashMap;
 use std::io::{self, Stdout};
 use std::path::PathBuf;
 use std::sync::mpsc::Sender;
@@ -83,16 +84,21 @@ fn spawn_decode(
     path: PathBuf,
     target_rate: u32,
     detect: bool,
+    cached_bpm: Option<f32>,
     tx: Sender<Decoded>,
 ) {
     std::thread::spawn(
         move || match crate::audio::decode_file(&path, target_rate) {
             Ok(track) => {
-                let bpm = if detect {
-                    crate::audio::detect_bpm(&track.samples, track.channels, track.sample_rate)
-                } else {
-                    None
-                };
+                // Use the cached BPM when we have one (skips re-analysis);
+                // otherwise detect afresh when asked.
+                let bpm = cached_bpm.or_else(|| {
+                    if detect {
+                        crate::audio::detect_bpm(&track.samples, track.channels, track.sample_rate)
+                    } else {
+                        None
+                    }
+                });
                 let _ = tx.send(Decoded {
                     target,
                     track,
@@ -231,6 +237,9 @@ pub struct App {
     /// Clips recorded this session (most recent last), awaiting assignment
     /// to a pad.
     recordings: Vec<Clip>,
+    /// Cache of detected BPM per file path, so reloading a track skips
+    /// re-analysis.
+    bpm_cache: HashMap<PathBuf, f32>,
 }
 
 /// How many recently-loaded tracks the "Loaded" shortlist keeps.
@@ -751,6 +760,7 @@ impl App {
                 self.mixer.deck_mut(i).load_named(d.track, name);
                 if let Some(b) = d.bpm {
                     self.mixer.deck_mut(i).set_bpm(b);
+                    self.bpm_cache.insert(d.path.clone(), b); // remember for reloads
                 }
                 self.note_loaded(d.path);
                 if i < DECKS {
@@ -1672,13 +1682,16 @@ fn apply_load_action(
         _ => return false,
     };
     // Decode off the UI thread so a long track / resample never freezes
-    // input; the deck shows `loading…` until the result arrives.
+    // input; the deck shows `loading…` until the result arrives. Skip BPM
+    // re-analysis when this file's tempo is already cached.
     app.loading[focus] = true;
+    let cached = app.bpm_cache.get(&path).copied();
     spawn_decode(
         LoadTarget::Deck(focus),
         path,
         target_rate,
-        true,
+        cached.is_none(),
+        cached,
         load_tx.clone(),
     );
     true
@@ -1705,6 +1718,7 @@ fn apply_pad_assign(
         path,
         target_rate,
         false,
+        None,
         load_tx.clone(),
     );
     true
@@ -2731,6 +2745,20 @@ mod tests {
         app.place_decoded(rx.recv().unwrap());
         assert!(!app.is_loading(0), "loading clears once the decode lands");
         assert_eq!(app.mixer.deck(0).state(), DeckState::Loaded);
+    }
+
+    #[test]
+    fn cached_bpm_is_applied_on_load() {
+        let mut app = app_with_real_crate();
+        let path = app.selected_path().unwrap();
+        app.bpm_cache.insert(path, 130.0); // pre-seed → detection skipped
+        let act = app.on_key(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE));
+        drive_action(&mut app, act);
+        assert_eq!(
+            app.mixer.deck(0).bpm(),
+            Some(130.0),
+            "cached BPM applied on load"
+        );
     }
 
     #[test]

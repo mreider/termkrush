@@ -68,7 +68,6 @@
 |  | [Yt-dlp shell-out for media URLs](termkrush/yt-dlp-shell-out-for-media-URLs.md) | 3 | [download](.am/tags/download.md) [yt-dlp](.am/tags/yt-dlp.md) |
 |  | [Lower-corner 8-bit DJ cat that bobs to the BPM](termkrush/Lower-corner-8-bit-DJ-cat-that-bobs-to-the-BPM.md) | 3 |  |
 |  | [Offline BPM detection on load](termkrush/Offline-BPM-detection-on-load.md) | 5 | [tempo](.am/tags/tempo.md) [analysis](.am/tags/analysis.md) |
-|  | [Auto fade and hard cut between decks replacing the manual crossfader](termkrush/Auto-fade-and-hard-cut-between-decks-replacing-the-manual-crossfader.md) | 5 |  |
 |  | [Beat synced clip patterns cut and baby scratch](termkrush/Beat-synced-clip-patterns-cut-and-baby-scratch.md) | 5 |  |
 |  | [Clip buttons assign clips and trigger straight playback](termkrush/Clip-buttons-assign-clips-and-trigger-straight-playback.md) | 5 |  |
 |  | [Clip engine test harness for record trim patterns and stretch](termkrush/Clip-engine-test-harness-for-record-trim-patterns-and-stretch.md) |  |  |
@@ -77,7 +76,7 @@
 |  | [Optional auto BPM on clip playback via time stretch](termkrush/Optional-auto-BPM-on-clip-playback-via-time-stretch.md) | 5 |  |
 |  | [Record a clip from a deck by marking in and out](termkrush/Record-a-clip-from-a-deck-by-marking-in-and-out.md) | 5 |  |
 |  | [Uniform grid layout with equal sized boxes for decks clips and DJ](termkrush/Uniform-grid-layout-with-equal-sized-boxes-for-decks-clips-and-DJ.md) | 5 |  |
-| Total Points | | 127 | |
+| Total Points | | 122 | |
 
 ### Started
 | User | Title | Points | Tags |
@@ -131,6 +130,7 @@
 |  | [Bug: logging crash-line test asserts unix path separator, fails on Windows CI](termkrush/Bug-logging-crash-line-test-asserts-unix-path-separator-fails-on-Windows-CI.md) |  |  |
 |  | [Awesome UX revamp functional great-looking turntable interface](termkrush/Awesome-UX-revamp-functional-great-looking-turntable-interface.md) | 8 |  |
 |  | [ESC opens a quit confirmation modal](termkrush/ESC-opens-a-quit-confirmation-modal.md) | 2 |  |
+|  | [Auto fade and hard cut between decks replacing the manual crossfader](termkrush/Auto-fade-and-hard-cut-between-decks-replacing-the-manual-crossfader.md) | 5 |  |
 
 ### Rejected
 | User | Title | Points | Tags |

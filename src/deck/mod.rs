@@ -132,6 +132,16 @@ impl Deck {
         self.speed
     }
 
+    /// Set the varispeed multiplier directly (clamped). Used by deck sync.
+    pub fn set_speed(&mut self, speed: f32) {
+        self.speed = speed.clamp(SPEED_MIN, SPEED_MAX);
+    }
+
+    /// The detected *base* tempo (without varispeed), if known.
+    pub fn base_bpm(&self) -> Option<f32> {
+        self.bpm
+    }
+
     /// Capture the interleaved-stereo samples between two frame positions
     /// (non-destructive — the track is untouched). Bounds are clamped and
     /// ordered, so `capture(out, in)` works too; an empty/invalid range

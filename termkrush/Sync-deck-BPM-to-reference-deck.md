@@ -2,13 +2,17 @@
 title: Sync deck BPM to reference deck
 type: feature
 created: "2026-06-04T09:15:06Z"
-modified: "2026-06-04T09:15:06Z"
+modified: "2026-06-06T20:01:43Z"
 author: Matt Reider
-status: unstarted
+status: accepted
 estimate: "3"
 epic: sync-and-fade
 tags: [tempo, sync]
 project: termkrush
+started: "2026-06-06T20:00:20Z"
+finished: "2026-06-06T20:01:43Z"
+delivered: "2026-06-06T20:01:43Z"
+accepted: "2026-06-06T20:01:43Z"
 ---
 
 ## Problem statement

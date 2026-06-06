@@ -64,7 +64,7 @@ jog/scratch the focused deck · `Start` quit · `Back` help.
 | `space`        | cycle the auto-fade duration (1 / 2 / 4 / 8 s) |
 | `1`–`7`        | trigger clip pads directly              |
 | `r`            | resample the live mix (arm/disarm) → a clip on the focused pad, else the recordings stash |
-| `b`            | toggle auto-BPM on the focused pad — triggering then time-stretches the clip (pitch-preserving) to the active deck's tempo |
+| `b`            | beat-match — on a **deck**: sync its tempo (varispeed) to the other deck's BPM; on a **pad**: toggle auto-BPM (clip stretches to the active deck) |
 | `,` / `.`      | tempo: varispeed the focused **deck** ∓1% (`shift` = ∓0.1%) — pitch rides with speed, effective BPM = base × speed; on a **pad**, nudge its stored BPM |
 | `[` / `]`      | master volume down / up                 |
 | `/`            | filter the crate; `↑`/`↓` pick; `enter` load |

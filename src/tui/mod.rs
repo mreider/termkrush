@@ -590,13 +590,26 @@ impl App {
         Action::TriggerPad
     }
 
-    /// `b` — toggle auto-BPM on the focused pad.
-    fn toggle_pad_autobpm(&mut self) -> Action {
-        if let Focus::Pad(i) = self.focus {
-            self.mixer.toggle_pad_autobpm(i);
-            Action::Mark
-        } else {
-            Action::None
+    /// `b` — beat-match. On a pad: toggle auto-BPM. On a deck: sync its
+    /// tempo (varispeed) to the *other* deck's current effective BPM.
+    fn beat_match(&mut self) -> Action {
+        match self.focus {
+            Focus::Pad(i) => {
+                self.mixer.toggle_pad_autobpm(i);
+                Action::Mark
+            }
+            Focus::Deck(i) => {
+                let other = (i + 1) % DECKS;
+                let target = self.mixer.deck(other).bpm(); // reference, effective
+                let base = self.mixer.deck(i).base_bpm();
+                if let (Some(t), Some(b)) = (target, base) {
+                    if b > 0.0 {
+                        self.mixer.deck_mut(i).set_speed(t / b);
+                    }
+                }
+                Action::Bpm
+            }
+            _ => Action::None,
         }
     }
 
@@ -927,7 +940,7 @@ impl App {
             (KeyCode::Char('z'), _) => self.crate_collapse_toggle(),
             (KeyCode::Char('\\'), _) => Action::OpenFile, // load demo into focused deck
             (KeyCode::Char('r'), _) => self.toggle_record(), // resample the live mix
-            (KeyCode::Char('b'), _) => self.toggle_pad_autobpm(), // beat-match this pad
+            (KeyCode::Char('b'), _) => self.beat_match(), // deck: sync to other · pad: auto-BPM
 
             // ---- direct clip triggers (quick, always live) ----
             (KeyCode::Char(c @ '1'..='7'), _) => {
@@ -1498,7 +1511,7 @@ fn draw_help(f: &mut Frame, area: Rect) {
     f.render_widget(Clear, popup);
     // Keys are by finger position: left hand = deck A, right hand = deck B.
     let help = Paragraph::new(
-        "Keys  —  focus a target, then act\n\n  focus       tab + arrows  (every cell; crate is left)\n  act  j play/trig  k cue/assign-rec  l mark-in/assign  ; mark-out/pattern\n  value       w / s     (deck volume · pad trim out)\n  jog         a / d     (deck scrub · pad trim in; shift = fine)\n\n  transition  g/h cut A/B   G/H auto-fade   space dur\n  master      [ / ]      tempo , / . (deck varispeed)\n  clips       1-7 trigger   r record mix   b beat-match pad\n\n  crate   / filter   ↑/↓ pick   enter load\n          \\ load demo   z hide crate\n  ?  help   esc/q quit   C-c force",
+        "Keys  —  focus a target, then act\n\n  focus       tab + arrows  (every cell; crate is left)\n  act  j play/trig  k cue/assign-rec  l mark-in/assign  ; mark-out/pattern\n  value       w / s     (deck volume · pad trim out)\n  jog         a / d     (deck scrub · pad trim in; shift = fine)\n\n  transition  g/h cut A/B   G/H auto-fade   space dur\n  master      [ / ]      tempo , / . (deck varispeed)\n  clips  1-7 trig  r record mix  b sync deck / beat-match pad\n\n  crate   / filter   ↑/↓ pick   enter load\n          \\ load demo   z hide crate\n  ?  help   esc/q quit   C-c force",
     )
     .block(
         Block::bordered()
@@ -2870,6 +2883,26 @@ mod tests {
         // Arrow right moves to Pad 1 (the other column).
         app.on_key(KeyEvent::new(KeyCode::Right, KeyModifiers::NONE));
         assert_eq!(app.focus_cell(), Focus::Pad(1));
+    }
+
+    #[test]
+    fn b_syncs_focused_deck_tempo_to_the_other() {
+        let mut app = App::new();
+        app.mixer.deck_mut(0).load(synth_track(2000));
+        app.mixer.deck_mut(0).set_bpm(120.0); // reference
+        app.mixer.deck_mut(1).load(synth_track(2000));
+        app.mixer.deck_mut(1).set_bpm(100.0); // native
+        app.on_key(KeyEvent::new(KeyCode::Tab, KeyModifiers::NONE)); // focus deck B
+        assert_eq!(app.focus_cell(), Focus::Deck(1));
+        assert_eq!(app.on_key(key('b')), Action::Bpm); // sync B → A
+                                                       // B base 100, reference 120 → speed 1.2 → effective 120.
+        assert!((app.mixer.deck(1).speed() - 1.2).abs() < 1e-6);
+        assert!((app.mixer.deck(1).bpm().unwrap() - 120.0).abs() < 1e-3);
+        assert_eq!(
+            app.mixer.deck(0).bpm(),
+            Some(120.0),
+            "reference deck untouched"
+        );
     }
 
     #[test]

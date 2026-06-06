@@ -133,6 +133,33 @@ pub enum Action {
     Bpm,
 }
 
+/// A focusable cell of the control surface (plus the crate browser on the
+/// left). One is focused at a time; the shared action cluster acts on it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Focus {
+    Crate,
+    Deck(usize), // 0 = A, 1 = B
+    MixSoft,
+    MixHard,
+    Pad(usize), // 0..PADS
+    Dj,
+}
+
+impl Default for Focus {
+    fn default() -> Self {
+        Focus::Deck(0)
+    }
+}
+
+/// Arrow-key direction for grid focus navigation.
+#[derive(Debug, Clone, Copy)]
+enum Dir {
+    Up,
+    Down,
+    Left,
+    Right,
+}
+
 /// UI state for the shell: the decks + master bus (owned by [`Mixer`]),
 /// which deck has focus, and the browsable local crate.
 #[derive(Debug, Default)]
@@ -144,15 +171,13 @@ pub struct App {
     pub confirm_quit: bool,
     /// Index into [`FADE_SECS`] — the auto-fade duration `space` cycles.
     fade_idx: usize,
-    /// When true, the action cluster targets the Clip bank rather than a deck.
-    /// `Tab` cycles Deck A → Deck B → Clips. `focus` still names the deck the
-    /// clips/transitions act around.
-    clips_focused: bool,
-    /// Which clip slot is selected while the Clip bank is focused (`0..PADS`).
-    clip_sel: usize,
     pub mixer: Mixer,
-    /// Which deck the transport keys target (`Tab` cycles).
-    focus: usize,
+    /// The focused cell — what the action cluster acts on. `Tab` steps
+    /// through every cell; arrows move the focus box across the grid.
+    focus: Focus,
+    /// The deck that transitions / load / jog act around when the focused
+    /// cell isn't itself a deck. Updated whenever a deck is focused.
+    last_deck: usize,
     /// Scanned local crate of mp3s.
     crate_lib: Crate,
     /// Selection index into the *filtered* crate view.
@@ -189,14 +214,22 @@ impl App {
         self.crate_sel = 0;
     }
 
-    /// The focused deck (transport target), shared.
-    fn focused(&self) -> &Deck {
-        self.mixer.deck(self.focus)
+    /// The deck the controls act around: the focused deck, else the last
+    /// deck focused (when the focus is on the mixer / pads / crate / DJ).
+    fn active_deck(&self) -> usize {
+        match self.focus {
+            Focus::Deck(i) => i,
+            _ => self.last_deck,
+        }
     }
 
-    /// The focused deck, mutable.
+    /// The active deck, shared / mutable.
+    fn focused(&self) -> &Deck {
+        self.mixer.deck(self.active_deck())
+    }
     fn focused_mut(&mut self) -> &mut Deck {
-        self.mixer.deck_mut(self.focus)
+        let i = self.active_deck();
+        self.mixer.deck_mut(i)
     }
 
     /// The currently-selected auto-fade duration in seconds.
@@ -204,62 +237,195 @@ impl App {
         FADE_SECS[self.fade_idx % FADE_SECS.len()]
     }
 
-    /// Whether the Clip bank is the active target (vs. a deck).
+    /// The focused cell — for rendering + tests.
+    pub fn focus_cell(&self) -> Focus {
+        self.focus
+    }
+
+    /// Which deck the load path targets (the active deck).
+    pub fn focus(&self) -> usize {
+        self.active_deck()
+    }
+
+    /// `true` if a clip pad is focused (compat shim for the pad readout).
     pub fn clips_focused(&self) -> bool {
-        self.clips_focused
+        matches!(self.focus, Focus::Pad(_))
     }
-
-    /// The selected clip slot while the Clip bank is focused.
+    /// The focused pad slot (0 when no pad is focused).
     pub fn clip_sel(&self) -> usize {
-        self.clip_sel
+        match self.focus {
+            Focus::Pad(i) => i,
+            _ => 0,
+        }
     }
 
-    /// Cycle the focused target: Deck A → Deck B → Clips → Deck A.
+    // ---- focus navigation ----
+
+    /// Set focus, remembering the deck whenever one is focused so the
+    /// transitions/load/jog have a sensible target from any cell.
+    fn set_focus(&mut self, f: Focus) {
+        if let Focus::Deck(i) = f {
+            self.last_deck = i;
+        }
+        self.focus = f;
+    }
+
+    /// Linear `Tab` order: crate, decks, mixer cells, pads, DJ.
+    fn tab_order() -> Vec<Focus> {
+        let mut v = vec![
+            Focus::Crate,
+            Focus::Deck(0),
+            Focus::Deck(1),
+            Focus::MixSoft,
+            Focus::MixHard,
+        ];
+        v.extend((0..PADS).map(Focus::Pad));
+        v.push(Focus::Dj);
+        v
+    }
+
+    /// `Tab`: step to the next cell, wrapping.
     fn cycle_target(&mut self) -> Action {
-        if self.clips_focused {
-            self.clips_focused = false;
-            self.focus = 0;
-        } else if self.focus == 0 {
-            self.focus = 1;
+        let order = Self::tab_order();
+        let idx = order.iter().position(|&f| f == self.focus).unwrap_or(0);
+        self.set_focus(order[(idx + 1) % order.len()]);
+        Action::Focus
+    }
+
+    /// Grid coordinates of a cell: column 0 is the crate (full-height left),
+    /// columns 1-2 are the two control columns; rows 0-5 top to bottom.
+    fn focus_rc(f: Focus) -> (i32, i32) {
+        match f {
+            Focus::Crate => (0, 0),
+            Focus::Deck(0) => (0, 1),
+            Focus::Deck(_) => (0, 2),
+            Focus::MixSoft => (1, 1),
+            Focus::MixHard => (1, 2),
+            Focus::Dj => (5, 2),
+            Focus::Pad(i) => (i as i32 / 2 + 2, i as i32 % 2 + 1),
+        }
+    }
+    fn rc_focus(row: i32, col: i32) -> Focus {
+        if col <= 0 {
+            return Focus::Crate;
+        }
+        match (row, col) {
+            (0, 1) => Focus::Deck(0),
+            (0, 2) => Focus::Deck(1),
+            (1, 1) => Focus::MixSoft,
+            (1, 2) => Focus::MixHard,
+            (5, 2) => Focus::Dj,
+            (r, c) => {
+                let i = ((r - 2) * 2 + (c - 1)) as usize;
+                if i < PADS {
+                    Focus::Pad(i)
+                } else {
+                    Focus::Dj
+                }
+            }
+        }
+    }
+
+    /// Arrow navigation across the grid. On the crate, up/down browse the
+    /// list; right enters the grid. Elsewhere it walks the 2-column grid,
+    /// and left from the left column returns to the crate.
+    fn move_focus(&mut self, dir: Dir) -> Action {
+        if self.focus == Focus::Crate {
+            return match dir {
+                Dir::Up => {
+                    self.sel_up();
+                    Action::CrateNav
+                }
+                Dir::Down => {
+                    self.sel_down();
+                    Action::CrateNav
+                }
+                Dir::Right => {
+                    self.set_focus(Focus::Deck(0));
+                    Action::Focus
+                }
+                Dir::Left => Action::None,
+            };
+        }
+        let (mut r, mut c) = Self::focus_rc(self.focus);
+        match dir {
+            Dir::Up => r = (r - 1).max(0),
+            Dir::Down => r = (r + 1).min(5),
+            Dir::Left => c -= 1,
+            Dir::Right => c = (c + 1).min(2),
+        }
+        if c <= 0 {
+            self.set_focus(Focus::Crate);
         } else {
-            self.clips_focused = true;
+            self.set_focus(Self::rc_focus(r, c));
         }
         Action::Focus
+    }
+
+    /// Load the highlighted crate track into the active deck.
+    fn load_selected(&mut self) -> Action {
+        self.pending_load = self.selected_path();
+        if self.pending_load.is_some() {
+            Action::LoadSelected
+        } else {
+            Action::None
+        }
     }
 
     // ---- the context-sensitive action cluster (j / k / l / ;) ----
 
     fn act_primary(&mut self) -> Action {
-        if self.clips_focused {
-            self.mixer.trigger_pad(self.clip_sel);
-            Action::TriggerPad
-        } else {
-            self.focused_mut().toggle();
-            Action::PlayPause
+        match self.focus {
+            Focus::Deck(i) => {
+                self.mixer.deck_mut(i).toggle();
+                Action::PlayPause
+            }
+            Focus::Pad(i) => {
+                self.mixer.trigger_pad(i);
+                Action::TriggerPad
+            }
+            Focus::MixSoft => {
+                self.mixer.autofade_to(-1.0, self.fade_secs()); // fade to A
+                Action::Crossfade
+            }
+            Focus::MixHard => {
+                self.mixer.cut_to(-1.0); // hard cut to A
+                Action::Crossfade
+            }
+            Focus::Crate => self.load_selected(),
+            Focus::Dj => Action::None,
         }
     }
 
     fn act_secondary(&mut self) -> Action {
-        if self.clips_focused {
-            Action::None // reserved: clip pattern cycle (Beat-synced patterns story)
-        } else {
-            self.focused_mut().stop();
-            Action::Stop
+        match self.focus {
+            Focus::Deck(i) => {
+                self.mixer.deck_mut(i).stop();
+                Action::Stop
+            }
+            Focus::MixSoft => {
+                self.mixer.autofade_to(1.0, self.fade_secs()); // fade to B
+                Action::Crossfade
+            }
+            Focus::MixHard => {
+                self.mixer.cut_to(1.0); // hard cut to B
+                Action::Crossfade
+            }
+            _ => Action::None, // pad pattern cycle reserved; deck/crate/dj n/a
         }
     }
 
     fn act_mark_in(&mut self) -> Action {
-        if self.clips_focused {
-            // Assign the highlighted crate track to the selected slot.
-            match self.selected_path() {
+        match self.focus {
+            // Assign the highlighted crate track to the focused pad.
+            Focus::Pad(i) => match self.selected_path() {
                 Some(p) => {
-                    self.pending_pad_assign = Some((self.clip_sel, p));
+                    self.pending_pad_assign = Some((i, p));
                     Action::AssignPad
                 }
                 None => Action::None,
-            }
-        } else {
-            Action::None // reserved: deck mark-in (Record a clip story)
+            },
+            _ => Action::None, // deck mark-in reserved (Record story)
         }
     }
 
@@ -268,41 +434,41 @@ impl App {
         Action::None
     }
 
-    /// Nudge the focused target's BPM (deck, or the selected pad in Clips).
+    /// Nudge the focused cell's BPM (deck, or focused pad).
     fn nudge_bpm(&mut self, delta: f32) -> Action {
-        if self.clips_focused {
-            self.mixer.nudge_pad_bpm(self.clip_sel, delta);
-        } else {
-            self.focused_mut().nudge_bpm(delta);
+        match self.focus {
+            Focus::Deck(i) => {
+                self.mixer.deck_mut(i).nudge_bpm(delta);
+                Action::Bpm
+            }
+            Focus::Pad(i) => {
+                self.mixer.nudge_pad_bpm(i, delta);
+                Action::Bpm
+            }
+            _ => Action::None,
         }
-        Action::Bpm
     }
 
-    // ---- the context-sensitive value keys (w / s) ----
+    // ---- the context-sensitive value keys (w / s): deck volume ----
 
     fn value_up(&mut self) -> Action {
-        if self.clips_focused {
-            self.clip_sel = (self.clip_sel + PADS - 1) % PADS; // previous slot
-            Action::CrateNav
-        } else {
-            self.focused_mut().nudge_gain(GAIN_NUDGE);
-            Action::DeckGain
+        match self.focus {
+            Focus::Deck(i) => {
+                self.mixer.deck_mut(i).nudge_gain(GAIN_NUDGE);
+                Action::DeckGain
+            }
+            _ => Action::None,
         }
     }
 
     fn value_down(&mut self) -> Action {
-        if self.clips_focused {
-            self.clip_sel = (self.clip_sel + 1) % PADS; // next slot
-            Action::CrateNav
-        } else {
-            self.focused_mut().nudge_gain(-GAIN_NUDGE);
-            Action::DeckGain
+        match self.focus {
+            Focus::Deck(i) => {
+                self.mixer.deck_mut(i).nudge_gain(-GAIN_NUDGE);
+                Action::DeckGain
+            }
+            _ => Action::None,
         }
-    }
-
-    /// Which deck currently has focus (`0..DECKS`).
-    pub fn focus(&self) -> usize {
-        self.focus
     }
 
     /// The current filter query (empty string when not filtering).
@@ -525,22 +691,11 @@ impl App {
                 self.crate_sel = 0;
                 Action::Filter
             }
-            (KeyCode::Up, _) => {
-                self.sel_up();
-                Action::CrateNav
-            }
-            (KeyCode::Down, _) => {
-                self.sel_down();
-                Action::CrateNav
-            }
-            (KeyCode::Enter, _) => {
-                self.pending_load = self.selected_path();
-                if self.pending_load.is_some() {
-                    Action::LoadSelected
-                } else {
-                    Action::None
-                }
-            }
+            (KeyCode::Up, _) => self.move_focus(Dir::Up),
+            (KeyCode::Down, _) => self.move_focus(Dir::Down),
+            (KeyCode::Left, _) => self.move_focus(Dir::Left),
+            (KeyCode::Right, _) => self.move_focus(Dir::Right),
+            (KeyCode::Enter, _) => self.load_selected(),
             (KeyCode::Char('z'), _) => self.crate_collapse_toggle(),
             (KeyCode::Char('\\'), _) => Action::OpenFile, // load demo into focused deck
 
@@ -666,7 +821,7 @@ pub fn draw(f: &mut Frame, app: &App) {
     // Row 0 — the two decks.
     let r = split2(grid_rows[0]);
     for i in 0..DECKS {
-        let focused = app.focus() == i && !app.clips_focused();
+        let focused = app.focus_cell() == Focus::Deck(i);
         draw_deck_cell(
             f,
             r[i],
@@ -688,7 +843,7 @@ pub fn draw(f: &mut Frame, app: &App) {
             Line::from(blend_state(app)),
             Line::from(format!("auto-fade {:.0}s", app.fade_secs())),
         ],
-        false,
+        app.focus_cell() == Focus::MixSoft,
     );
     draw_cell(
         f,
@@ -698,7 +853,7 @@ pub fn draw(f: &mut Frame, app: &App) {
             Line::from(blend_state(app)),
             Line::from(format!("master {m:.2}  {}", fmt_db(m))),
         ],
-        false,
+        app.focus_cell() == Focus::MixHard,
     );
 
     // Rows 2-4 — pads 1-6; row 5 — pad 7 + the DJ placeholder.
@@ -714,7 +869,7 @@ pub fn draw(f: &mut Frame, app: &App) {
         r[1],
         "DJ",
         vec![Line::from(""), Line::from("  ♪ (soon)")],
-        false,
+        app.focus_cell() == Focus::Dj,
     );
 
     if app.show_help {
@@ -860,6 +1015,7 @@ fn draw_deck_cell(
 /// track count, or the live filter query while `/` is open.
 fn draw_crate_panel(f: &mut Frame, area: Rect, app: &App) {
     let visible = app.visible();
+    let bc = deck_border(app.focus_cell() == Focus::Crate); // amber when focused
     let title = match &app.filter {
         Some(q) => format!("Crate  /{q}_  ({} match)", visible.len()),
         None => format!("Crate  ({} tracks)", app.crate_lib.len()),
@@ -875,6 +1031,7 @@ fn draw_crate_panel(f: &mut Frame, area: Rect, app: &App) {
         .block(
             Block::bordered()
                 .title(title.clone())
+                .border_style(Style::default().fg(bc))
                 .style(Style::default().fg(GREEN).bg(BG)),
         )
         .style(Style::default().fg(GREEN).bg(BG));
@@ -898,6 +1055,7 @@ fn draw_crate_panel(f: &mut Frame, area: Rect, app: &App) {
         .block(
             Block::bordered()
                 .title(title)
+                .border_style(Style::default().fg(bc))
                 .style(Style::default().fg(GREEN).bg(BG)),
         )
         .highlight_style(
@@ -1027,7 +1185,7 @@ fn draw_help(f: &mut Frame, area: Rect) {
     f.render_widget(Clear, popup);
     // Keys are by finger position: left hand = deck A, right hand = deck B.
     let help = Paragraph::new(
-        "Keys  —  focus a target, then act\n\n  focus       tab    (Deck A -> Deck B -> Clips)\n  act         j primary   k cue/2nd   l mark·assign   ; alt\n  value       w / s     (deck: volume   clips: pick slot)\n  jog         a / d     (scrub focused deck; shift = coarse)\n\n  transition  g/h cut A/B   G/H auto-fade   space dur\n  master      [ / ]      bpm  , / .  (shift = .1)\n  clips       1-4 trigger\n\n  crate   / filter   ↑/↓ pick   enter load\n          \\ load demo   z hide crate\n  ?  help   esc/q quit   C-c force",
+        "Keys  —  focus a target, then act\n\n  focus       tab + arrows  (every cell; crate is left)\n  act         j primary   k cue/2nd   l mark·assign   ; alt\n  value       w / s     (deck: volume   clips: pick slot)\n  jog         a / d     (scrub focused deck; shift = coarse)\n\n  transition  g/h cut A/B   G/H auto-fade   space dur\n  master      [ / ]      bpm  , / .  (shift = .1)\n  clips       1-4 trigger\n\n  crate   / filter   ↑/↓ pick   enter load\n          \\ load demo   z hide crate\n  ?  help   esc/q quit   C-c force",
     )
     .block(
         Block::bordered()
@@ -1638,10 +1796,14 @@ mod tests {
     }
 
     #[test]
-    fn arrows_navigate_and_enter_loads_selected() {
+    fn arrows_browse_the_focused_crate_and_enter_loads() {
         let mut app = app_with_crate(&["alpha.mp3", "beta.mp3", "gamma.mp3"]);
         let down = || KeyEvent::new(KeyCode::Down, KeyModifiers::NONE);
         let up = || KeyEvent::new(KeyCode::Up, KeyModifiers::NONE);
+        let left = || KeyEvent::new(KeyCode::Left, KeyModifiers::NONE);
+        // Default focus is Deck A; arrow left to focus the crate.
+        assert_eq!(app.on_key(left()), Action::Focus);
+        assert_eq!(app.focus_cell(), Focus::Crate);
         assert_eq!(app.on_key(down()), Action::CrateNav); // -> beta
         assert_eq!(app.on_key(down()), Action::CrateNav); // -> gamma
         assert_eq!(app.on_key(up()), Action::CrateNav); // -> beta
@@ -1656,10 +1818,11 @@ mod tests {
     }
 
     #[test]
-    fn arrow_navigation_clamps_at_ends() {
+    fn crate_list_clamps_at_ends_when_focused() {
         let mut app = app_with_crate(&["a.mp3", "b.mp3"]);
         let down = || KeyEvent::new(KeyCode::Down, KeyModifiers::NONE);
         let up = || KeyEvent::new(KeyCode::Up, KeyModifiers::NONE);
+        app.on_key(KeyEvent::new(KeyCode::Left, KeyModifiers::NONE)); // focus crate
         app.on_key(up()); // already at top, stays 0
         assert_eq!(app.crate_sel, 0);
         app.on_key(down());
@@ -1725,17 +1888,27 @@ mod tests {
     }
 
     #[test]
-    fn tab_cycles_focus_deck_a_b_clips() {
+    fn tab_steps_through_every_cell_and_wraps() {
         let mut app = App::new();
-        assert_eq!(app.focus(), 0);
-        assert!(!app.clips_focused());
         let tab = KeyEvent::new(KeyCode::Tab, KeyModifiers::NONE);
-        assert_eq!(app.on_key(tab), Action::Focus);
-        assert_eq!(app.focus(), 1, "A -> B");
-        app.on_key(tab);
-        assert!(app.clips_focused(), "B -> Clips");
-        app.on_key(tab);
-        assert!(!app.clips_focused() && app.focus() == 0, "Clips -> A wraps");
+        assert_eq!(app.focus_cell(), Focus::Deck(0));
+        // The order: decks, mixer cells, pads, DJ, crate, …
+        for want in [
+            Focus::Deck(1),
+            Focus::MixSoft,
+            Focus::MixHard,
+            Focus::Pad(0),
+        ] {
+            assert_eq!(app.on_key(tab), Action::Focus);
+            assert_eq!(app.focus_cell(), want);
+        }
+        // 13 cells total (crate + 2 decks + 2 mixer + 7 pads + DJ): a full
+        // cycle returns to the start.
+        let start = app.focus_cell();
+        for _ in 0..13 {
+            app.on_key(tab);
+        }
+        assert_eq!(app.focus_cell(), start, "Tab wraps after every cell");
     }
 
     #[test]
@@ -1813,12 +1986,48 @@ mod tests {
         assert_eq!(app.mixer.deck(0).bpm(), Some(120.9), "manual BPM is locked");
     }
 
+    /// Move focus from Deck A down to Pad 0 (Deck A → MixSoft → Pad 0).
+    fn focus_first_pad(app: &mut App) {
+        let down = KeyEvent::new(KeyCode::Down, KeyModifiers::NONE);
+        app.on_key(down);
+        app.on_key(down);
+        assert_eq!(app.focus_cell(), Focus::Pad(0));
+    }
+
     #[test]
-    fn comma_period_nudge_selected_pad_bpm_in_clips_focus() {
+    fn arrows_walk_the_control_grid() {
         let mut app = App::new();
-        let tab = KeyEvent::new(KeyCode::Tab, KeyModifiers::NONE);
-        app.on_key(tab);
-        app.on_key(tab); // -> Clips, slot 0
+        let go = |app: &mut App, code| app.on_key(KeyEvent::new(code, KeyModifiers::NONE));
+        assert_eq!(app.focus_cell(), Focus::Deck(0));
+        assert_eq!(go(&mut app, KeyCode::Right), Action::Focus);
+        assert_eq!(app.focus_cell(), Focus::Deck(1)); // right column
+        go(&mut app, KeyCode::Down);
+        assert_eq!(app.focus_cell(), Focus::MixHard); // down a row
+        go(&mut app, KeyCode::Left);
+        assert_eq!(app.focus_cell(), Focus::MixSoft); // left column
+        go(&mut app, KeyCode::Left);
+        assert_eq!(app.focus_cell(), Focus::Crate); // off the left edge → crate
+    }
+
+    #[test]
+    fn mixer_cells_dispatch_cut_and_fade() {
+        let mut app = App::new();
+        let down = KeyEvent::new(KeyCode::Down, KeyModifiers::NONE);
+        app.on_key(down); // Deck A → MixSoft
+        assert_eq!(app.focus_cell(), Focus::MixSoft);
+        assert_eq!(app.on_key(key('k')), Action::Crossfade); // soft: fade to B
+        assert!(app.mixer.is_fading());
+        // Move to the hard-cut cell and hard-cut to A.
+        app.on_key(KeyEvent::new(KeyCode::Right, KeyModifiers::NONE));
+        assert_eq!(app.focus_cell(), Focus::MixHard);
+        assert_eq!(app.on_key(key('j')), Action::Crossfade);
+        assert_eq!(app.mixer.xfade_applied(), -1.0, "hard cut to A is instant");
+    }
+
+    #[test]
+    fn comma_period_nudge_focused_pad_bpm() {
+        let mut app = App::new();
+        focus_first_pad(&mut app);
         assert_eq!(app.on_key(key('.')), Action::Bpm);
         assert_eq!(app.mixer.pad_bpm(0), Some(121.0));
         // Deck A's BPM is untouched by pad nudges.
@@ -2138,8 +2347,13 @@ mod tests {
             Action::ToggleHelp
         );
 
-        // Crate keys on a populated crate (separate app: `/` enters filter mode).
+        // Crate keys on a populated crate. Arrow left focuses the crate, then
+        // up/down browse it; enter loads; `/` enters filter mode.
         let mut c = app_with_crate(&["a.mp3", "b.mp3"]);
+        assert_eq!(
+            c.on_key(KeyEvent::new(KeyCode::Left, KeyModifiers::NONE)),
+            Action::Focus
+        );
         assert_eq!(
             c.on_key(KeyEvent::new(KeyCode::Down, KeyModifiers::NONE)),
             Action::CrateNav
@@ -2169,27 +2383,22 @@ mod tests {
     }
 
     #[test]
-    fn clips_focus_w_s_pick_slot_and_j_triggers_it() {
+    fn focused_pad_triggers_with_j() {
         let mut app = App::new();
-        app.mixer.assign_pad(1, vec![0.5; 32]); // a clip in slot index 1
-        let tab = KeyEvent::new(KeyCode::Tab, KeyModifiers::NONE);
-        app.on_key(tab);
-        app.on_key(tab); // -> Clips, slot 0 selected
-        assert_eq!(app.clip_sel(), 0);
-        assert_eq!(app.on_key(key('s')), Action::CrateNav); // next slot
-        assert_eq!(app.clip_sel(), 1);
-        assert_eq!(app.on_key(key('j')), Action::TriggerPad); // trigger slot 1
+        app.mixer.assign_pad(0, vec![0.5; 32]); // a clip in slot 0
+        focus_first_pad(&mut app); // arrow down to Pad 0
+        assert_eq!(app.on_key(key('j')), Action::TriggerPad);
         assert_eq!(app.mixer.active_voices(), 1);
+        // Arrow right moves to Pad 1 (the other column).
+        app.on_key(KeyEvent::new(KeyCode::Right, KeyModifiers::NONE));
+        assert_eq!(app.focus_cell(), Focus::Pad(1));
     }
 
     #[test]
-    fn clips_focus_l_assigns_selected_crate_track_to_the_slot() {
+    fn focused_pad_l_assigns_selected_crate_track() {
         let mut app = app_with_real_crate(); // crate holds the real WAV fixture
-        let tab = KeyEvent::new(KeyCode::Tab, KeyModifiers::NONE);
-        app.on_key(tab); // A -> B
-        app.on_key(tab); // B -> Clips
-        assert!(app.clips_focused());
-        let act = app.on_key(key('l')); // assign highlighted crate track to slot 0
+        focus_first_pad(&mut app);
+        let act = app.on_key(key('l')); // assign highlighted crate track to Pad 0
         assert_eq!(act, Action::AssignPad);
         drive_action(&mut app, act); // decodes off-thread, then assigns
         assert!(app.mixer.pad_loaded(0), "slot 0 now holds a clip");

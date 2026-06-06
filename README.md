@@ -46,7 +46,8 @@ in the in-app `?` help; an Xbox controller is the preferred input.)
 
 | Key            | Action (on the **focused** target)      |
 |----------------|-----------------------------------------|
-| `tab`          | cycle focus: Deck A → Deck B → Clips     |
+| `tab`          | step focus through every grid cell (decks · mixer · pads · DJ · crate) |
+| `↑↓←→`         | move the focus box around the grid; on the crate, `↑`/`↓` browse the list |
 | `j`            | primary — deck play/pause · clip trigger |
 | `k`            | secondary — deck cue/stop                |
 | `l`            | mark / assign — clip: assign highlighted crate track |

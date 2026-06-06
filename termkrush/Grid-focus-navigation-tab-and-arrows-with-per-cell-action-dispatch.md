@@ -2,12 +2,16 @@
 title: Grid focus navigation tab and arrows with per cell action dispatch
 type: feature
 created: "2026-06-06T17:37:27Z"
-modified: "2026-06-06T17:37:27Z"
+modified: "2026-06-06T19:00:27Z"
 author: Matt Reider
-status: unstarted
+status: accepted
 estimate: "5"
 epic: controls
 project: termkrush
+started: "2026-06-06T18:52:06Z"
+finished: "2026-06-06T19:00:27Z"
+delivered: "2026-06-06T19:00:27Z"
+accepted: "2026-06-06T19:00:27Z"
 ---
 
 ## Intent (navigation half)

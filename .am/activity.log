@@ -188,3 +188,7 @@
 2026-06-06T14:19:44Z	Matt Reider	estimate	termkrush/More-clip-patterns-transformer-stutter-warble-and-reverse.md	5
 2026-06-06T14:19:44Z	Matt Reider	set-type	termkrush/Optional-auto-BPM-on-clip-playback-via-time-stretch.md	feature
 2026-06-06T14:19:44Z	Matt Reider	estimate	termkrush/Optional-auto-BPM-on-clip-playback-via-time-stretch.md	5
+2026-06-06T14:33:32Z	Matt Reider	started	termkrush/ESC-opens-a-quit-confirmation-modal.md	
+2026-06-06T14:37:01Z	Matt Reider	finished	termkrush/ESC-opens-a-quit-confirmation-modal.md	
+2026-06-06T14:37:01Z	Matt Reider	delivered	termkrush/ESC-opens-a-quit-confirmation-modal.md	
+2026-06-06T14:37:01Z	Matt Reider	accepted	termkrush/ESC-opens-a-quit-confirmation-modal.md	ESC (or q) opens a centered 'Quit TermKrush? (y/n)' modal; y confirms, n/Esc cancels, all other keys swallowed while open. Ctrl-C remains an unconditional force-quit (works from inside the modal too). Help text updated. 109 lib tests incl. 6 new modal tests; fmt/clippy green.

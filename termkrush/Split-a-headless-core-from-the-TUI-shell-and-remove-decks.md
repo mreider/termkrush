@@ -2,11 +2,14 @@
 title: Split a headless core from the TUI shell and remove decks
 type: feature
 created: "2026-06-07T11:09:28Z"
-modified: "2026-06-07T11:18:24Z"
+modified: "2026-06-07T11:38:35Z"
 author: Matt Reider
-status: started
+status: accepted
 estimate: "5"
 started: "2026-06-07T11:18:24Z"
+finished: "2026-06-07T11:38:35Z"
+delivered: "2026-06-07T11:38:35Z"
+accepted: "2026-06-07T11:38:35Z"
 ---
 
 ## Problem

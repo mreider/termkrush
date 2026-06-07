@@ -2,11 +2,12 @@
 title: 'Bug: trim and timeline editing are not usable'
 type: bug
 created: "2026-06-07T15:42:33Z"
-modified: "2026-06-07T15:59:13Z"
+modified: "2026-06-07T16:06:50Z"
 author: Matt Reider
-status: started
+status: finished
 project: termkrush
 started: "2026-06-07T15:59:13Z"
+finished: "2026-06-07T16:06:50Z"
 ---
 
 ## Symptom

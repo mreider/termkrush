@@ -8,11 +8,10 @@
 |  | [First release dry run with rc tag](termkrush/First-release-dry-run-with-rc-tag.md) |  |  |
 |  | [Wire Buy Me A Coffee into README and site](termkrush/Wire-Buy-Me-A-Coffee-into-README-and-site.md) |  |  |
 |  | [Export a track to MP3](termkrush/Export-a-track-to-MP3.md) | 3 |  |
-|  | [Import MP3 files into the track list](termkrush/Import-MP3-files-into-the-track-list.md) | 2 |  |
 |  | [Import a YouTube song as WAV to the track list](termkrush/Import-a-YouTube-song-as-WAV-to-the-track-list.md) | 5 |  |
 |  | [Refresh GitHub Pages for the pad based model](termkrush/Refresh-GitHub-Pages-for-the-pad-based-model.md) | 2 |  |
 |  | [V0.1.0 krush](termkrush/V010-krush.md) |  |  |
-| Total Points | | 12 | |
+| Total Points | | 10 | |
 
 ### Started
 | User | Title | Points | Tags |
@@ -113,6 +112,7 @@
 |  | [Play the arrangement through the mixer](termkrush/Play-the-arrangement-through-the-mixer.md) | 5 |  |
 |  | [Render the arrangement to a WAV in the track list](termkrush/Render-the-arrangement-to-a-WAV-in-the-track-list.md) | 5 |  |
 |  | [Reload a track onto a pad edit and save back](termkrush/Reload-a-track-onto-a-pad-edit-and-save-back.md) | 3 |  |
+|  | [Import MP3 files into the track list](termkrush/Import-MP3-files-into-the-track-list.md) | 2 |  |
 
 ### Rejected
 | User | Title | Points | Tags |

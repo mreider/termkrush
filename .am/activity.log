@@ -457,3 +457,9 @@
 2026-06-07T12:49:33Z	Matt Reider	finished	termkrush/Reload-a-track-onto-a-pad-edit-and-save-back.md	
 2026-06-07T12:49:33Z	Matt Reider	delivered	termkrush/Reload-a-track-onto-a-pad-edit-and-save-back.md	
 2026-06-07T12:49:33Z	Matt Reider	accepted	termkrush/Reload-a-track-onto-a-pad-edit-and-save-back.md	Reload → edit → save-back. mix.pad_clip_region(i) returns the trimmed samples. App records pad_source[i] on load (place_decoded). Loading a track onto a pad + trim/tempo/volume already worked; this adds save-back: S writes the focused pad's trimmed clip as a NEW WAV ({stem}-editN.wav) in the current folder, O overwrites the source file; both refresh the list. Test: S creates loop-edit1.wav; O shrinks the source to the trimmed length. fmt + clippy --workspace + 8 suites green.
+2026-06-07T12:49:37Z	Matt Reider	started	termkrush/Export-a-track-to-MP3.md	
+2026-06-07T12:51:30Z	Matt Reider	unstarted	termkrush/Export-a-track-to-MP3.md	
+2026-06-07T12:51:30Z	Matt Reider	started	termkrush/Import-MP3-files-into-the-track-list.md	
+2026-06-07T12:51:30Z	Matt Reider	finished	termkrush/Import-MP3-files-into-the-track-list.md	
+2026-06-07T12:51:30Z	Matt Reider	delivered	termkrush/Import-MP3-files-into-the-track-list.md	
+2026-06-07T12:51:30Z	Matt Reider	accepted	termkrush/Import-MP3-files-into-the-track-list.md	MP3 import already functional via the existing pipeline: is_audio lists .wav AND .mp3 in the library; decode_file (symphonia, mp3 feature) decodes mp3 → assign_pad plays it on a pad like any clip; the committed fixture sine_a440_10s.mp3 + decode_test (mp3_duration_matches_within_10ms, mp3≈source) pin mp3 decode, and the library test lists a .mp3. No new code needed — the pad model decodes mp3 the same as wav. (Export to mp3 is the separate G3 story, pending the encoder-dependency decision.)

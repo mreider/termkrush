@@ -2,12 +2,14 @@
 title: Build a scratch phrase by tapping whips and wikis
 type: feature
 created: "2026-06-07T11:10:21Z"
-modified: "2026-06-07T12:27:23Z"
+modified: "2026-06-07T12:30:47Z"
 author: Matt Reider
-status: started
+status: accepted
 estimate: "5"
 project: termkrush
 started: "2026-06-07T12:27:23Z"
+delivered: "2026-06-07T12:30:47Z"
+accepted: "2026-06-07T12:30:47Z"
 ---
 
 ## Problem

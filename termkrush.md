@@ -7,7 +7,6 @@
 |---|---|:---:|---|
 |  | [First release dry run with rc tag](termkrush/First-release-dry-run-with-rc-tag.md) |  |  |
 |  | [Wire Buy Me A Coffee into README and site](termkrush/Wire-Buy-Me-A-Coffee-into-README-and-site.md) |  |  |
-|  | [Build a scratch phrase by tapping whips and wikis](termkrush/Build-a-scratch-phrase-by-tapping-whips-and-wikis.md) | 5 |  |
 |  | [Export a track to MP3](termkrush/Export-a-track-to-MP3.md) | 3 |  |
 |  | [Import MP3 files into the track list](termkrush/Import-MP3-files-into-the-track-list.md) | 2 |  |
 |  | [Import a YouTube song as WAV to the track list](termkrush/Import-a-YouTube-song-as-WAV-to-the-track-list.md) | 5 |  |
@@ -20,7 +19,7 @@
 |  | [Step grid editor with cursor and step toggle](termkrush/Step-grid-editor-with-cursor-and-step-toggle.md) | 5 |  |
 |  | [Step grid timeline data model](termkrush/Step-grid-timeline-data-model.md) | 3 |  |
 |  | [V0.1.0 krush](termkrush/V010-krush.md) |  |  |
-| Total Points | | 44 | |
+| Total Points | | 39 | |
 
 ### Started
 | User | Title | Points | Tags |
@@ -113,6 +112,7 @@
 |  | [Global speed control all loops follow](termkrush/Global-speed-control-all-loops-follow.md) | 3 |  |
 |  | [Detect the scratch pivot onset in a short clip](termkrush/Detect-the-scratch-pivot-onset-in-a-short-clip.md) | 3 |  |
 |  | [Whip and wiki scratch primitives](termkrush/Whip-and-wiki-scratch-primitives.md) | 5 |  |
+|  | [Build a scratch phrase by tapping whips and wikis](termkrush/Build-a-scratch-phrase-by-tapping-whips-and-wikis.md) | 5 |  |
 
 ### Rejected
 | User | Title | Points | Tags |

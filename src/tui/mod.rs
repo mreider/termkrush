@@ -1143,14 +1143,21 @@ pub fn draw(f: &mut Frame, app: &App) {
         return;
     }
 
-    // Body: crate on the left (unless collapsed), pads + DJ on the right.
+    // Master timeline is a permanent strip across the top of the body; the
+    // library + pads sit below it.
+    let stack =
+        Layout::vertical([Constraint::Length(PADS as u16 + 2), Constraint::Min(0)]).split(rows[1]);
+    draw_timeline_strip(f, stack[0], app);
+    let lower = stack[1];
+
+    // Lower body: crate on the left (unless collapsed), pads on the right.
     let body = if app.crate_collapsed {
-        let cols = Layout::horizontal([Constraint::Min(0)]).split(rows[1]);
+        let cols = Layout::horizontal([Constraint::Min(0)]).split(lower);
         draw_pads(f, cols[0], app);
         return_help(f, app);
         return;
     } else {
-        Layout::horizontal([Constraint::Length(34), Constraint::Min(0)]).split(rows[1])
+        Layout::horizontal([Constraint::Length(34), Constraint::Min(0)]).split(lower)
     };
     draw_crate(f, body[0], app);
     draw_pads(f, body[1], app);
@@ -1246,6 +1253,40 @@ fn draw_timeline(f: &mut Frame, area: Rect, app: &App) {
                 (false, true, false) => '█',
                 (false, false, true) => ':',
                 (false, false, false) => '·',
+            });
+        }
+        lines.push(Line::from(s));
+    }
+    f.render_widget(
+        Paragraph::new(lines)
+            .block(block)
+            .style(Style::default().fg(GREEN)),
+        area,
+    );
+}
+
+/// The persistent master-timeline strip at the top of the body: one lane per
+/// pad, hits as `█`, the playhead as `▶`/`:`. Read-only overview — `t` opens
+/// the full editor.
+fn draw_timeline_strip(f: &mut Frame, area: Rect, app: &App) {
+    let tl = &app.timeline;
+    let spb = tl.steps_per_bar();
+    let transport = if app.playing { "▶" } else { "■" };
+    let title = format!("TIMELINE {transport} {}×{}  ·  t edit", tl.bars(), spb);
+    let block = cell_block(&title, false);
+    let head = app.playhead();
+    let mut lines: Vec<Line> = Vec::with_capacity(PADS);
+    for lane in 0..PADS {
+        let mut s = format!(" P{} ", lane + 1);
+        for step in 0..tl.total_steps() {
+            if step > 0 && step % spb == 0 {
+                s.push('|'); // bar boundary
+            }
+            s.push(match (tl.step(lane, step), head == Some(step)) {
+                (true, true) => '▶',
+                (true, false) => '█',
+                (false, true) => ':',
+                (false, false) => '·',
             });
         }
         lines.push(Line::from(s));
@@ -2337,10 +2378,14 @@ mod tests {
     }
 
     #[test]
-    fn renders_wordmark_and_eight_pads() {
+    fn renders_timeline_strip_wordmark_and_eight_pads() {
         let app = App::new();
-        let text = buffer_text(&render(&app, 96, 32));
+        let text = buffer_text(&render(&app, 96, 40));
         assert!(text.contains("TermKrush"));
+        assert!(
+            text.contains("TIMELINE"),
+            "persistent timeline strip on top"
+        );
         assert!(text.contains("Pad 1"));
         assert!(text.contains("Pad 8"), "eighth pad renders");
         assert!(!text.contains("=^.^="), "no DJ cat");

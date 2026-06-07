@@ -33,8 +33,11 @@ Run `cargo run --release` with a few tracks in `crate_root` and walk this:
 - [ ] The clip bar + cursor move smoothly with `←/→` (shift = coarse); `i`/`o`
       set in/out you can hear; `x` truncates.
 
-## Timeline (`t`)
-- [ ] Cursor + step toggling feel right; `v`..`v` draws a loop region; `x` cuts
+## Timeline
+- [ ] A **persistent TIMELINE strip** sits across the top (8 lanes P1–P8, bar
+      `|` separators, playhead `▶`/`:`); the library + pads are below it.
+- [ ] `t` opens the full editor: cursor + step toggling feel right; `v`..`v`
+      draws a loop region; `x` cuts
       the end; `space` plays/**pauses** (resumes from position), `backspace`
       stops/rewinds; `w` renders a WAV into the library.
 

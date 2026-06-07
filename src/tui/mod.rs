@@ -2086,6 +2086,34 @@ mod tests {
     }
 
     #[test]
+    fn esc_leaves_the_timeline_then_opens_quit() {
+        let esc = || KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE);
+        let mut app = App::new();
+        app.on_key(key('t'));
+        assert!(app.tl_visible);
+        app.on_key(esc());
+        assert!(!app.tl_visible, "first esc closes the timeline");
+        assert!(!app.confirm_quit, "and does not open quit yet");
+        app.on_key(esc());
+        assert!(app.confirm_quit, "second esc opens the quit modal");
+    }
+
+    #[test]
+    fn esc_leaves_the_clip_editor_then_opens_quit() {
+        let esc = || KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE);
+        let mut app = App::new();
+        app.mixer.assign_pad(0, vec![0.5; 64]);
+        app.set_focus(Focus::Pad(0));
+        app.on_key(key('e'));
+        assert!(app.clip_edit.is_some());
+        app.on_key(esc());
+        assert!(app.clip_edit.is_none(), "first esc closes the clip editor");
+        assert!(!app.confirm_quit);
+        app.on_key(esc());
+        assert!(app.confirm_quit, "second esc opens quit");
+    }
+
+    #[test]
     fn t_opens_timeline_and_cursor_toggles_a_step() {
         let mut app = App::new();
         assert!(!app.tl_visible);

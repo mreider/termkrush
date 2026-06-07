@@ -2,12 +2,14 @@
 title: Track list with folders
 type: feature
 created: "2026-06-07T11:10:18Z"
-modified: "2026-06-07T11:51:58Z"
+modified: "2026-06-07T11:55:20Z"
 author: Matt Reider
-status: started
+status: accepted
 estimate: "3"
 project: termkrush
 started: "2026-06-07T11:51:58Z"
+delivered: "2026-06-07T11:55:20Z"
+accepted: "2026-06-07T11:55:20Z"
 ---
 
 ## Problem

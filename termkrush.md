@@ -28,10 +28,9 @@
 |  | [Step grid editor with cursor and step toggle](termkrush/Step-grid-editor-with-cursor-and-step-toggle.md) | 5 |  |
 |  | [Step grid timeline data model](termkrush/Step-grid-timeline-data-model.md) | 3 |  |
 |  | [Sync loop pads to the master tempo via varispeed](termkrush/Sync-loop-pads-to-the-master-tempo-via-varispeed.md) | 5 |  |
-|  | [Track list with folders](termkrush/Track-list-with-folders.md) | 3 |  |
 |  | [V0.1.0 krush](termkrush/V010-krush.md) |  |  |
 |  | [Whip and wiki scratch primitives](termkrush/Whip-and-wiki-scratch-primitives.md) | 5 |  |
-| Total Points | | 79 | |
+| Total Points | | 76 | |
 
 ### Started
 | User | Title | Points | Tags |
@@ -113,6 +112,7 @@
 |  | [Split a headless core from the TUI shell and remove decks](termkrush/Split-a-headless-core-from-the-TUI-shell-and-remove-decks.md) | 5 |  |
 |  | [Drop the crossfader deck blend sync cue and old patterns](termkrush/Drop-the-crossfader-deck-blend-sync-cue-and-old-patterns.md) | 3 |  |
 |  | [Multipass cruft sweep for a clean pad based codebase](termkrush/Multipass-cruft-sweep-for-a-clean-pad-based-codebase.md) |  |  |
+|  | [Track list with folders](termkrush/Track-list-with-folders.md) | 3 |  |
 
 ### Rejected
 | User | Title | Points | Tags |

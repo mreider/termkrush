@@ -118,6 +118,11 @@ pub struct App {
     tl_step: usize,
     /// First endpoint of a loop region being drawn (`v` marks, `v` fills).
     tl_region_start: Option<usize>,
+    /// Arrangement transport.
+    playing: bool,
+    play_acc: f64,          // frames accumulated toward the next step
+    play_step: usize,       // next step to fire
+    prev_run: [bool; PADS], // whether each lane was in a run last step
 }
 
 impl Default for App {
@@ -153,6 +158,81 @@ impl App {
             tl_lane: 0,
             tl_step: 0,
             tl_region_start: None,
+            playing: false,
+            play_acc: 0.0,
+            play_step: 0,
+            prev_run: [false; PADS],
+        }
+    }
+
+    /// Play/stop the arrangement transport. Starting resets to the top.
+    fn toggle_transport(&mut self) -> Action {
+        self.playing = !self.playing;
+        if self.playing {
+            self.play_step = 0;
+            self.prev_run = [false; PADS];
+            self.play_acc = self.frames_per_step(); // fire step 0 immediately
+        }
+        Action::Timeline
+    }
+
+    /// Frames per timeline step at the effective tempo (4/4: steps_per_bar/4
+    /// steps per beat). 0 if tempo/grid are degenerate.
+    fn frames_per_step(&self) -> f64 {
+        let bpm = self.mixer.effective_bpm().unwrap_or(120.0) as f64;
+        let rate = self.mixer.sample_rate() as f64;
+        let steps_per_beat = self.timeline.steps_per_bar() as f64 / 4.0;
+        if bpm <= 0.0 || steps_per_beat <= 0.0 {
+            return 0.0;
+        }
+        (rate * 60.0 / bpm) / steps_per_beat
+    }
+
+    /// Advance the transport by `frames`, firing pads as their steps arrive.
+    /// Driven by the audio pump so playback stays in tempo.
+    pub fn advance_playback(&mut self, frames: usize) {
+        if !self.playing {
+            return;
+        }
+        let fps = self.frames_per_step();
+        let total = self.timeline.total_steps();
+        if fps <= 0.0 || total == 0 {
+            return;
+        }
+        self.play_acc += frames as f64;
+        while self.play_acc >= fps {
+            self.play_acc -= fps;
+            let step = self.play_step % total;
+            self.fire_step(step);
+            self.play_step = (self.play_step + 1) % total;
+        }
+    }
+
+    /// Fire the pads entering/leaving a run at `step`: one-shots/scratch on
+    /// entry, loops triggered on entry and faded out when the run ends.
+    fn fire_step(&mut self, step: usize) {
+        for lane in 0..PADS {
+            let now = self.timeline.step(lane, step);
+            let was = self.prev_run[lane];
+            if now && !was {
+                match self.mixer.pad_kind(lane) {
+                    PadKind::Scratch => self.mixer.play_phrase(lane),
+                    _ => self.mixer.trigger_pad(lane),
+                }
+            } else if !now && was && self.mixer.pad_kind(lane) == PadKind::Loop {
+                self.mixer.set_pad_active(lane, false, true);
+            }
+            self.prev_run[lane] = now;
+        }
+    }
+
+    /// The step the playhead last fired (for the editor's playhead marker).
+    fn playhead(&self) -> Option<usize> {
+        if self.playing {
+            let total = self.timeline.total_steps().max(1);
+            Some((self.play_step + total - 1) % total)
+        } else {
+            None
         }
     }
 
@@ -180,10 +260,11 @@ impl App {
                 self.tl_step = (self.tl_step + 1).min(self.timeline.total_steps() - 1);
                 Some(Action::Timeline)
             }
-            KeyCode::Char(' ') | KeyCode::Enter => {
+            KeyCode::Enter => {
                 self.timeline.toggle(self.tl_lane, self.tl_step);
                 Some(Action::Timeline)
             }
+            KeyCode::Char(' ') => Some(self.toggle_transport()),
             KeyCode::Char('v') => {
                 // First `v` marks the region start; second fills to the cursor.
                 match self.tl_region_start {
@@ -675,6 +756,7 @@ impl App {
                 self.tl_visible = true;
                 Action::Timeline
             }
+            KeyCode::Char(' ') => self.toggle_transport(),
             // Library file ops (on the highlighted track).
             KeyCode::Char('x') => self.arm_delete(),
             KeyCode::Char('R') => self.start_rename(),
@@ -798,8 +880,10 @@ fn draw_timeline(f: &mut Frame, area: Rect, app: &App) {
     } else {
         ""
     };
+    let transport = if app.playing { "▶" } else { "■" };
+    let head = app.playhead();
     let title = format!(
-        "Timeline  {} bars × {}   (move · space hit · v region · t close){region}",
+        "Timeline {transport} {}×{}  (enter hit · v region · space play · t close){region}",
         tl.bars(),
         spb
     );
@@ -817,11 +901,14 @@ fn draw_timeline(f: &mut Frame, area: Rect, app: &App) {
             }
             let hit = tl.step(lane, step);
             let cursor = lane == app.tl_lane && step == app.tl_step;
-            s.push(match (cursor, hit) {
-                (true, true) => '▣',
-                (true, false) => '▢',
-                (false, true) => '█',
-                (false, false) => '·',
+            let on_head = head == Some(step);
+            s.push(match (cursor, hit, on_head) {
+                (true, true, _) => '▣',
+                (true, false, _) => '▢',
+                (false, true, true) => '▶',
+                (false, true, false) => '█',
+                (false, false, true) => ':',
+                (false, false, false) => '·',
             });
         }
         lines.push(Line::from(s));
@@ -1240,6 +1327,10 @@ fn event_loop(terminal: &mut Term) -> io::Result<()> {
             app.place_decoded(decoded);
         }
         if let Some(p) = producer.as_mut() {
+            // Advance the arrangement over the same frames we're about to
+            // render, so transport stays in tempo with the audio.
+            let frames = p.slots() / (out_channels.max(1) as usize);
+            app.advance_playback(frames);
             pump(&mut app.mixer, p, out_channels, &mut scratch);
         }
         app.tick = app.tick.wrapping_add(1);
@@ -1452,6 +1543,22 @@ mod tests {
     }
 
     #[test]
+    fn transport_fires_pads_on_their_steps() {
+        let mut app = App::new();
+        app.mixer.set_sample_rate(1000);
+        app.mixer.set_master_bpm(Some(120.0)); // beat 500f, 16ths → 125f/step
+        app.mixer.assign_pad(0, vec![0.5; 64]);
+        app.timeline.set_step(0, 0, true);
+        assert_eq!(app.on_key(key(' ')), Action::Timeline); // play (fires step 0)
+        assert!(app.playing);
+        app.advance_playback(1); // step 0 is due immediately on start
+        assert_eq!(app.mixer.active_voices(), 1, "pad fired on its step");
+        // Stop.
+        app.on_key(key(' '));
+        assert!(!app.playing);
+    }
+
+    #[test]
     fn v_draws_a_loop_region_across_steps() {
         let mut app = App::new();
         app.on_key(key('t')); // open editor (lane 0, step 0)
@@ -1477,7 +1584,10 @@ mod tests {
         // Move the cursor and toggle a step.
         app.on_key(KeyEvent::new(KeyCode::Down, KeyModifiers::NONE)); // lane 1
         app.on_key(KeyEvent::new(KeyCode::Right, KeyModifiers::NONE)); // step 1
-        assert_eq!(app.on_key(key(' ')), Action::Timeline);
+        assert_eq!(
+            app.on_key(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE)),
+            Action::Timeline
+        );
         assert!(app.timeline.step(1, 1), "step placed at the cursor");
         assert_eq!(app.timeline.pads_at(1), vec![1]);
         // Render shows the grid; t closes it.

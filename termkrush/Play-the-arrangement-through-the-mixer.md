@@ -2,11 +2,12 @@
 title: Play the arrangement through the mixer
 type: feature
 created: "2026-06-07T11:10:22Z"
-modified: "2026-06-07T11:12:12Z"
+modified: "2026-06-07T12:40:44Z"
 author: Matt Reider
-status: unstarted
+status: started
 estimate: "5"
 project: termkrush
+started: "2026-06-07T12:40:44Z"
 ---
 
 ## Problem

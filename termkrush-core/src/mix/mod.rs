@@ -539,6 +539,11 @@ impl Mixer {
         self.sample_rate = rate.max(1);
     }
 
+    /// The output sample rate (frames per second).
+    pub fn sample_rate(&self) -> u32 {
+        self.sample_rate
+    }
+
     /// Render the next block: sum the active sampler voices into `out`
     /// (interleaved stereo), apply the master gain, and capture it when the
     /// recorder is armed. This is what the audio pump calls each block.

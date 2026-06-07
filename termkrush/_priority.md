@@ -108,3 +108,4 @@ Stack-rank order. Top is the highest priority. Edit by hand or via `am rank` / `
 - [Import a YouTube song as WAV to the track list](Import-a-YouTube-song-as-WAV-to-the-track-list.md)
 - [Launch quantization engine: master bar clock and next-bar triggers](Launch-quantization-engine-master-bar-clock-and-next-bar-triggers.md)
 - [Auto-BPM: first track sets master and every pad locks, no prompt](Auto-BPM-first-track-sets-master-and-every-pad-locks-no-prompt.md)
+- [Master timeline as a permanent top strip](Master-timeline-as-a-permanent-top-strip.md)

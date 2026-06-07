@@ -2,13 +2,14 @@
 title: Master timeline as a permanent top strip
 type: feature
 created: "2026-06-07T17:52:35Z"
-modified: "2026-06-07T18:11:01Z"
+modified: "2026-06-07T20:18:55Z"
 author: Matt Reider
-status: started
+status: delivered
 estimate: "8"
 epic: looper
 project: termkrush
 started: "2026-06-07T18:11:01Z"
+delivered: "2026-06-07T20:18:55Z"
 ---
 
 ## Goal

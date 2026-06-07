@@ -2,12 +2,14 @@
 title: Sync loop pads to the master tempo via varispeed
 type: feature
 created: "2026-06-07T11:10:20Z"
-modified: "2026-06-07T12:15:16Z"
+modified: "2026-06-07T12:17:11Z"
 author: Matt Reider
-status: started
+status: accepted
 estimate: "5"
 project: termkrush
 started: "2026-06-07T12:15:16Z"
+delivered: "2026-06-07T12:17:11Z"
+accepted: "2026-06-07T12:17:11Z"
 ---
 
 ## Problem

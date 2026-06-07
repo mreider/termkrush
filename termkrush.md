@@ -21,10 +21,9 @@
 |  | [Scratch pad controls and display](termkrush/Scratch-pad-controls-and-display.md) | 3 |  |
 |  | [Step grid editor with cursor and step toggle](termkrush/Step-grid-editor-with-cursor-and-step-toggle.md) | 5 |  |
 |  | [Step grid timeline data model](termkrush/Step-grid-timeline-data-model.md) | 3 |  |
-|  | [Sync loop pads to the master tempo via varispeed](termkrush/Sync-loop-pads-to-the-master-tempo-via-varispeed.md) | 5 |  |
 |  | [V0.1.0 krush](termkrush/V010-krush.md) |  |  |
 |  | [Whip and wiki scratch primitives](termkrush/Whip-and-wiki-scratch-primitives.md) | 5 |  |
-| Total Points | | 60 | |
+| Total Points | | 55 | |
 
 ### Started
 | User | Title | Points | Tags |
@@ -113,6 +112,7 @@
 |  | [Activate and deactivate pads with hard or soft fade](termkrush/Activate-and-deactivate-pads-with-hard-or-soft-fade.md) | 3 |  |
 |  | [Loop pad playback with precise timeline trim](termkrush/Loop-pad-playback-with-precise-timeline-trim.md) | 3 |  |
 |  | [Master tempo from the first loop](termkrush/Master-tempo-from-the-first-loop.md) | 2 |  |
+|  | [Sync loop pads to the master tempo via varispeed](termkrush/Sync-loop-pads-to-the-master-tempo-via-varispeed.md) | 5 |  |
 
 ### Rejected
 | User | Title | Points | Tags |

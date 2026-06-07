@@ -10,11 +10,6 @@
 
 use std::sync::Arc;
 
-use crate::deck::Deck;
-
-/// Number of decks the mixer drives (two-deck era).
-pub const DECKS: usize = 2;
-
 /// Number of sampler pads (clip triggers).
 pub const PADS: usize = 7;
 
@@ -141,47 +136,18 @@ impl SampleVoice {
 pub const MASTER_MIN: f32 = 0.0;
 pub const MASTER_MAX: f32 = 1.5;
 
-/// Crossfader position range: `-1.0` = deck A only, `+1.0` = deck B only,
-/// `0.0` = both decks at unity.
-pub const XFADE_MIN: f32 = -1.0;
-pub const XFADE_MAX: f32 = 1.0;
-
-/// Max change in applied master gain per frame, matching the deck's ramp
-/// so master moves de-zipper too.
+/// Max change in applied master gain per frame, so master moves de-zipper.
 const MASTER_RAMP_STEP: f32 = 1.0 / 512.0;
 
-/// Max change in the crossfader position per frame, so slides de-zipper.
-const XFADE_RAMP_STEP: f32 = 1.0 / 512.0;
-
-/// Linear crossfader law: position `pos` in `[-1, 1]` to (deck A, deck B)
-/// gains. `0` leaves both at unity; the off-side deck ramps to silence as
-/// the fader travels to the far end.
-fn xfade_gains(pos: f32) -> (f32, f32) {
-    (1.0 - pos.max(0.0), 1.0 + pos.min(0.0))
-}
-
-/// The master bus: owns the decks, crossfades A↔B, and applies master gain.
+/// The master bus: owns the sampler pads/voices and applies the master gain.
 #[derive(Debug)]
 pub struct Mixer {
-    /// The decks: index 0 is deck A, index 1 is deck B.
-    decks: [Deck; DECKS],
     /// Target master gain (what the dB readout shows).
     master: f32,
     /// Applied master gain, ramped toward `master` per frame.
     smoothed: f32,
-    /// Target crossfader position (`-1` A only … `+1` B only).
-    xfade: f32,
-    /// Applied crossfader position, ramped toward `xfade` per frame.
-    xfade_smoothed: f32,
-    /// Per-frame ramp magnitude for the blend. A hard cut sets the blend
-    /// directly; an auto-fade sets this so the ramp lands in N seconds.
-    xfade_step: f32,
-    /// Output sample rate, so timed fades convert seconds to frames.
+    /// Output sample rate, so beat-synced pad patterns convert seconds→frames.
     sample_rate: u32,
-    /// Reusable per-deck scratch for [`fill_mix`](Self::fill_mix), so the
-    /// mix path does not allocate every block.
-    scratch_a: Vec<f32>,
-    scratch_b: Vec<f32>,
     /// Clip assigned to each sampler pad (interleaved stereo), if any.
     pads: [Option<Arc<Vec<f32>>>; PADS],
     /// Manually-set BPM per pad (for later beat-sync / auto-bpm).
@@ -209,18 +175,12 @@ impl Default for Mixer {
 }
 
 impl Mixer {
-    /// A master bus at unity gain, crossfader centered, empty decks.
+    /// A master bus at unity gain with empty pads.
     pub fn new() -> Self {
         Mixer {
-            decks: [Deck::new(), Deck::new()],
             master: 1.0,
             smoothed: 1.0,
-            xfade: 0.0,
-            xfade_smoothed: 0.0,
-            xfade_step: XFADE_RAMP_STEP,
             sample_rate: 44_100,
-            scratch_a: Vec::new(),
-            scratch_b: Vec::new(),
             pads: Default::default(),
             pad_bpm: Default::default(),
             pad_trim: Default::default(),
@@ -419,88 +379,24 @@ impl Mixer {
         self.voices.len()
     }
 
-    /// Shared access to deck `i` (panics out of range — callers use `0..DECKS`).
-    pub fn deck(&self, i: usize) -> &Deck {
-        &self.decks[i]
-    }
-
-    /// Mutable access to deck `i`, for transport and loading.
-    pub fn deck_mut(&mut self, i: usize) -> &mut Deck {
-        &mut self.decks[i]
-    }
-
-    /// Set the output sample rate so timed fades know how many frames a
-    /// second is. Called once at startup by the event loop.
+    /// Set the output sample rate so beat-synced pad patterns know how many
+    /// frames a second is. Called once at startup by the event loop.
     pub fn set_sample_rate(&mut self, rate: u32) {
         self.sample_rate = rate.max(1);
     }
 
-    /// Instant hard-cut the deck blend to `target` (`-1` = A only, `+1` = B
-    /// only). No ramp — for cutting between sources on the beat.
-    pub fn cut_to(&mut self, target: f32) {
-        self.xfade = target.clamp(XFADE_MIN, XFADE_MAX);
-        self.xfade_smoothed = self.xfade;
-    }
-
-    /// Begin a hands-free fade to `target` over `secs` seconds. The blend
-    /// ramps per frame in `fill_mix`; pace is set so it lands in `secs`.
-    pub fn autofade_to(&mut self, target: f32, secs: f32) {
-        self.xfade = target.clamp(XFADE_MIN, XFADE_MAX);
-        let frames = (secs.max(0.001) * self.sample_rate as f32).max(1.0);
-        self.xfade_step = ((self.xfade - self.xfade_smoothed).abs() / frames).max(1e-7);
-    }
-
-    /// Current target crossfader position.
-    pub fn xfade(&self) -> f32 {
-        self.xfade
-    }
-
-    /// Currently-applied (ramped) blend — what you actually hear right now.
-    pub fn xfade_applied(&self) -> f32 {
-        self.xfade_smoothed
-    }
-
-    /// True while a fade is still travelling toward its target.
-    pub fn is_fading(&self) -> bool {
-        (self.xfade - self.xfade_smoothed).abs() > 1e-4
-    }
-
-    /// Mix the two decks through the crossfader into `out` (interleaved
-    /// stereo) and apply the master gain. Decks play independently; a
-    /// stopped/paused deck contributes silence. The crossfader position is
-    /// ramped per frame so slides don't click. This is what the pump calls.
+    /// Render the next block: sum the active sampler voices into `out`
+    /// (interleaved stereo), apply the master gain, and capture it when the
+    /// recorder is armed. This is what the audio pump calls each block.
     pub fn fill_mix(&mut self, out: &mut [f32]) {
-        self.scratch_a.resize(out.len(), 0.0);
-        self.scratch_b.resize(out.len(), 0.0);
-        self.decks[0].fill(&mut self.scratch_a);
-        self.decks[1].fill(&mut self.scratch_b);
-
-        let target = self.xfade;
-        let mut x = self.xfade_smoothed;
-        for i in 0..out.len() / 2 {
-            // Ramp the fader toward its target, then derive the A/B gains.
-            if x < target {
-                x = (x + self.xfade_step).min(target);
-            } else if x > target {
-                x = (x - self.xfade_step).max(target);
-            }
-            let (ga, gb) = xfade_gains(x);
-            let l = self.scratch_a[i * 2] * ga + self.scratch_b[i * 2] * gb;
-            let r = self.scratch_a[i * 2 + 1] * ga + self.scratch_b[i * 2 + 1] * gb;
-            out[i * 2] = l;
-            out[i * 2 + 1] = r;
+        for s in out.iter_mut() {
+            *s = 0.0;
         }
-        self.xfade_smoothed = x;
-
-        // Sum the sampler voices on top of the deck mix — they play over
-        // whatever the decks are doing, independent of the crossfader.
-        // Finished one-shots are dropped.
         self.mix_voices(out);
-
         self.apply(out);
 
         // Capture the final master output when armed (post-everything, so a
-        // resample includes the decks AND any playing pads — overdub).
+        // resample includes every playing pad — overdub).
         if self.recording {
             self.record_buf.extend_from_slice(out);
         }
@@ -561,167 +457,6 @@ impl Mixer {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::audio::DecodedAudio;
-
-    /// A constant-level stereo track for summing checks.
-    fn track(frames: usize, level: f32) -> DecodedAudio {
-        DecodedAudio {
-            samples: vec![level; frames * 2],
-            sample_rate: 44_100,
-            channels: 2,
-            source_sample_rate: 44_100,
-            source_channels: 2,
-            duration_secs: frames as f64 / 44_100.0,
-            title: None,
-            artist: None,
-        }
-    }
-
-    #[test]
-    fn fill_mix_sums_playing_decks() {
-        let mut m = Mixer::new();
-        m.deck_mut(0).load(track(1000, 0.2));
-        m.deck_mut(1).load(track(1000, 0.3));
-        m.deck_mut(0).play();
-        m.deck_mut(1).play();
-        let mut buf = vec![0.0f32; 64];
-        m.fill_mix(&mut buf);
-        // 0.2 + 0.3 = 0.5 at unity master.
-        assert!(
-            buf.iter().all(|&s| (s - 0.5).abs() < 1e-4),
-            "decks should sum"
-        );
-    }
-
-    #[test]
-    fn fill_mix_ignores_stopped_deck() {
-        let mut m = Mixer::new();
-        m.deck_mut(0).load(track(1000, 0.4));
-        m.deck_mut(1).load(track(1000, 0.4));
-        m.deck_mut(0).play(); // deck 1 stays loaded (silent)
-        let mut buf = vec![0.0f32; 64];
-        m.fill_mix(&mut buf);
-        assert!(
-            buf.iter().all(|&s| (s - 0.4).abs() < 1e-4),
-            "only the playing deck contributes"
-        );
-    }
-
-    #[test]
-    fn decks_are_independent() {
-        let mut m = Mixer::new();
-        m.deck_mut(0).load(track(1000, 0.5));
-        m.deck_mut(1).load(track(1000, 0.5));
-        m.deck_mut(0).play();
-        // Drain a block; deck 0 advances, deck 1 does not.
-        let mut buf = vec![0.0f32; 64];
-        m.fill_mix(&mut buf);
-        assert!(m.deck(0).position_frames() > 0);
-        assert_eq!(
-            m.deck(1).position_frames(),
-            0,
-            "loading/playing one leaves the other put"
-        );
-    }
-
-    #[test]
-    fn xfade_gains_follow_linear_law() {
-        assert_eq!(xfade_gains(0.0), (1.0, 1.0), "center: both unity");
-        assert_eq!(xfade_gains(1.0), (0.0, 1.0), "+1: B only");
-        assert_eq!(xfade_gains(-1.0), (1.0, 0.0), "-1: A only");
-        let (a, b) = xfade_gains(0.5);
-        assert!((a - 0.5).abs() < 1e-6 && (b - 1.0).abs() < 1e-6);
-        let (a, b) = xfade_gains(-0.5);
-        assert!((a - 1.0).abs() < 1e-6 && (b - 0.5).abs() < 1e-6);
-    }
-
-    #[test]
-    fn cut_clamps_and_is_instant() {
-        let mut m = Mixer::new();
-        m.cut_to(9.0);
-        assert_eq!(m.xfade(), XFADE_MAX);
-        assert_eq!(m.xfade_applied(), XFADE_MAX, "hard cut applies immediately");
-        assert!(!m.is_fading());
-        m.cut_to(-9.0);
-        assert_eq!(m.xfade(), XFADE_MIN);
-        assert_eq!(m.xfade_applied(), XFADE_MIN);
-    }
-
-    #[test]
-    fn autofade_ramps_over_the_requested_time() {
-        let mut m = Mixer::new();
-        m.set_sample_rate(10); // 10 frames per second → easy to count
-        m.autofade_to(1.0, 1.0); // travel 0→1 over 10 frames (step 0.1/frame)
-        assert!(m.is_fading());
-        m.fill_mix(&mut [0.0; 10]); // 5 frames → ~halfway
-        assert!((m.xfade_applied() - 0.5).abs() < 0.06 && m.is_fading());
-        m.fill_mix(&mut [0.0; 20]); // +10 frames → lands on target
-        assert!(!m.is_fading() && (m.xfade_applied() - 1.0).abs() < 1e-3);
-    }
-
-    #[test]
-    fn full_left_is_deck_a_only_full_right_is_deck_b_only() {
-        let mut m = Mixer::new();
-        m.deck_mut(0).load(track(20_000, 0.4)); // A
-        m.deck_mut(1).load(track(20_000, 0.6)); // B
-        m.deck_mut(0).play();
-        m.deck_mut(1).play();
-
-        // Hard cut full left: only A (0.4) is heard, immediately.
-        m.cut_to(-1.0);
-        let mut buf = vec![0.0f32; 8192];
-        m.fill_mix(&mut buf);
-        let last = buf[buf.len() - 1];
-        assert!(
-            (last - 0.4).abs() < 1e-3,
-            "full-left should be deck A only, got {last}"
-        );
-
-        // Hard cut full right: only B (0.6).
-        m.cut_to(1.0);
-        let mut buf = vec![0.0f32; 8192];
-        m.fill_mix(&mut buf);
-        let last = buf[buf.len() - 1];
-        assert!(
-            (last - 0.6).abs() < 1e-3,
-            "full-right should be deck B only, got {last}"
-        );
-    }
-
-    #[test]
-    fn center_plays_both_at_unity() {
-        let mut m = Mixer::new();
-        m.deck_mut(0).load(track(1000, 0.3));
-        m.deck_mut(1).load(track(1000, 0.3));
-        m.deck_mut(0).play();
-        m.deck_mut(1).play();
-        // Default fader is centered.
-        let mut buf = vec![0.0f32; 64];
-        m.fill_mix(&mut buf);
-        assert!(
-            buf.iter().all(|&s| (s - 0.6).abs() < 1e-4),
-            "center: A+B at unity"
-        );
-    }
-
-    #[test]
-    fn autofade_is_smoothed_no_zipper() {
-        let mut m = Mixer::new();
-        m.deck_mut(0).load(track(20_000, 0.4));
-        m.deck_mut(1).load(track(20_000, 0.6));
-        m.deck_mut(0).play();
-        m.deck_mut(1).play();
-        // Auto-fade to B over 2s; the first frame must not snap to B-only —
-        // it should still be ~both (A+B ≈ 1.0).
-        m.autofade_to(1.0, 2.0);
-        let mut buf = vec![0.0f32; 8];
-        m.fill_mix(&mut buf);
-        assert!(
-            (buf[0] - 1.0).abs() < 0.02,
-            "first frame should barely move from center (no zipper), got {}",
-            buf[0]
-        );
-    }
 
     #[test]
     fn master_clamps_to_range() {
@@ -817,10 +552,8 @@ mod tests {
     #[test]
     fn live_mix_recorder_captures_master_output() {
         let mut m = Mixer::new();
-        m.deck_mut(0).load(track(20_000, 0.5));
-        m.deck_mut(0).play();
-        m.assign_pad(0, vec![0.3; 64]);
-        m.trigger_pad(0); // a pad voice plays too → overdub into the capture
+        m.assign_pad(0, vec![0.3; 4096]);
+        m.trigger_pad(0); // a pad voice plays → captured into the recording
         m.arm_record();
         assert!(m.is_recording());
         let mut buf = vec![0.0f32; 256];
@@ -831,7 +564,7 @@ mod tests {
         assert_eq!(rec.len(), 512, "two 256-sample blocks captured");
         assert!(
             rec.iter().any(|&s| s.abs() > 0.01),
-            "captured the live deck + pad audio"
+            "captured the live pad audio"
         );
     }
 
@@ -1026,18 +759,17 @@ mod tests {
     }
 
     #[test]
-    fn pad_plays_over_a_playing_deck() {
+    fn two_pads_sum_at_unity() {
         let mut m = Mixer::new();
-        m.deck_mut(0).load(track(1000, 0.3));
-        m.deck_mut(0).play();
-        m.assign_pad(0, vec![0.4; 64]);
+        m.assign_pad(0, vec![0.3; 64]);
+        m.assign_pad(1, vec![0.4; 64]);
         m.trigger_pad(0);
+        m.trigger_pad(1);
         let mut buf = vec![0.0f32; 8];
         m.fill_mix(&mut buf);
-        // deck 0.3 (centered xfade, unity) + pad 0.4 = 0.7 at unity master.
         assert!(
             buf.iter().all(|&s| (s - 0.7).abs() < 1e-4),
-            "sample plays over the deck"
+            "pads sum on the master bus"
         );
     }
 }

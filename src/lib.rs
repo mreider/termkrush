@@ -6,11 +6,11 @@
 //! `tests/` can consume them:
 //!
 //! - [`audio`]   — output device, decoding, resampling, the realtime path.
-//! - [`deck`]    — a single playing track: transport, pitch, cue points.
-//! - [`mix`]     — combining decks: crossfader, sync, master bus, FX.
+//! - [`clip`]    — a captured clip: the unit the sampler pads play.
+//! - [`mix`]     — the master bus + sampler pads/voices.
 //! - [`tui`]     — the ratatui/crossterm interface and key handling.
-//! - [`library`] — local track storage, downloads, metadata.
-//! - [`config`]  — user configuration and key bindings.
+//! - [`library`] — local track list (filesystem).
+//! - [`config`]  — user configuration.
 
 // Scaffold stage: several module placeholders are not yet wired into the
 // binary, so they read as dead code to the compiler. This crate-level
@@ -22,7 +22,6 @@
 pub mod audio;
 pub mod clip;
 pub mod config;
-pub mod deck;
 pub mod library;
 pub mod logging;
 pub mod mix;

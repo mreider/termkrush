@@ -2,10 +2,11 @@
 title: Usability + integration test pass for the TUI flows
 type: chore
 created: "2026-06-07T15:42:34Z"
-modified: "2026-06-07T15:43:00Z"
+modified: "2026-06-07T16:09:57Z"
 author: Matt Reider
-status: unstarted
+status: started
 project: termkrush
+started: "2026-06-07T16:09:57Z"
 ---
 
 ## Why

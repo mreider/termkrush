@@ -2186,6 +2186,68 @@ mod tests {
         assert!(app.should_quit);
     }
 
+    /// Walks a realistic session end-to-end through the public key API and
+    /// asserts it neither panics nor goes silent — the cross-feature coverage
+    /// piecemeal unit tests miss (where "no pause / no unload / unusable trim"
+    /// would have shown up).
+    #[test]
+    fn full_session_flow_does_not_panic_and_renders() {
+        use std::fs;
+        let tmp = std::env::temp_dir().join(format!("tk-e2e-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&tmp);
+        fs::create_dir_all(&tmp).unwrap();
+        let mut app = App::new();
+        app.set_crate(Crate::scan(&tmp));
+        app.mixer.set_sample_rate(1000);
+        app.mixer.assign_pad(0, vec![0.5; 4000]);
+        app.mixer.assign_pad(1, vec![0.4; 4000]);
+        app.mixer.set_pad_bpm(0, Some(120.0));
+        app.mixer.set_master_bpm(Some(120.0));
+
+        // Pad 0 → loop; pad 1 → clip-edit (trim + cut) then back.
+        app.set_focus(Focus::Pad(0));
+        app.on_key(key(';'));
+        assert_eq!(app.mixer.pad_kind(0), PadKind::Loop);
+        app.set_focus(Focus::Pad(1));
+        app.on_key(key('e'));
+        for _ in 0..3 {
+            app.on_key(KeyEvent::new(KeyCode::Right, KeyModifiers::NONE));
+        }
+        app.on_key(key('o')); // set out
+        app.on_key(key('x')); // truncate
+        app.on_key(key('e')); // close
+        assert!(app.clip_edit.is_none());
+
+        // Arrange: place a hit, play, pause, render the mix.
+        app.on_key(key('t'));
+        app.on_key(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE)); // lane 0, step 0
+        app.on_key(key(' ')); // play
+        app.advance_playback(600);
+        app.on_key(key(' ')); // pause
+        let mix = app.render_arrangement();
+        assert!(
+            mix.iter().any(|&s| s.abs() > 0.01),
+            "arrangement renders audio"
+        );
+        app.on_key(key('t')); // close timeline
+
+        // Export pad 1 to mp3, then unload pad 0.
+        app.set_focus(Focus::Pad(1));
+        assert_eq!(app.on_key(key('E')), Action::Record);
+        assert!(
+            fs::read_dir(&tmp).unwrap().any(|e| e
+                .unwrap()
+                .path()
+                .extension()
+                .is_some_and(|x| x == "mp3")),
+            "mp3 exported"
+        );
+        app.set_focus(Focus::Pad(0));
+        app.on_key(key('u'));
+        assert!(!app.mixer.pad_loaded(0), "unloaded");
+        let _ = fs::remove_dir_all(&tmp);
+    }
+
     #[test]
     fn first_tempo_track_prompts_then_syncs_all() {
         use termkrush_core::audio::DecodedAudio;

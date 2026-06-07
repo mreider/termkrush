@@ -1001,10 +1001,13 @@ impl App {
         if let Some(b) = d.bpm {
             self.mixer.set_pad_bpm(i, Some(b));
             self.bpm_cache.insert(d.path.clone(), b);
-            // First track with a tempo: offer to make it the project master
-            // and sync everything to it.
-            if self.mixer.master_bpm().is_none() {
-                self.bpm_prompt = Some(b);
+            match self.mixer.master_bpm() {
+                // The first track silently defines the project tempo.
+                None => self.mixer.set_master_bpm(Some(b)),
+                // A later track at a different tempo: now there's a real
+                // decision — offer to sync everything to the master.
+                Some(m) if (b - m).abs() > 0.5 => self.bpm_prompt = Some(m),
+                _ => {}
             }
         }
         if i < PADS {
@@ -1014,15 +1017,12 @@ impl App {
     }
 
     /// Answer the "sync all tracks?" prompt. `yes` makes every loaded pad a
-    /// loop at the candidate tempo (all synced); either way it becomes master.
+    /// loop synced to the (already-set) master tempo.
     fn answer_bpm_prompt(&mut self, yes: bool) -> Action {
-        if let Some(b) = self.bpm_prompt.take() {
-            self.mixer.set_master_bpm(Some(b));
-            if yes {
-                for i in 0..PADS {
-                    if self.mixer.pad_loaded(i) {
-                        self.mixer.set_pad_kind(i, PadKind::Loop);
-                    }
+        if self.bpm_prompt.take().is_some() && yes {
+            for i in 0..PADS {
+                if self.mixer.pad_loaded(i) {
+                    self.mixer.set_pad_kind(i, PadKind::Loop);
                 }
             }
         }
@@ -2249,35 +2249,40 @@ mod tests {
     }
 
     #[test]
-    fn first_tempo_track_prompts_then_syncs_all() {
+    fn second_mismatching_track_prompts_to_sync() {
         use termkrush_core::audio::DecodedAudio;
+        fn load(app: &mut App, pad: usize, bpm: f32) {
+            app.place_decoded(Decoded {
+                target: LoadTarget::Pad(pad),
+                track: DecodedAudio {
+                    samples: vec![0.5; 64],
+                    sample_rate: 44_100,
+                    channels: 2,
+                    source_sample_rate: 44_100,
+                    source_channels: 2,
+                    duration_secs: 0.0,
+                    title: None,
+                    artist: None,
+                },
+                path: format!("/m/{pad}.mp3").into(),
+                bpm: Some(bpm),
+            });
+        }
         let mut app = App::new();
-        app.mixer.assign_pad(1, vec![0.5; 64]); // another loaded pad to sync
-        app.place_decoded(Decoded {
-            target: LoadTarget::Pad(0),
-            track: DecodedAudio {
-                samples: vec![0.5; 64],
-                sample_rate: 44_100,
-                channels: 2,
-                source_sample_rate: 44_100,
-                source_channels: 2,
-                duration_secs: 0.0,
-                title: None,
-                artist: None,
-            },
-            path: "/m/x.mp3".into(),
-            bpm: Some(126.0),
-        });
-        assert_eq!(app.bpm_prompt, Some(126.0), "first tempo track prompts");
-        assert!(app.mixer.master_bpm().is_none());
-        assert_eq!(app.on_key(key('y')), Action::Mark);
-        assert_eq!(app.mixer.master_bpm(), Some(126.0), "yes sets master");
-        assert_eq!(app.mixer.pad_kind(0), PadKind::Loop);
+        // First track silently sets the master tempo — no prompt.
+        load(&mut app, 0, 120.0);
+        assert_eq!(app.mixer.master_bpm(), Some(120.0));
+        assert!(app.bpm_prompt.is_none(), "pad 1 does not prompt");
+        // A second track at a different tempo prompts (to the master).
+        load(&mut app, 1, 140.0);
         assert_eq!(
-            app.mixer.pad_kind(1),
-            PadKind::Loop,
-            "all loaded pads synced"
+            app.bpm_prompt,
+            Some(120.0),
+            "prompt targets the master tempo"
         );
+        assert_eq!(app.on_key(key('y')), Action::Mark);
+        assert_eq!(app.mixer.pad_kind(0), PadKind::Loop);
+        assert_eq!(app.mixer.pad_kind(1), PadKind::Loop, "all synced as loops");
         assert!(app.bpm_prompt.is_none());
     }
 

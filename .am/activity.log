@@ -487,3 +487,7 @@
 2026-06-07T16:11:26Z	Matt Reider	accepted	termkrush/Usability-integration-test-pass-for-the-TUI-flows.md	
 2026-06-07T16:11:26Z	Matt Reider	accepted	termkrush/Usability-integration-test-pass-for-the-TUI-flows.md	
 2026-06-07T16:11:26Z	Matt Reider	accepted	termkrush/Usability-integration-test-pass-for-the-TUI-flows.md	Added cross-feature coverage so usability gaps don't ship silently. full_session_flow_does_not_panic_and_renders walks a realistic journey through on_key (assign→;loop→e clip-edit trim+cut→t arrange→enter hit→space play→advance→space pause→render_arrangement→E mp3 export→u unload) and asserts: no panic across mode transitions, the render is non-silent, an mp3 lands on disk, the pad unloads. docs/SMOKE.md is a manual checklist for the tty-only things headless tests can't reach (audio actually sounding, key feel, fades). Engine integration tests already exist. fmt + clippy --workspace + 8 suites green.
+2026-06-07T17:19:36Z	Matt Reider	bug	termkrush/Bug-BPM-sync-should-prompt-on-a-mismatching-load-not-on-pad-1.md	target=priority position=top
+2026-06-07T17:19:36Z	Matt Reider	bug	termkrush/Bug-space-is-not-a-global-play-pause-cannot-pause-the-mix.md	target=priority position=top
+2026-06-07T17:19:36Z	Matt Reider	bug	termkrush/Bug-clip-edit-needs-audition-preview-and-two-sided-snip.md	target=priority position=top
+2026-06-07T17:19:55Z	Matt Reider	started	termkrush/Bug-BPM-sync-should-prompt-on-a-mismatching-load-not-on-pad-1.md	

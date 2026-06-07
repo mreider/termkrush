@@ -12,9 +12,8 @@
 |  | [Import a YouTube song as WAV to the track list](termkrush/Import-a-YouTube-song-as-WAV-to-the-track-list.md) | 5 |  |
 |  | [Refresh GitHub Pages for the pad based model](termkrush/Refresh-GitHub-Pages-for-the-pad-based-model.md) | 2 |  |
 |  | [Reload a track onto a pad edit and save back](termkrush/Reload-a-track-onto-a-pad-edit-and-save-back.md) | 3 |  |
-|  | [Render the arrangement to a WAV in the track list](termkrush/Render-the-arrangement-to-a-WAV-in-the-track-list.md) | 5 |  |
 |  | [V0.1.0 krush](termkrush/V010-krush.md) |  |  |
-| Total Points | | 20 | |
+| Total Points | | 15 | |
 
 ### Started
 | User | Title | Points | Tags |
@@ -113,6 +112,7 @@
 |  | [Step grid editor with cursor and step toggle](termkrush/Step-grid-editor-with-cursor-and-step-toggle.md) | 5 |  |
 |  | [Loop regions on the grid repeat to fill](termkrush/Loop-regions-on-the-grid-repeat-to-fill.md) | 3 |  |
 |  | [Play the arrangement through the mixer](termkrush/Play-the-arrangement-through-the-mixer.md) | 5 |  |
+|  | [Render the arrangement to a WAV in the track list](termkrush/Render-the-arrangement-to-a-WAV-in-the-track-list.md) | 5 |  |
 
 ### Rejected
 | User | Title | Points | Tags |

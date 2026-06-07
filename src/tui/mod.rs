@@ -34,6 +34,7 @@ use termkrush_core::config::Config;
 use termkrush_core::library::Crate;
 use termkrush_core::mix::{Mixer, PadKind, PADS};
 use termkrush_core::scratch::ScratchUnit;
+use termkrush_core::timeline::Timeline;
 
 /// Per-keypress master-gain nudge (linear).
 const GAIN_NUDGE: f32 = 0.05;
@@ -68,6 +69,7 @@ pub enum Action {
     Mark,
     Record,
     MasterGain,
+    Timeline,
 }
 
 /// Which grid cell currently has focus.
@@ -109,6 +111,11 @@ pub struct App {
     move_mark: Option<PathBuf>,
     /// The scratch pad currently recording a phrase (taps append to it).
     phrase_rec: Option<usize>,
+    /// The arrangement grid, and whether its editor is showing.
+    timeline: Timeline,
+    tl_visible: bool,
+    tl_lane: usize,
+    tl_step: usize,
 }
 
 impl Default for App {
@@ -139,6 +146,50 @@ impl App {
             rename: None,
             move_mark: None,
             phrase_rec: None,
+            timeline: Timeline::default(),
+            tl_visible: false,
+            tl_lane: 0,
+            tl_step: 0,
+        }
+    }
+
+    /// Handle a key while the timeline editor is showing. Returns `None` to
+    /// fall through to the normal handler (for keys the editor ignores).
+    fn on_timeline_key(&mut self, key: KeyEvent) -> Option<Action> {
+        match key.code {
+            KeyCode::Char('t') | KeyCode::Esc => {
+                self.tl_visible = false;
+                Some(Action::Timeline)
+            }
+            KeyCode::Up => {
+                self.tl_lane = self.tl_lane.saturating_sub(1);
+                Some(Action::Timeline)
+            }
+            KeyCode::Down => {
+                self.tl_lane = (self.tl_lane + 1).min(PADS - 1);
+                Some(Action::Timeline)
+            }
+            KeyCode::Left => {
+                self.tl_step = self.tl_step.saturating_sub(1);
+                Some(Action::Timeline)
+            }
+            KeyCode::Right => {
+                self.tl_step = (self.tl_step + 1).min(self.timeline.total_steps() - 1);
+                Some(Action::Timeline)
+            }
+            KeyCode::Char(' ') | KeyCode::Enter => {
+                self.timeline.toggle(self.tl_lane, self.tl_step);
+                Some(Action::Timeline)
+            }
+            KeyCode::Char('?') => {
+                self.show_help = !self.show_help;
+                Some(Action::ToggleHelp)
+            }
+            KeyCode::Char('q') => {
+                self.confirm_quit = true;
+                Some(Action::ConfirmQuit)
+            }
+            _ => None,
         }
     }
 
@@ -570,6 +621,13 @@ impl App {
             };
         }
 
+        // Timeline editor captures navigation + toggling while it's open.
+        if self.tl_visible {
+            if let Some(a) = self.on_timeline_key(key) {
+                return a;
+            }
+        }
+
         let shift = key.modifiers.contains(KeyModifiers::SHIFT);
         match key.code {
             KeyCode::Esc | KeyCode::Char('q') => {
@@ -598,6 +656,10 @@ impl App {
             KeyCode::Char('z') => {
                 self.crate_collapsed = !self.crate_collapsed;
                 Action::ToggleCrate
+            }
+            KeyCode::Char('t') => {
+                self.tl_visible = true;
+                Action::Timeline
             }
             // Library file ops (on the highlighted track).
             KeyCode::Char('x') => self.arm_delete(),
@@ -691,6 +753,13 @@ pub fn draw(f: &mut Frame, app: &App) {
     let rows = Layout::vertical([Constraint::Length(2), Constraint::Min(0)]).split(f.area());
     draw_header(f, rows[0], app);
 
+    // The timeline editor takes over the body while it's open.
+    if app.tl_visible {
+        draw_timeline(f, rows[1], app);
+        return_help(f, app);
+        return;
+    }
+
     // Body: crate on the left (unless collapsed), pads + DJ on the right.
     let body = if app.crate_collapsed {
         let cols = Layout::horizontal([Constraint::Min(0)]).split(rows[1]);
@@ -703,6 +772,47 @@ pub fn draw(f: &mut Frame, app: &App) {
     draw_crate(f, body[0], app);
     draw_pads(f, body[1], app);
     return_help(f, app);
+}
+
+/// The tracker step-grid editor: one row per pad, columns are steps. The
+/// cursor cell is boxed; bar boundaries are spaced for legibility.
+fn draw_timeline(f: &mut Frame, area: Rect, app: &App) {
+    let tl = &app.timeline;
+    let spb = tl.steps_per_bar();
+    let title = format!(
+        "Timeline  {} bars × {}   (arrows move · space toggles · t close)",
+        tl.bars(),
+        spb
+    );
+    let block = cell_block(&title, true);
+    let mut lines: Vec<Line> = Vec::with_capacity(PADS);
+    for lane in 0..PADS {
+        let mut s = format!(
+            "{}P{} ",
+            if lane == app.tl_lane { "▸" } else { " " },
+            lane + 1
+        );
+        for step in 0..tl.total_steps() {
+            if step > 0 && step % spb == 0 {
+                s.push('|'); // bar boundary
+            }
+            let hit = tl.step(lane, step);
+            let cursor = lane == app.tl_lane && step == app.tl_step;
+            s.push(match (cursor, hit) {
+                (true, true) => '▣',
+                (true, false) => '▢',
+                (false, true) => '█',
+                (false, false) => '·',
+            });
+        }
+        lines.push(Line::from(s));
+    }
+    f.render_widget(
+        Paragraph::new(lines)
+            .block(block)
+            .style(Style::default().fg(GREEN)),
+        area,
+    );
 }
 
 fn return_help(f: &mut Frame, app: &App) {
@@ -932,7 +1042,7 @@ fn draw_help(f: &mut Frame, area: Rect) {
   trim    a/d in   w/s out   (shift = fine)
   tempo   , / .  pad bpm
   mix     1-7 trigger   r record   - / = pad vol   [ ] master   { } tempo
-  quit    esc (y/n)   C-c force   ? help";
+  arrange t timeline (arrows move, space toggles)\n  quit    esc (y/n)   C-c force   ? help";
     let block = Block::default()
         .borders(Borders::ALL)
         .border_style(Style::default().fg(AMBER))
@@ -1320,6 +1430,24 @@ mod tests {
         assert_eq!(app.mixer.pad_kind(0), PadKind::OneShot);
         assert_eq!(app.on_key(key(';')), Action::Mark);
         assert_eq!(app.mixer.pad_kind(0), PadKind::Loop);
+    }
+
+    #[test]
+    fn t_opens_timeline_and_cursor_toggles_a_step() {
+        let mut app = App::new();
+        assert!(!app.tl_visible);
+        assert_eq!(app.on_key(key('t')), Action::Timeline);
+        assert!(app.tl_visible);
+        // Move the cursor and toggle a step.
+        app.on_key(KeyEvent::new(KeyCode::Down, KeyModifiers::NONE)); // lane 1
+        app.on_key(KeyEvent::new(KeyCode::Right, KeyModifiers::NONE)); // step 1
+        assert_eq!(app.on_key(key(' ')), Action::Timeline);
+        assert!(app.timeline.step(1, 1), "step placed at the cursor");
+        assert_eq!(app.timeline.pads_at(1), vec![1]);
+        // Render shows the grid; t closes it.
+        assert!(buffer_text(&render(&app, 96, 24)).contains("Timeline"));
+        assert_eq!(app.on_key(key('t')), Action::Timeline);
+        assert!(!app.tl_visible);
     }
 
     #[test]

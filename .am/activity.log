@@ -437,3 +437,4 @@
 2026-06-07T12:34:42Z	Matt Reider	finished	termkrush/Step-grid-timeline-data-model.md	
 2026-06-07T12:34:43Z	Matt Reider	delivered	termkrush/Step-grid-timeline-data-model.md	
 2026-06-07T12:34:43Z	Matt Reider	accepted	termkrush/Step-grid-timeline-data-model.md	Timeline model (headless). New termkrush-core::timeline::Timeline = PADS lanes × (bars·steps_per_bar) steps; set_step/toggle/step/pads_at/clear, total_steps/bars/steps_per_bar, out-of-range safe; Default = 4 bars × 16 steps. Tests: place/toggle/query/clear + pads_at lane order; out-of-range no panic. Editor UI, loop regions, and playback build on this. fmt + clippy --workspace + 8 suites green.
+2026-06-07T12:34:47Z	Matt Reider	started	termkrush/Step-grid-editor-with-cursor-and-step-toggle.md	

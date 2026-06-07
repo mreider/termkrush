@@ -351,21 +351,6 @@ impl Mixer {
         }
     }
 
-    /// **Destructively** truncate pad `i`'s clip to end at `frame` — drop
-    /// everything past it and reset the trim to the new full length.
-    pub fn truncate_pad(&mut self, i: usize, frame: usize) {
-        if i >= PADS {
-            return;
-        }
-        if let Some(clip) = self.pads.get(i).and_then(|p| p.as_ref()) {
-            let total = clip.len() / 2;
-            let end = frame.clamp(1, total);
-            let truncated = clip[..end * 2].to_vec();
-            self.pads[i] = Some(Arc::new(truncated));
-            self.pad_trim[i] = (self.pad_trim[i].0.min(end - 1), end);
-        }
-    }
-
     /// Manually nudge pad `i`'s BPM by `delta` (from 120 if unset), clamped.
     pub fn nudge_pad_bpm(&mut self, i: usize, delta: f32) {
         if i < PADS {
@@ -418,13 +403,6 @@ impl Mixer {
     /// Pad `i`'s scratch pivot (onset frame), found on assign.
     pub fn pad_pivot(&self, i: usize) -> usize {
         self.pad_pivot.get(i).copied().unwrap_or(0)
-    }
-
-    /// Set pad `i`'s kind directly.
-    pub fn set_pad_kind(&mut self, i: usize, kind: PadKind) {
-        if i < PADS {
-            self.pad_kind[i] = kind;
-        }
     }
 
     /// Cycle pad `i`'s kind: OneShot → Loop → Scratch → …
@@ -1198,6 +1176,23 @@ mod tests {
         m.fill_mix(&mut vec![0.0; 800]);
         assert_eq!(m.pending_count(), 0, "released at the bar");
         assert_eq!(m.active_voices(), 1, "started on the bar line");
+    }
+
+    #[test]
+    fn quantize_grid_and_frames_to_next_bar() {
+        let mut m = Mixer::new();
+        m.set_sample_rate(1000);
+        m.set_master_bpm(Some(120.0)); // beat 500f, bar 2000f
+        assert_eq!(m.quantize_beats(), 4.0, "default grid is one bar");
+        assert_eq!(
+            m.frames_to_next_bar(),
+            0,
+            "at the start we're on a bar line"
+        );
+        m.fill_mix(&mut vec![0.0; 1200]); // advance 600 frames
+        assert_eq!(m.frames_to_next_bar(), 1400, "1400 frames to the 2000 line");
+        m.set_quantize_beats(1.0); // one-beat grid
+        assert_eq!(m.quantize_beats(), 1.0);
     }
 
     #[test]

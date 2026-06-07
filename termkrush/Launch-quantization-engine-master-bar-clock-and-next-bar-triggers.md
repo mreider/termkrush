@@ -2,12 +2,15 @@
 title: 'Launch quantization engine: master bar clock and next-bar triggers'
 type: feature
 created: "2026-06-07T17:52:35Z"
-modified: "2026-06-07T17:54:45Z"
+modified: "2026-06-07T17:57:29Z"
 author: Matt Reider
-status: started
+status: accepted
 estimate: "5"
 epic: looper
 started: "2026-06-07T17:54:45Z"
+delivered: "2026-06-07T17:57:29Z"
+accepted: "2026-06-07T17:57:29Z"
+project: termkrush
 ---
 
 ## Goal

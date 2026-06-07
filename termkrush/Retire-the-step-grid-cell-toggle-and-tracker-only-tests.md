@@ -6,6 +6,7 @@ modified: "2026-06-07T17:54:05Z"
 author: Matt Reider
 status: unstarted
 epic: looper
+project: termkrush
 ---
 
 ## Why

@@ -104,3 +104,4 @@ Stack-rank order. Top is the highest priority. Edit by hand or via `am rank` / `
 - [First release dry run with rc tag](First-release-dry-run-with-rc-tag.md)
 - [V0.1.0 krush](V010-krush.md)
 - [Import a YouTube song as WAV to the track list](Import-a-YouTube-song-as-WAV-to-the-track-list.md)
+- [Launch quantization engine: master bar clock and next-bar triggers](Launch-quantization-engine-master-bar-clock-and-next-bar-triggers.md)

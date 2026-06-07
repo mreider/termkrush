@@ -10,7 +10,12 @@
 |  | [Import a YouTube song as WAV to the track list](termkrush/Import-a-YouTube-song-as-WAV-to-the-track-list.md) | 5 |  |
 |  | [Refresh GitHub Pages for the pad based model](termkrush/Refresh-GitHub-Pages-for-the-pad-based-model.md) | 2 |  |
 |  | [V0.1.0 krush](termkrush/V010-krush.md) |  |  |
-| Total Points | | 7 | |
+|  | [Auto-BPM: first track sets master and every pad locks, no prompt](termkrush/Auto-BPM-first-track-sets-master-and-every-pad-locks-no-prompt.md) | 3 |  |
+|  | [Edit captured blocks on the timeline (move and trim)](termkrush/Edit-captured-blocks-on-the-timeline-move-and-trim.md) | 5 |  |
+|  | [Master timeline as a permanent top strip](termkrush/Master-timeline-as-a-permanent-top-strip.md) | 5 |  |
+|  | [Record pad performance into the timeline (launch-quantized capture)](termkrush/Record-pad-performance-into-the-timeline-launch-quantized-capture.md) | 8 |  |
+|  | [Retire the step-grid cell-toggle and tracker-only tests](termkrush/Retire-the-step-grid-cell-toggle-and-tracker-only-tests.md) |  |  |
+| Total Points | | 28 | |
 
 ### Started
 | User | Title | Points | Tags |
@@ -123,6 +128,7 @@
 |  | [Import MP3 files into the track list](termkrush/Import-MP3-files-into-the-track-list.md) | 2 |  |
 |  | [Export a track to MP3](termkrush/Export-a-track-to-MP3.md) | 3 |  |
 |  | [Usability + integration test pass for the TUI flows](termkrush/Usability-integration-test-pass-for-the-TUI-flows.md) |  |  |
+|  | [Launch quantization engine: master bar clock and next-bar triggers](termkrush/Launch-quantization-engine-master-bar-clock-and-next-bar-triggers.md) | 5 |  |
 
 ### Rejected
 | User | Title | Points | Tags |

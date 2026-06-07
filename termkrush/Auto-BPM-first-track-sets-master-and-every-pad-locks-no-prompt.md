@@ -7,6 +7,7 @@ author: Matt Reider
 status: unstarted
 estimate: "3"
 epic: looper
+project: termkrush
 ---
 
 ## Goal

@@ -1,6 +1,6 @@
 //! Integration tests for the symphonia mp3 decode pipeline.
 //!
-//! These exercise the real public API (`termkrush::audio::decode_file`)
+//! These exercise the real public API (`termkrush_core::audio::decode_file`)
 //! against the committed fixtures: the lossless WAV sine and the mp3
 //! encoded from it. The WAV decode is the reference the (lossy) mp3 is
 //! measured against, so the assertion is "mp3 ~= source" rather than a
@@ -9,7 +9,7 @@
 mod common;
 
 use common::fixtures;
-use termkrush::audio::decode_file;
+use termkrush_core::audio::decode_file;
 
 /// Root-mean-square level of an interleaved buffer, as linear amplitude.
 fn rms(samples: &[f32]) -> f64 {

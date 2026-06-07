@@ -7,7 +7,7 @@
 
 use proptest::prelude::*;
 
-use termkrush::mix::Mixer;
+use termkrush_core::mix::Mixer;
 
 /// A short interleaved-stereo clip of arbitrary samples.
 fn clip() -> impl Strategy<Value = Vec<f32>> {

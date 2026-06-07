@@ -1,0 +1,31 @@
+[package]
+name = "termkrush-core"
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.75"
+description = "TermKrush engine: decode/resample, BPM, the master bus + sampler pads — headless, no UI."
+authors = ["Matt Reider <mreider@gmail.com>"]
+license = "MIT"
+repository = "https://github.com/mreider/termkrush"
+
+[lib]
+name = "termkrush_core"
+path = "src/lib.rs"
+
+[dependencies]
+cpal = "0.15"
+# Lock-free ring buffer feeding the realtime output callback.
+rtrb = "0.3"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
+tracing-appender = "0.2"
+# Decoding: symphonia reads the container + codec; only the formats we use.
+symphonia = { version = "0.5", default-features = false, features = ["mp3", "wav", "pcm"] }
+# Resampling: convert a decoded track's sample rate to the output rate.
+rubato = "0.16"
+# Config file parsing (~/.config/termkrush/config.toml).
+toml = "0.8"
+
+[dev-dependencies]
+# Property-based testing for the DSP path (master bus, pad voices).
+proptest = "1"

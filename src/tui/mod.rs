@@ -28,11 +28,11 @@ use ratatui::crossterm::terminal::{
 use ratatui::prelude::*;
 use ratatui::widgets::{Block, Borders, Clear, List, ListItem, ListState, Paragraph, Wrap};
 
-use crate::audio::{AudioOutput, DecodedAudio};
-use crate::clip::Clip;
-use crate::config::Config;
-use crate::library::Crate;
-use crate::mix::{Mixer, Pattern, PADS};
+use termkrush_core::audio::{AudioOutput, DecodedAudio};
+use termkrush_core::clip::Clip;
+use termkrush_core::config::Config;
+use termkrush_core::library::Crate;
+use termkrush_core::mix::{Mixer, Pattern, PADS};
 
 /// Per-keypress master-gain nudge (linear).
 const GAIN_NUDGE: f32 = 0.05;
@@ -300,11 +300,6 @@ impl App {
             self.mixer.arm_record();
         }
         Action::Record
-    }
-
-    /// Clips recorded this session, oldest first.
-    pub fn recordings(&self) -> &[Clip] {
-        &self.recordings
     }
 
     fn is_loading(&self, pad: usize) -> bool {
@@ -714,11 +709,15 @@ fn spawn_decode(
     tx: Sender<Decoded>,
 ) {
     std::thread::spawn(
-        move || match crate::audio::decode_file(&path, target_rate) {
+        move || match termkrush_core::audio::decode_file(&path, target_rate) {
             Ok(track) => {
                 let bpm = cached_bpm.or_else(|| {
                     if detect {
-                        crate::audio::detect_bpm(&track.samples, track.channels, track.sample_rate)
+                        termkrush_core::audio::detect_bpm(
+                            &track.samples,
+                            track.channels,
+                            track.sample_rate,
+                        )
                     } else {
                         None
                     }
@@ -883,7 +882,7 @@ fn pump(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::library::CrateEntry;
+    use termkrush_core::library::CrateEntry;
 
     fn key(c: char) -> KeyEvent {
         KeyEvent::new(KeyCode::Char(c), KeyModifiers::NONE)
@@ -1005,7 +1004,7 @@ mod tests {
         app.mixer.fill_mix(&mut [0.0f32; 256]);
         assert_eq!(app.on_key(key('r')), Action::Record); // disarm → stash
         assert!(!app.mixer.is_recording());
-        assert_eq!(app.recordings().len(), 1);
+        assert_eq!(app.recordings.len(), 1);
     }
 
     #[test]

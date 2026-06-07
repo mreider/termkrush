@@ -3,7 +3,7 @@ name = "termkrush"
 version = "0.1.0"
 edition = "2021"
 rust-version = "1.75"
-description = "A keyboard-first terminal DJ application: beat-match, crossfade, scratch, and record from the comfort of your shell."
+description = "A keyboard-first terminal scratch/loop mixer: pads, auto-synced loops, old-school scratching, and a tracker timeline — from your shell."
 authors = ["Matt Reider <mreider@gmail.com>"]
 license = "MIT"
 repository = "https://github.com/mreider/termkrush"
@@ -16,38 +16,25 @@ categories = ["command-line-utilities", "multimedia::audio"]
 name = "termkrush"
 path = "src/main.rs"
 
+# The binary is a thin shell; all engine logic lives in the headless
+# `termkrush-core` crate, which carries no UI dependency.
 [dependencies]
-cpal = "0.15"
+termkrush-core = { path = "termkrush-core" }
 ratatui = "0.29"
 rtrb = "0.3"
 tracing = "0.1"
-tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
-tracing-appender = "0.2"
-# Decoding: symphonia reads the container + codec; only the formats we use
-# are enabled (mp3 for the decode story, wav+pcm for the synthesized fixtures).
-symphonia = { version = "0.5", default-features = false, features = ["mp3", "wav", "pcm"] }
-# Resampling: convert a decoded track's sample rate to the output rate.
-rubato = "0.16"
-# Config file parsing (~/.config/termkrush/config.toml).
-toml = "0.8"
-# Gamepad input (Xbox is the preferred controller). The mapping layer is
-# unit-tested via a normalized PadInput enum; gilrs only feeds it at runtime.
-gilrs = "0.11"
 
-[dev-dependencies]
-# Property-based testing for the DSP path (gain, crossfade, mix).
-proptest = "1"
+[workspace]
+members = ["termkrush-core"]
 
 [profile.release]
 opt-level = 3
 lto = true
-strip = true       # strip symbols at link time — cross-target safe, no external strip
+strip = true
 
-# Optimize *dependencies* even in dev/test builds, while keeping our own
-# crate unoptimized (fast incremental builds, debuggable). Without this the
-# audio DSP deps (symphonia mp3 decode, rubato/rustfft resampling) run
-# ~50-80x slower in debug, turning a track load into a ~60s "stuck" decode.
-# Our code stays at the profile's default opt-level so iteration is quick.
+# Optimize *dependencies* even in dev/test builds (the audio DSP deps run
+# ~50-80x slower otherwise), while our own crates stay unoptimized for fast
+# incremental builds. Applies across the workspace.
 [profile.dev.package."*"]
 opt-level = 3
 

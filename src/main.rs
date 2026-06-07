@@ -1,11 +1,13 @@
-//! TermKrush — a keyboard-first terminal DJ application.
+//! TermKrush — a keyboard-first terminal scratch/loop mixer.
 //!
-//! This is the binary entry point: a thin shell over the `termkrush`
-//! library crate (`src/lib.rs`), where the audio engine, decks, mixer, and
-//! TUI live. `main` wires up logging, handles a couple of smoke-test flags
-//! (`--test-tone`, `--panic-test`), and otherwise hands off to the TUI.
+//! This is the binary entry point: a thin shell over the headless
+//! `termkrush-core` engine. `main` wires up logging, handles a couple of
+//! smoke-test flags (`--test-tone`, `--panic-test`), and otherwise hands off
+//! to the TUI (the only UI-dependent code, which lives here in the binary).
 
-use termkrush::{audio, logging, tui};
+mod tui;
+
+use termkrush_core::{audio, logging};
 
 /// The human-facing version string, e.g. "TermKrush v0.1.0".
 fn version_banner() -> String {

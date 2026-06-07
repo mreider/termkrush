@@ -2,11 +2,12 @@
 title: Master tempo from the first loop
 type: feature
 created: "2026-06-07T11:10:19Z"
-modified: "2026-06-07T11:11:38Z"
+modified: "2026-06-07T12:13:11Z"
 author: Matt Reider
-status: unstarted
+status: started
 estimate: "2"
 project: termkrush
+started: "2026-06-07T12:13:11Z"
 ---
 
 ## Problem

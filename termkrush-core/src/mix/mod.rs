@@ -96,6 +96,9 @@ pub struct Mixer {
     pad_env_target: [f32; PADS],
     /// Per-pad fade step per block (1.0 = hard cut, small = soft fade).
     pad_fade: [f32; PADS],
+    /// The project's master tempo (BPM), seeded by the first loop. Loops sync
+    /// to this; `None` until a loop with a known tempo plays.
+    master_bpm: Option<f32>,
     /// Currently-sounding one-shot voices, summed onto the master bus.
     voices: Vec<SampleVoice>,
     /// When armed, `fill_mix` appends each block of master output here so the
@@ -125,6 +128,7 @@ impl Mixer {
             pad_env: [1.0; PADS],
             pad_env_target: [1.0; PADS],
             pad_fade: [1.0; PADS],
+            master_bpm: None,
             voices: Vec::new(),
             recording: false,
             record_buf: Vec::new(),
@@ -278,6 +282,14 @@ impl Mixer {
         // A loop pad holds a single voice — re-triggering restarts it.
         if looping {
             self.voices.retain(|v| v.pad != i);
+            // The first loop with a known tempo seeds the master tempo.
+            if self.master_bpm.is_none() {
+                if let Some(bpm) = self.pad_bpm(i) {
+                    if bpm > 0.0 {
+                        self.master_bpm = Some(bpm);
+                    }
+                }
+            }
         }
         if let Some(Some(clip)) = self.pads.get(i) {
             let total = clip.len() / 2;
@@ -295,6 +307,16 @@ impl Mixer {
             self.pad_env[i] = 1.0;
             self.pad_env_target[i] = 1.0;
         }
+    }
+
+    /// The project's master tempo (BPM), if set (seeded by the first loop).
+    pub fn master_bpm(&self) -> Option<f32> {
+        self.master_bpm
+    }
+
+    /// Override the master tempo (e.g. a manual set). Loops re-sync to it.
+    pub fn set_master_bpm(&mut self, bpm: Option<f32>) {
+        self.master_bpm = bpm.filter(|&b| b > 0.0);
     }
 
     /// Number of sampler voices currently sounding.
@@ -537,6 +559,29 @@ mod tests {
         assert_eq!(m.pad_trim(0).0, 99);
         m.nudge_pad_out(0, 1000); // can't pass the clip end
         assert_eq!(m.pad_trim(0).1, 100);
+    }
+
+    #[test]
+    fn first_loop_seeds_the_master_tempo() {
+        let mut m = Mixer::new();
+        assert_eq!(m.master_bpm(), None);
+        // A one-shot with a tempo does NOT seed it.
+        m.assign_pad(0, vec![0.5; 64]);
+        m.set_pad_bpm(0, Some(100.0));
+        m.trigger_pad(0);
+        assert_eq!(m.master_bpm(), None, "only loops seed the master");
+        // First loop does.
+        m.assign_pad(1, vec![0.5; 64]);
+        m.set_pad_bpm(1, Some(126.0));
+        m.cycle_pad_kind(1); // → Loop
+        m.trigger_pad(1);
+        assert_eq!(m.master_bpm(), Some(126.0));
+        // A later loop at a different tempo does not change it.
+        m.assign_pad(2, vec![0.5; 64]);
+        m.set_pad_bpm(2, Some(140.0));
+        m.cycle_pad_kind(2);
+        m.trigger_pad(2);
+        assert_eq!(m.master_bpm(), Some(126.0), "first loop wins");
     }
 
     #[test]

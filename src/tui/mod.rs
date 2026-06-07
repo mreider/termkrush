@@ -622,7 +622,7 @@ pub fn draw(f: &mut Frame, app: &App) {
     f.render_widget(Block::default().style(Style::default().bg(BG)), f.area());
 
     let rows = Layout::vertical([Constraint::Length(2), Constraint::Min(0)]).split(f.area());
-    draw_header(f, rows[0]);
+    draw_header(f, rows[0], app);
 
     // Body: crate on the left (unless collapsed), pads + DJ on the right.
     let body = if app.crate_collapsed {
@@ -649,10 +649,14 @@ fn return_help(f: &mut Frame, app: &App) {
     }
 }
 
-fn draw_header(f: &mut Frame, area: Rect) {
+fn draw_header(f: &mut Frame, area: Rect, app: &App) {
+    let tempo = match app.mixer.master_bpm() {
+        Some(b) => format!("TermKrush   ♩ {b:.0} BPM"),
+        None => "TermKrush".to_string(),
+    };
     let lines = vec![
         Line::from(Span::styled(
-            "TermKrush",
+            tempo,
             Style::default().fg(AMBER).add_modifier(Modifier::BOLD),
         ))
         .centered(),

@@ -405,3 +405,4 @@
 2026-06-07T12:12:38Z	Matt Reider	finished	termkrush/Loop-pad-playback-with-precise-timeline-trim.md	
 2026-06-07T12:12:39Z	Matt Reider	delivered	termkrush/Loop-pad-playback-with-precise-timeline-trim.md	
 2026-06-07T12:12:39Z	Matt Reider	accepted	termkrush/Loop-pad-playback-with-precise-timeline-trim.md	Loop pad playback. SampleVoice.looping wraps t at len_f and never finishes on its own; deactivating the pad (env→0) drops it. trigger_pad derives looping from PadKind::Loop and clears existing voices on that pad first, so a loop pad holds exactly one voice (re-trigger restarts cleanly). Loops play the non-destructive trimmed region [in,out). One-shots unchanged. Test: loop sounds past its 100-frame length (500 frames in, still 1 voice), no stacking on re-trigger, stops when deactivated. fmt + clippy --workspace + 8 suites green.
+2026-06-07T12:13:11Z	Matt Reider	started	termkrush/Master-tempo-from-the-first-loop.md	

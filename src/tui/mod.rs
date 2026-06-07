@@ -323,6 +323,17 @@ impl App {
         }
     }
 
+    /// `f` — toggle the focused pad's activation (soft fade in/out).
+    fn toggle_active(&mut self) -> Action {
+        if let Focus::Pad(i) = self.focus {
+            let on = self.mixer.pad_active(i);
+            self.mixer.set_pad_active(i, !on, true);
+            Action::Mark
+        } else {
+            Action::None
+        }
+    }
+
     /// `-` / `=` — nudge the focused pad's volume.
     fn pad_volume(&mut self, up: bool) -> Action {
         if let Focus::Pad(i) = self.focus {
@@ -537,6 +548,7 @@ impl App {
             KeyCode::Char('m') => self.mark_move(),
             KeyCode::Char('p') => self.paste_move(),
             KeyCode::Char(';') => self.cycle_kind(),
+            KeyCode::Char('f') => self.toggle_active(),
             KeyCode::Char('-') => self.pad_volume(false),
             KeyCode::Char('=') => self.pad_volume(true),
             KeyCode::Enter if self.focus == Focus::Crate && self.selected_is_dir() => {
@@ -755,10 +767,18 @@ fn draw_pad_cell(f: &mut Frame, area: Rect, app: &App, pad: usize) {
         PadKind::Loop => "loop",
         PadKind::Scratch => "scratch",
     };
+    let off = if app.mixer.pad_active(pad) {
+        ""
+    } else {
+        " off"
+    };
     let line1 = if app.is_loading(pad) {
         "  ⏳ loading…".to_string()
     } else {
-        format!("  {glyph} {kind} {:.0}%", app.mixer.pad_gain(pad) * 100.0)
+        format!(
+            "  {glyph} {kind} {:.0}%{off}",
+            app.mixer.pad_gain(pad) * 100.0
+        )
     };
     let line2 = if focused && loaded {
         let (inp, out) = app.mixer.pad_trim(pad);
@@ -822,7 +842,7 @@ fn draw_help(f: &mut Frame, area: Rect) {
   focus   tab / arrows   (library · pads · DJ)
   library / filter   ↑↓ browse   enter open/load→pad   z hide
   files   x delete   R rename   m mark / p move-here
-  pad     j play   l load   k assign-rec   ; kind
+  pad     j play   f on/off   l load   k assign-rec   ; kind
   trim    a/d in   w/s out   (shift = fine)
   tempo   , / .  pad bpm
   mix     1-7 trigger   r record   - / = pad vol   [ ] master
@@ -1174,6 +1194,16 @@ mod tests {
         app.on_key(key('/'));
         app.on_key(key('b')); // matches "Beta"
         assert_eq!(app.selected_path(), Some("/m/b.mp3".into()));
+    }
+
+    #[test]
+    fn f_toggles_pad_activation() {
+        let mut app = App::new();
+        app.mixer.assign_pad(0, vec![0.5; 64]);
+        app.set_focus(Focus::Pad(0));
+        assert!(app.mixer.pad_active(0));
+        assert_eq!(app.on_key(key('f')), Action::Mark);
+        assert!(!app.mixer.pad_active(0));
     }
 
     #[test]

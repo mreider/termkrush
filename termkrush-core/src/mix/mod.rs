@@ -57,6 +57,10 @@ pub const MASTER_MAX: f32 = 1.5;
 /// Max change in applied master gain per frame, so master moves de-zipper.
 const MASTER_RAMP_STEP: f32 = 1.0 / 512.0;
 
+/// Per-block step for a *soft* pad activation fade (~0.3 s at 256-frame
+/// blocks). A hard cut uses a step of 1.0 (one block).
+const ENV_SOFT_STEP: f32 = 0.02;
+
 /// The master bus: owns the sampler pads/voices and applies the master gain.
 #[derive(Debug)]
 pub struct Mixer {
@@ -77,6 +81,11 @@ pub struct Mixer {
     pad_kind: [PadKind; PADS],
     /// Per-pad linear volume (1.0 = unity), applied live to its voices.
     pad_gain: [f32; PADS],
+    /// Per-pad activation envelope (0 = off … 1 = on), ramped toward target.
+    pad_env: [f32; PADS],
+    pad_env_target: [f32; PADS],
+    /// Per-pad fade step per block (1.0 = hard cut, small = soft fade).
+    pad_fade: [f32; PADS],
     /// Currently-sounding one-shot voices, summed onto the master bus.
     voices: Vec<SampleVoice>,
     /// When armed, `fill_mix` appends each block of master output here so the
@@ -103,6 +112,9 @@ impl Mixer {
             pad_trim: Default::default(),
             pad_kind: Default::default(),
             pad_gain: [1.0; PADS],
+            pad_env: [1.0; PADS],
+            pad_env_target: [1.0; PADS],
+            pad_fade: [1.0; PADS],
             voices: Vec::new(),
             recording: false,
             record_buf: Vec::new(),
@@ -225,6 +237,28 @@ impl Mixer {
         }
     }
 
+    /// Activate or deactivate pad `i`. `soft` ramps the envelope (a fade);
+    /// hard snaps. A pad that fades fully off has its voices dropped.
+    pub fn set_pad_active(&mut self, i: usize, active: bool, soft: bool) {
+        if i < PADS {
+            self.pad_env_target[i] = if active { 1.0 } else { 0.0 };
+            self.pad_fade[i] = if soft { ENV_SOFT_STEP } else { 1.0 };
+            if !soft {
+                self.pad_env[i] = self.pad_env_target[i];
+            }
+        }
+    }
+
+    /// Whether pad `i` is active (its envelope target is on).
+    pub fn pad_active(&self, i: usize) -> bool {
+        self.pad_env_target.get(i).copied().unwrap_or(1.0) > 0.5
+    }
+
+    /// Pad `i`'s current envelope level (0..1).
+    pub fn pad_env(&self, i: usize) -> f32 {
+        self.pad_env.get(i).copied().unwrap_or(1.0)
+    }
+
     /// Trigger pad `i`: start a new one-shot voice over its trimmed clip,
     /// summed onto the master bus. No-op if the pad is empty. Overlapping
     /// triggers stack (polyphonic).
@@ -241,6 +275,9 @@ impl Mixer {
                 len_f,
                 t: 0,
             });
+            // Triggering implies the pad is on (hard) so a one-shot always sounds.
+            self.pad_env[i] = 1.0;
+            self.pad_env_target[i] = 1.0;
         }
     }
 
@@ -262,6 +299,15 @@ impl Mixer {
         for s in out.iter_mut() {
             *s = 0.0;
         }
+        // Step each pad's activation envelope toward its target (per block).
+        for i in 0..PADS {
+            let t = self.pad_env_target[i];
+            if self.pad_env[i] < t {
+                self.pad_env[i] = (self.pad_env[i] + self.pad_fade[i]).min(t);
+            } else if self.pad_env[i] > t {
+                self.pad_env[i] = (self.pad_env[i] - self.pad_fade[i]).max(t);
+            }
+        }
         self.mix_voices(out);
         self.apply(out);
 
@@ -277,8 +323,15 @@ impl Mixer {
     fn mix_voices(&mut self, out: &mut [f32]) {
         let frames = out.len() / 2;
         let gains = self.pad_gain;
+        let envs = self.pad_env;
+        let targets = self.pad_env_target;
         self.voices.retain_mut(|v| {
-            let g = gains.get(v.pad).copied().unwrap_or(1.0);
+            let env = envs.get(v.pad).copied().unwrap_or(1.0);
+            // Drop voices on a pad that has fully faded off.
+            if env <= 0.0 && targets.get(v.pad).copied().unwrap_or(1.0) <= 0.0 {
+                return false;
+            }
+            let g = gains.get(v.pad).copied().unwrap_or(1.0) * env;
             for i in 0..frames {
                 match v.next_frame() {
                     Some((l, r)) => {
@@ -468,6 +521,30 @@ mod tests {
         assert_eq!(m.pad_trim(0).0, 99);
         m.nudge_pad_out(0, 1000); // can't pass the clip end
         assert_eq!(m.pad_trim(0).1, 100);
+    }
+
+    #[test]
+    fn hard_deactivate_silences_and_drops_voices() {
+        let mut m = Mixer::new();
+        m.assign_pad(0, vec![0.5; 40_000]);
+        m.trigger_pad(0);
+        m.set_pad_active(0, false, false); // hard off
+        let mut buf = vec![0.0f32; 8];
+        m.fill_mix(&mut buf);
+        assert!(buf.iter().all(|&s| s == 0.0), "hard-off is silent");
+        assert_eq!(m.active_voices(), 0, "voices dropped when off");
+    }
+
+    #[test]
+    fn soft_deactivate_fades_gradually() {
+        let mut m = Mixer::new();
+        m.assign_pad(0, vec![0.5; 400_000]);
+        m.trigger_pad(0);
+        m.set_pad_active(0, false, true); // soft off
+        m.fill_mix(&mut [0.0f32; 8]); // one block → env steps down, not to 0
+        assert!(m.pad_env(0) > 0.0 && m.pad_env(0) < 1.0, "fading");
+        assert_eq!(m.active_voices(), 1, "still sounding during the fade");
+        assert!(!m.pad_active(0));
     }
 
     #[test]

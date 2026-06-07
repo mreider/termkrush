@@ -397,3 +397,4 @@
 2026-06-07T12:06:58Z	Matt Reider	finished	termkrush/Per-pad-volume.md	
 2026-06-07T12:06:58Z	Matt Reider	delivered	termkrush/Per-pad-volume.md	
 2026-06-07T12:06:58Z	Matt Reider	accepted	termkrush/Per-pad-volume.md	Per-pad volume. Each SampleVoice carries its owning pad index; mix_voices multiplies by pad_gain[pad] live (so sustained voices follow volume changes). pad_gain array defaults to unity; nudge_pad_gain clamps 0..1.5. TUI: -/= nudge the focused pad's gain; pad cell shows kind + vol%. Test: gain 0.5 halves a flat clip's output (mix); -/= adjust on the focused pad (tui). fmt + clippy --workspace + 8 suites green.
+2026-06-07T12:07:03Z	Matt Reider	started	termkrush/Activate-and-deactivate-pads-with-hard-or-soft-fade.md	

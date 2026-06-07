@@ -27,6 +27,7 @@ pub enum PadKind {
 #[derive(Debug)]
 struct SampleVoice {
     clip: Arc<Vec<f32>>, // interleaved stereo at the mix rate
+    pad: usize,          // owning pad, for live per-pad volume
     in_f: usize,         // trim in-point (frames)
     len_f: usize,        // playable length in frames
     t: usize,            // frames elapsed
@@ -74,6 +75,8 @@ pub struct Mixer {
     pad_trim: [(usize, usize); PADS],
     /// Per-pad kind (one-shot / loop / scratch).
     pad_kind: [PadKind; PADS],
+    /// Per-pad linear volume (1.0 = unity), applied live to its voices.
+    pad_gain: [f32; PADS],
     /// Currently-sounding one-shot voices, summed onto the master bus.
     voices: Vec<SampleVoice>,
     /// When armed, `fill_mix` appends each block of master output here so the
@@ -99,6 +102,7 @@ impl Mixer {
             pad_bpm: Default::default(),
             pad_trim: Default::default(),
             pad_kind: Default::default(),
+            pad_gain: [1.0; PADS],
             voices: Vec::new(),
             recording: false,
             record_buf: Vec::new(),
@@ -209,6 +213,18 @@ impl Mixer {
         }
     }
 
+    /// Pad `i`'s linear volume (1.0 = unity).
+    pub fn pad_gain(&self, i: usize) -> f32 {
+        self.pad_gain.get(i).copied().unwrap_or(1.0)
+    }
+
+    /// Nudge pad `i`'s volume by `delta`, clamped to `[0.0, 1.5]`.
+    pub fn nudge_pad_gain(&mut self, i: usize, delta: f32) {
+        if i < PADS {
+            self.pad_gain[i] = (self.pad_gain[i] + delta).clamp(0.0, 1.5);
+        }
+    }
+
     /// Trigger pad `i`: start a new one-shot voice over its trimmed clip,
     /// summed onto the master bus. No-op if the pad is empty. Overlapping
     /// triggers stack (polyphonic).
@@ -220,6 +236,7 @@ impl Mixer {
             let len_f = out.min(total).saturating_sub(in_f);
             self.voices.push(SampleVoice {
                 clip: Arc::clone(clip),
+                pad: i,
                 in_f,
                 len_f,
                 t: 0,
@@ -259,12 +276,14 @@ impl Mixer {
     /// advancing its position; voices that reach their end are removed.
     fn mix_voices(&mut self, out: &mut [f32]) {
         let frames = out.len() / 2;
+        let gains = self.pad_gain;
         self.voices.retain_mut(|v| {
+            let g = gains.get(v.pad).copied().unwrap_or(1.0);
             for i in 0..frames {
                 match v.next_frame() {
                     Some((l, r)) => {
-                        out[i * 2] += l;
-                        out[i * 2 + 1] += r;
+                        out[i * 2] += l * g;
+                        out[i * 2 + 1] += r * g;
                     }
                     None => break,
                 }
@@ -449,6 +468,21 @@ mod tests {
         assert_eq!(m.pad_trim(0).0, 99);
         m.nudge_pad_out(0, 1000); // can't pass the clip end
         assert_eq!(m.pad_trim(0).1, 100);
+    }
+
+    #[test]
+    fn per_pad_volume_scales_that_pad() {
+        let mut m = Mixer::new();
+        m.assign_pad(0, vec![1.0; 64]);
+        assert_eq!(m.pad_gain(0), 1.0);
+        m.nudge_pad_gain(0, -0.5); // → 0.5
+        m.trigger_pad(0);
+        let mut buf = vec![0.0f32; 8];
+        m.fill_mix(&mut buf);
+        assert!(
+            buf.iter().all(|&s| (s - 0.5).abs() < 1e-4),
+            "pad gain applied"
+        );
     }
 
     #[test]

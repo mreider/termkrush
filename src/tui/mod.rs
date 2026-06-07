@@ -323,6 +323,16 @@ impl App {
         }
     }
 
+    /// `-` / `=` — nudge the focused pad's volume.
+    fn pad_volume(&mut self, up: bool) -> Action {
+        if let Focus::Pad(i) = self.focus {
+            self.mixer.nudge_pad_gain(i, if up { 0.05 } else { -0.05 });
+            Action::Mark
+        } else {
+            Action::None
+        }
+    }
+
     fn trim_in(&mut self, forward: bool, fine: bool) -> Action {
         if let Focus::Pad(i) = self.focus {
             let step = if fine { TRIM_FINE } else { TRIM_COARSE };
@@ -527,6 +537,8 @@ impl App {
             KeyCode::Char('m') => self.mark_move(),
             KeyCode::Char('p') => self.paste_move(),
             KeyCode::Char(';') => self.cycle_kind(),
+            KeyCode::Char('-') => self.pad_volume(false),
+            KeyCode::Char('=') => self.pad_volume(true),
             KeyCode::Enter if self.focus == Focus::Crate && self.selected_is_dir() => {
                 self.enter_selected()
             }
@@ -746,7 +758,7 @@ fn draw_pad_cell(f: &mut Frame, area: Rect, app: &App, pad: usize) {
     let line1 = if app.is_loading(pad) {
         "  ⏳ loading…".to_string()
     } else {
-        format!("  {glyph} {kind}")
+        format!("  {glyph} {kind} {:.0}%", app.mixer.pad_gain(pad) * 100.0)
     };
     let line2 = if focused && loaded {
         let (inp, out) = app.mixer.pad_trim(pad);
@@ -813,7 +825,7 @@ fn draw_help(f: &mut Frame, area: Rect) {
   pad     j play   l load   k assign-rec   ; kind
   trim    a/d in   w/s out   (shift = fine)
   tempo   , / .  pad bpm
-  mix     1-7 trigger   r record mix   [ ] master
+  mix     1-7 trigger   r record   - / = pad vol   [ ] master
   quit    esc (y/n)   C-c force   ? help";
     let block = Block::default()
         .borders(Borders::ALL)
@@ -1162,6 +1174,16 @@ mod tests {
         app.on_key(key('/'));
         app.on_key(key('b')); // matches "Beta"
         assert_eq!(app.selected_path(), Some("/m/b.mp3".into()));
+    }
+
+    #[test]
+    fn minus_equals_adjust_focused_pad_volume() {
+        let mut app = App::new();
+        app.set_focus(Focus::Pad(0));
+        assert_eq!(app.mixer.pad_gain(0), 1.0);
+        assert_eq!(app.on_key(key('-')), Action::Mark);
+        assert!(app.mixer.pad_gain(0) < 1.0);
+        assert_eq!(app.on_key(key('=')), Action::Mark);
     }
 
     #[test]

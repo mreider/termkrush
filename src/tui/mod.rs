@@ -573,6 +573,14 @@ impl App {
 
             // Globals.
             KeyCode::Char('r') => self.toggle_record(),
+            KeyCode::Char('}') => {
+                self.mixer.nudge_global_speed(0.02);
+                Action::MasterGain
+            }
+            KeyCode::Char('{') => {
+                self.mixer.nudge_global_speed(-0.02);
+                Action::MasterGain
+            }
             KeyCode::Char('[') => {
                 self.mixer.nudge_master(-GAIN_NUDGE);
                 Action::MasterGain
@@ -650,7 +658,7 @@ fn return_help(f: &mut Frame, app: &App) {
 }
 
 fn draw_header(f: &mut Frame, area: Rect, app: &App) {
-    let tempo = match app.mixer.master_bpm() {
+    let tempo = match app.mixer.effective_bpm() {
         Some(b) => format!("TermKrush   ♩ {b:.0} BPM"),
         None => "TermKrush".to_string(),
     };
@@ -849,7 +857,7 @@ fn draw_help(f: &mut Frame, area: Rect) {
   pad     j play   f on/off   l load   k assign-rec   ; kind
   trim    a/d in   w/s out   (shift = fine)
   tempo   , / .  pad bpm
-  mix     1-7 trigger   r record   - / = pad vol   [ ] master
+  mix     1-7 trigger   r record   - / = pad vol   [ ] master   { } tempo
   quit    esc (y/n)   C-c force   ? help";
     let block = Block::default()
         .borders(Borders::ALL)
@@ -1198,6 +1206,17 @@ mod tests {
         app.on_key(key('/'));
         app.on_key(key('b')); // matches "Beta"
         assert_eq!(app.selected_path(), Some("/m/b.mp3".into()));
+    }
+
+    #[test]
+    fn brace_keys_nudge_global_tempo() {
+        let mut app = App::new();
+        app.mixer.set_master_bpm(Some(120.0));
+        assert_eq!(app.mixer.global_speed(), 1.0);
+        assert_eq!(app.on_key(key('}')), Action::MasterGain);
+        assert!(app.mixer.global_speed() > 1.0);
+        assert!(app.mixer.effective_bpm().unwrap() > 120.0);
+        assert_eq!(app.on_key(key('{')), Action::MasterGain);
     }
 
     #[test]

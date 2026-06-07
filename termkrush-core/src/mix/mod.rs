@@ -114,6 +114,8 @@ pub struct Mixer {
     /// The project's master tempo (BPM), seeded by the first loop. Loops sync
     /// to this; `None` until a loop with a known tempo plays.
     master_bpm: Option<f32>,
+    /// Global speed multiplier — scales every loop together (1.0 = nominal).
+    global_speed: f32,
     /// Currently-sounding one-shot voices, summed onto the master bus.
     voices: Vec<SampleVoice>,
     /// When armed, `fill_mix` appends each block of master output here so the
@@ -144,6 +146,7 @@ impl Mixer {
             pad_env_target: [1.0; PADS],
             pad_fade: [1.0; PADS],
             master_bpm: None,
+            global_speed: 1.0,
             voices: Vec::new(),
             recording: false,
             record_buf: Vec::new(),
@@ -331,19 +334,47 @@ impl Mixer {
     /// master tempo varispeeds by `pad_bpm / master_bpm` so its beats lock to
     /// the grid (pitch rides); everything else plays native (1.0).
     fn pad_play_speed(&self, i: usize, looping: bool) -> f64 {
-        if looping {
-            if let (Some(pad), Some(master)) = (self.pad_bpm(i), self.master_bpm) {
-                if pad > 0.0 && master > 0.0 {
-                    return (pad / master) as f64;
-                }
-            }
+        if !looping {
+            return 1.0;
         }
-        1.0
+        let gs = self.global_speed as f64;
+        match (self.pad_bpm(i), self.master_bpm) {
+            (Some(pad), Some(master)) if pad > 0.0 && master > 0.0 => (pad / master) as f64 * gs,
+            _ => gs, // looping but un-tempo'd: still follows the global speed
+        }
     }
 
     /// The project's master tempo (BPM), if set (seeded by the first loop).
     pub fn master_bpm(&self) -> Option<f32> {
         self.master_bpm
+    }
+
+    /// The effective master tempo after the global speed multiplier.
+    pub fn effective_bpm(&self) -> Option<f32> {
+        self.master_bpm.map(|b| b * self.global_speed)
+    }
+
+    /// The global speed multiplier (1.0 = nominal).
+    pub fn global_speed(&self) -> f32 {
+        self.global_speed
+    }
+
+    /// Set the global speed (clamped 0.25–4.0); every playing loop re-syncs.
+    pub fn set_global_speed(&mut self, s: f32) {
+        self.global_speed = s.clamp(0.25, 4.0);
+        let speeds: Vec<f64> = self
+            .voices
+            .iter()
+            .map(|v| self.pad_play_speed(v.pad, v.looping))
+            .collect();
+        for (v, sp) in self.voices.iter_mut().zip(speeds) {
+            v.speed = sp;
+        }
+    }
+
+    /// Nudge the global speed by `delta`.
+    pub fn nudge_global_speed(&mut self, delta: f32) {
+        self.set_global_speed(self.global_speed + delta);
     }
 
     /// Override the master tempo (e.g. a manual set). Loops re-sync to it.
@@ -591,6 +622,26 @@ mod tests {
         assert_eq!(m.pad_trim(0).0, 99);
         m.nudge_pad_out(0, 1000); // can't pass the clip end
         assert_eq!(m.pad_trim(0).1, 100);
+    }
+
+    #[test]
+    fn global_speed_resyncs_all_playing_loops() {
+        let mut m = Mixer::new();
+        m.assign_pad(0, vec![0.5; 200]);
+        m.set_pad_bpm(0, Some(120.0));
+        m.cycle_pad_kind(0); // → Loop, seeds master 120 → speed 1.0
+        m.trigger_pad(0);
+        m.assign_pad(1, vec![0.5; 200]);
+        m.set_pad_bpm(1, Some(120.0));
+        m.cycle_pad_kind(1);
+        m.trigger_pad(1);
+        // Double the global speed → both loops re-sync to 2x; effective 240.
+        m.set_global_speed(2.0);
+        assert_eq!(m.global_speed(), 2.0);
+        assert_eq!(m.effective_bpm(), Some(240.0));
+        let mut buf = vec![0.0f32; 16];
+        m.fill_mix(&mut buf);
+        assert!(buf.iter().all(|s| s.is_finite()));
     }
 
     #[test]

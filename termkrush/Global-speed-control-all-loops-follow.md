@@ -2,11 +2,12 @@
 title: Global speed control all loops follow
 type: feature
 created: "2026-06-07T11:10:20Z"
-modified: "2026-06-07T11:11:38Z"
+modified: "2026-06-07T12:17:15Z"
 author: Matt Reider
-status: unstarted
+status: started
 estimate: "3"
 project: termkrush
+started: "2026-06-07T12:17:15Z"
 ---
 
 ## Problem

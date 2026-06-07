@@ -2,12 +2,14 @@
 title: Drop the crossfader deck blend sync cue and old patterns
 type: feature
 created: "2026-06-07T11:10:18Z"
-modified: "2026-06-07T11:40:58Z"
+modified: "2026-06-07T11:46:17Z"
 author: Matt Reider
-status: started
+status: accepted
 estimate: "3"
 project: termkrush
 started: "2026-06-07T11:40:58Z"
+delivered: "2026-06-07T11:46:17Z"
+accepted: "2026-06-07T11:46:17Z"
 ---
 
 ## Problem

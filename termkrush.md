@@ -10,7 +10,6 @@
 |  | [Activate and deactivate pads with hard or soft fade](termkrush/Activate-and-deactivate-pads-with-hard-or-soft-fade.md) | 3 |  |
 |  | [Build a scratch phrase by tapping whips and wikis](termkrush/Build-a-scratch-phrase-by-tapping-whips-and-wikis.md) | 5 |  |
 |  | [Detect the scratch pivot onset in a short clip](termkrush/Detect-the-scratch-pivot-onset-in-a-short-clip.md) | 3 |  |
-|  | [Drop the crossfader deck blend sync cue and old patterns](termkrush/Drop-the-crossfader-deck-blend-sync-cue-and-old-patterns.md) | 3 |  |
 |  | [Export a track to MP3](termkrush/Export-a-track-to-MP3.md) | 3 |  |
 |  | [Global speed control all loops follow](termkrush/Global-speed-control-all-loops-follow.md) | 3 |  |
 |  | [Import MP3 files into the track list](termkrush/Import-MP3-files-into-the-track-list.md) | 2 |  |
@@ -33,7 +32,7 @@
 |  | [Track list with folders](termkrush/Track-list-with-folders.md) | 3 |  |
 |  | [V0.1.0 krush](termkrush/V010-krush.md) |  |  |
 |  | [Whip and wiki scratch primitives](termkrush/Whip-and-wiki-scratch-primitives.md) | 5 |  |
-| Total Points | | 82 | |
+| Total Points | | 79 | |
 
 ### Started
 | User | Title | Points | Tags |
@@ -113,6 +112,7 @@
 |  | [Auto-fade transition over N bars](termkrush/Auto-fade-transition-over-N-bars.md) | 3 | [mix](.am/tags/mix.md) [sync](.am/tags/sync.md) |
 |  | [Polish README for first release](termkrush/Polish-README-for-first-release.md) |  | [docs](.am/tags/docs.md) [release](.am/tags/release.md) |
 |  | [Split a headless core from the TUI shell and remove decks](termkrush/Split-a-headless-core-from-the-TUI-shell-and-remove-decks.md) | 5 |  |
+|  | [Drop the crossfader deck blend sync cue and old patterns](termkrush/Drop-the-crossfader-deck-blend-sync-cue-and-old-patterns.md) | 3 |  |
 
 ### Rejected
 | User | Title | Points | Tags |

@@ -14,7 +14,6 @@
 |  | [Import MP3 files into the track list](termkrush/Import-MP3-files-into-the-track-list.md) | 2 |  |
 |  | [Import a YouTube song as WAV to the track list](termkrush/Import-a-YouTube-song-as-WAV-to-the-track-list.md) | 5 |  |
 |  | [Loop regions on the grid repeat to fill](termkrush/Loop-regions-on-the-grid-repeat-to-fill.md) | 3 |  |
-|  | [Master tempo from the first loop](termkrush/Master-tempo-from-the-first-loop.md) | 2 |  |
 |  | [Play the arrangement through the mixer](termkrush/Play-the-arrangement-through-the-mixer.md) | 5 |  |
 |  | [Refresh GitHub Pages for the pad based model](termkrush/Refresh-GitHub-Pages-for-the-pad-based-model.md) | 2 |  |
 |  | [Reload a track onto a pad edit and save back](termkrush/Reload-a-track-onto-a-pad-edit-and-save-back.md) | 3 |  |
@@ -25,7 +24,7 @@
 |  | [Sync loop pads to the master tempo via varispeed](termkrush/Sync-loop-pads-to-the-master-tempo-via-varispeed.md) | 5 |  |
 |  | [V0.1.0 krush](termkrush/V010-krush.md) |  |  |
 |  | [Whip and wiki scratch primitives](termkrush/Whip-and-wiki-scratch-primitives.md) | 5 |  |
-| Total Points | | 62 | |
+| Total Points | | 60 | |
 
 ### Started
 | User | Title | Points | Tags |
@@ -113,6 +112,7 @@
 |  | [Per-pad volume](termkrush/Per-pad-volume.md) | 2 |  |
 |  | [Activate and deactivate pads with hard or soft fade](termkrush/Activate-and-deactivate-pads-with-hard-or-soft-fade.md) | 3 |  |
 |  | [Loop pad playback with precise timeline trim](termkrush/Loop-pad-playback-with-precise-timeline-trim.md) | 3 |  |
+|  | [Master tempo from the first loop](termkrush/Master-tempo-from-the-first-loop.md) | 2 |  |
 
 ### Rejected
 | User | Title | Points | Tags |

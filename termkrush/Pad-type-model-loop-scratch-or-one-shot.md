@@ -2,12 +2,14 @@
 title: Pad type model loop scratch or one-shot
 type: feature
 created: "2026-06-07T11:10:19Z"
-modified: "2026-06-07T12:01:01Z"
+modified: "2026-06-07T12:03:32Z"
 author: Matt Reider
-status: started
+status: accepted
 estimate: "3"
 project: termkrush
 started: "2026-06-07T12:01:01Z"
+delivered: "2026-06-07T12:03:32Z"
+accepted: "2026-06-07T12:03:32Z"
 ---
 
 ## Problem

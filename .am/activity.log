@@ -467,3 +467,13 @@
 2026-06-07T13:00:35Z	Matt Reider	finished	termkrush/Export-a-track-to-MP3.md	
 2026-06-07T13:00:35Z	Matt Reider	delivered	termkrush/Export-a-track-to-MP3.md	
 2026-06-07T13:00:36Z	Matt Reider	accepted	termkrush/Export-a-track-to-MP3.md	MP3 export via a bundled LAME (mp3lame-encoder vendors + compiles libmp3lame; single binary, no runtime tool — C compiler needed only at build, per your call; WASM would encode browser-side later). audio::mp3::export_mp3 (192 kbps, interleaved f32→i16). TUI: E exports the focused pad's trimmed clip to {stem}-N.mp3 in the current folder + refreshes. CI Linux jobs gained build-essential/autoconf/automake/libtool/nasm for the libmp3lame build. Test: export a 1s sine → decode_file round-trips to ~1s. fmt + clippy --workspace + green.
+2026-06-07T15:42:33Z	Matt Reider	bug	termkrush/Bug-first-track-sets-master-BPM-and-prompts-to-sync-all.md	target=priority position=top
+2026-06-07T15:42:33Z	Matt Reider	bug	termkrush/Bug-trim-and-timeline-editing-are-not-usable.md	target=priority position=top
+2026-06-07T15:42:33Z	Matt Reider	bug	termkrush/Bug-no-play-pause-space-should-pause-and-resume.md	target=priority position=top
+2026-06-07T15:42:33Z	Matt Reider	bug	termkrush/Bug-cannot-unload-a-clip-from-a-pad.md	target=priority position=top
+2026-06-07T15:42:34Z	Matt Reider	chore	termkrush/Usability-integration-test-pass-for-the-TUI-flows.md	target=priority position=top
+2026-06-07T15:44:42Z	Matt Reider	started	termkrush/Bug-cannot-unload-a-clip-from-a-pad.md	
+2026-06-07T15:48:01Z	Matt Reider	bug	termkrush/Bug-mp3-export-segfaults-in-libmp3lame.md	target=priority position=top
+2026-06-07T15:50:47Z	Matt Reider	finished	termkrush/Bug-cannot-unload-a-clip-from-a-pad.md	Added a pad unload. mix.unload_pad(i) resets all per-pad state (clip/trim/kind/bpm/pivot/phrase/gain/env) + drops its voices; tui u unloads the focused pad and clears pad_source. Test: load+loop a pad, u → empty + kind back to OneShot + source cleared. green.
+2026-06-07T15:50:47Z	Matt Reider	started	termkrush/Bug-mp3-export-segfaults-in-libmp3lame.md	
+2026-06-07T15:50:48Z	Matt Reider	finished	termkrush/Bug-mp3-export-segfaults-in-libmp3lame.md	export_mp3 segfaulted in libmp3lame: the encode_to_vec/flush_to_vec helpers under-sized the output buffer for interleaved PCM, so LAME wrote past the end (SIGSEGV that killed the entire core test binary — which is why the suite looked green-ish before; the crash aborted the process). Fixed with the documented explicit path: reserve max_required_buffer_size(pcm.len())+headroom, encode + flush into spare_capacity_mut, set_len from the returned counts. Round-trip test (export 1s sine → decode ~1s) now passes; full workspace suite green, no segfault.

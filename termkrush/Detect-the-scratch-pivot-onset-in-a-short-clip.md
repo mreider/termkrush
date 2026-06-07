@@ -2,12 +2,14 @@
 title: Detect the scratch pivot onset in a short clip
 type: feature
 created: "2026-06-07T11:10:20Z"
-modified: "2026-06-07T12:20:04Z"
+modified: "2026-06-07T12:22:49Z"
 author: Matt Reider
-status: started
+status: accepted
 estimate: "3"
 project: termkrush
 started: "2026-06-07T12:20:04Z"
+delivered: "2026-06-07T12:22:48Z"
+accepted: "2026-06-07T12:22:49Z"
 ---
 
 ## Problem

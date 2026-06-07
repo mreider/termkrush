@@ -504,6 +504,21 @@ impl Mixer {
         self.pad_phrase.get(i).map(|p| p.len()).unwrap_or(0)
     }
 
+    /// Pad `i`'s phrase as direction glyphs: `>` wiki (forward), `<` whip (back).
+    pub fn pad_phrase_glyphs(&self, i: usize) -> String {
+        self.pad_phrase
+            .get(i)
+            .map(|p| {
+                p.iter()
+                    .map(|u| match u {
+                        crate::scratch::ScratchUnit::Wiki => '>',
+                        crate::scratch::ScratchUnit::Whip => '<',
+                    })
+                    .collect()
+            })
+            .unwrap_or_default()
+    }
+
     /// Play pad `i`'s recorded phrase (or a single wiki if it's empty).
     pub fn play_phrase(&mut self, i: usize) {
         let (slice, pivot) = (self.scratch_slice(), self.pad_pivot(i));

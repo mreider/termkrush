@@ -343,6 +343,17 @@ impl App {
         self.assign_recording()
     }
 
+    /// `C` — clear the focused scratch pad's phrase.
+    fn clear_phrase(&mut self) -> Action {
+        if let Focus::Pad(i) = self.focus {
+            if self.mixer.pad_kind(i) == PadKind::Scratch {
+                self.mixer.clear_phrase(i);
+                return Action::Mark;
+            }
+        }
+        Action::None
+    }
+
     /// `P` — toggle phrase-record on the focused scratch pad (clears on arm).
     fn toggle_phrase_rec(&mut self) -> Action {
         if let Focus::Pad(i) = self.focus {
@@ -596,6 +607,7 @@ impl App {
             KeyCode::Char(';') => self.cycle_kind(),
             KeyCode::Char('f') => self.toggle_active(),
             KeyCode::Char('P') => self.toggle_phrase_rec(),
+            KeyCode::Char('C') => self.clear_phrase(),
             KeyCode::Char('-') => self.pad_volume(false),
             KeyCode::Char('=') => self.pad_volume(true),
             KeyCode::Enter if self.focus == Focus::Crate && self.selected_is_dir() => {
@@ -845,11 +857,15 @@ fn draw_pad_cell(f: &mut Frame, area: Rect, app: &App, pad: usize) {
         } else {
             ""
         };
-        format!(
-            "  piv{} ph{}{rec}",
-            app.mixer.pad_pivot(pad),
-            app.mixer.pad_phrase_len(pad)
-        )
+        let ph = app.mixer.pad_phrase_glyphs(pad);
+        let shown: String = {
+            let mut c: Vec<char> = ph.chars().collect();
+            if c.len() > 8 {
+                c = c.split_off(c.len() - 8);
+            }
+            c.into_iter().collect()
+        };
+        format!("  {shown}{rec}")
     } else if focused && loaded {
         let (inp, out) = app.mixer.pad_trim(pad);
         let len = app.mixer.pad_clip_frames(pad);
@@ -912,7 +928,7 @@ fn draw_help(f: &mut Frame, area: Rect) {
   focus   tab / arrows   (library · pads · DJ)
   library / filter   ↑↓ browse   enter open/load→pad   z hide
   files   x delete   R rename   m mark / p move-here
-  pad     j play/wiki   k whip/assign-rec   P rec-phrase   f on/off   l load   ; kind
+  pad     j play/wiki   k whip   P rec-phrase   C clear   f on/off   l load   ; kind
   trim    a/d in   w/s out   (shift = fine)
   tempo   , / .  pad bpm
   mix     1-7 trigger   r record   - / = pad vol   [ ] master   { } tempo
@@ -1304,6 +1320,20 @@ mod tests {
         assert_eq!(app.mixer.pad_kind(0), PadKind::OneShot);
         assert_eq!(app.on_key(key(';')), Action::Mark);
         assert_eq!(app.mixer.pad_kind(0), PadKind::Loop);
+    }
+
+    #[test]
+    fn capital_c_clears_the_scratch_phrase() {
+        let mut app = App::new();
+        app.mixer.assign_pad(0, vec![0.5; 8000]);
+        app.set_focus(Focus::Pad(0));
+        app.mixer.cycle_pad_kind(0);
+        app.mixer.cycle_pad_kind(0); // → Scratch
+        app.mixer.push_phrase(0, ScratchUnit::Wiki);
+        app.mixer.push_phrase(0, ScratchUnit::Whip);
+        assert_eq!(app.mixer.pad_phrase_glyphs(0), "><");
+        assert_eq!(app.on_key(key('C')), Action::Mark);
+        assert_eq!(app.mixer.pad_phrase_len(0), 0);
     }
 
     #[test]

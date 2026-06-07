@@ -2,11 +2,12 @@
 title: Scratch pad controls and display
 type: feature
 created: "2026-06-07T11:10:21Z"
-modified: "2026-06-07T11:12:11Z"
+modified: "2026-06-07T12:30:51Z"
 author: Matt Reider
-status: unstarted
+status: started
 estimate: "3"
 project: termkrush
+started: "2026-06-07T12:30:51Z"
 ---
 
 ## Problem

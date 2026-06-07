@@ -825,6 +825,7 @@ impl App {
             KeyCode::Char('C') => self.clear_phrase(),
             KeyCode::Char('S') => self.save_pad_new(),
             KeyCode::Char('O') => self.save_pad_over(),
+            KeyCode::Char('E') => self.export_pad_mp3(),
             KeyCode::Char('-') => self.pad_volume(false),
             KeyCode::Char('=') => self.pad_volume(true),
             KeyCode::Enter if self.focus == Focus::Crate && self.selected_is_dir() => {
@@ -912,6 +913,35 @@ impl App {
             n += 1;
         };
         let _ = termkrush_core::audio::write_wav(&path, &region, self.mixer.sample_rate(), 2);
+        self.crate_lib.refresh();
+        Action::Record
+    }
+
+    /// `E` — export the focused pad's trimmed clip to an MP3 in the library.
+    fn export_pad_mp3(&mut self) -> Action {
+        let Focus::Pad(i) = self.focus else {
+            return Action::None;
+        };
+        let region = self.mixer.pad_clip_region(i);
+        if region.is_empty() {
+            return Action::None;
+        }
+        let stem = self.pad_source[i]
+            .as_ref()
+            .and_then(|p| p.file_stem())
+            .and_then(|s| s.to_str())
+            .unwrap_or("pad")
+            .to_string();
+        let dir = self.crate_lib.cwd().to_path_buf();
+        let mut n = 1;
+        let path = loop {
+            let p = dir.join(format!("{stem}-{n}.mp3"));
+            if !p.exists() {
+                break p;
+            }
+            n += 1;
+        };
+        let _ = termkrush_core::audio::export_mp3(&path, &region, self.mixer.sample_rate(), 2);
         self.crate_lib.refresh();
         Action::Record
     }
@@ -1250,7 +1280,7 @@ fn draw_help(f: &mut Frame, area: Rect) {
   focus   tab / arrows   (library · pads · DJ)
   library / filter   ↑↓ browse   enter open/load→pad   z hide
   files   x delete   R rename   m mark / p move-here
-  pad     j play/wiki   k whip   f on/off   l load   ; kind   S save   O over
+  pad     j play/wiki   k whip   f on/off   l load   ; kind   S save   O over   E mp3
   trim    a/d in   w/s out   (shift = fine)
   tempo   , / .  pad bpm
   mix     1-7 trigger   r record   - / = pad vol   [ ] master   { } tempo

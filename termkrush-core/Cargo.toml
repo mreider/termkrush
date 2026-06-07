@@ -25,6 +25,7 @@ symphonia = { version = "0.5", default-features = false, features = ["mp3", "wav
 rubato = "0.16"
 # Config file parsing (~/.config/termkrush/config.toml).
 toml = "0.8"
+mp3lame-encoder = "0.2.4"
 
 [dev-dependencies]
 # Property-based testing for the DSP path (master bus, pad voices).

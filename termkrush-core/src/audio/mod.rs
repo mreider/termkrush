@@ -7,12 +7,14 @@
 
 pub mod bpm;
 pub mod decode;
+pub mod mp3;
 pub mod output;
 pub mod stretch;
 pub mod wav;
 
 pub use bpm::detect_bpm;
 pub use decode::{decode_file, DecodeError, DecodedAudio};
+pub use mp3::export_mp3;
 pub use output::{AudioOutput, SineSink, Sink};
 pub use stretch::time_stretch;
 pub use wav::write_wav;

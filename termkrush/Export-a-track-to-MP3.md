@@ -2,11 +2,12 @@
 title: Export a track to MP3
 type: feature
 created: "2026-06-07T11:10:22Z"
-modified: "2026-06-07T12:51:30Z"
+modified: "2026-06-07T12:56:35Z"
 author: Matt Reider
-status: unstarted
+status: started
 estimate: "3"
 project: termkrush
+started: "2026-06-07T12:56:35Z"
 ---
 
 ## Problem

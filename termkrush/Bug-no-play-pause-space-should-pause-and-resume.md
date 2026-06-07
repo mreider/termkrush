@@ -2,10 +2,11 @@
 title: 'Bug: no play/pause - space should pause and resume'
 type: bug
 created: "2026-06-07T15:42:33Z"
-modified: "2026-06-07T15:43:00Z"
+modified: "2026-06-07T15:51:13Z"
 author: Matt Reider
-status: unstarted
+status: started
 project: termkrush
+started: "2026-06-07T15:51:13Z"
 ---
 
 ## Symptom

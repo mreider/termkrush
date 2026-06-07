@@ -168,15 +168,35 @@ impl App {
         }
     }
 
-    /// Play/stop the arrangement transport. Starting resets to the top.
+    /// Play / **pause** the transport. Pausing stops sound and holds the
+    /// position; resuming continues from there (not the top).
     fn toggle_transport(&mut self) -> Action {
-        self.playing = !self.playing;
         if self.playing {
-            self.play_step = 0;
-            self.prev_run = [false; PADS];
-            self.play_acc = self.frames_per_step(); // fire step 0 immediately
+            self.playing = false;
+            self.silence_pads(); // pause = go quiet, keep play_step
+        } else {
+            self.playing = true;
+            self.prev_run = [false; PADS]; // re-fire the current step's pads
+            self.play_acc = self.frames_per_step(); // fire promptly
         }
         Action::Timeline
+    }
+
+    /// Stop and rewind the transport to the top (Backspace).
+    fn stop_transport(&mut self) -> Action {
+        self.playing = false;
+        self.silence_pads();
+        self.play_step = 0;
+        self.play_acc = 0.0;
+        self.prev_run = [false; PADS];
+        Action::Timeline
+    }
+
+    /// Fade every pad out (used on pause/stop so the mix goes quiet).
+    fn silence_pads(&mut self) {
+        for i in 0..PADS {
+            self.mixer.set_pad_active(i, false, true);
+        }
     }
 
     /// Frames per timeline step at the effective tempo (4/4: steps_per_bar/4
@@ -321,6 +341,7 @@ impl App {
                 Some(Action::Timeline)
             }
             KeyCode::Char(' ') => Some(self.toggle_transport()),
+            KeyCode::Backspace => Some(self.stop_transport()),
             KeyCode::Char('w') => Some(self.render_to_library()),
             KeyCode::Char('v') => {
                 // First `v` marks the region start; second fills to the cursor.
@@ -825,6 +846,7 @@ impl App {
                 Action::Timeline
             }
             KeyCode::Char(' ') => self.toggle_transport(),
+            KeyCode::Backspace => self.stop_transport(),
             // Library file ops (on the highlighted track).
             KeyCode::Char('x') => self.arm_delete(),
             KeyCode::Char('R') => self.start_rename(),
@@ -1296,7 +1318,7 @@ fn draw_help(f: &mut Frame, area: Rect) {
   trim    a/d in   w/s out   (shift = fine)
   tempo   , / .  pad bpm
   mix     1-7 trigger   r record   - / = pad vol   [ ] master   { } tempo
-  arrange t timeline (enter hit, v region, space play, w render)\n  quit    esc (y/n)   C-c force   ? help";
+  arrange t timeline (enter hit, v region, space play/pause, backspace stop, w render)\n  quit    esc (y/n)   C-c force   ? help";
     let block = Block::default()
         .borders(Borders::ALL)
         .border_style(Style::default().fg(AMBER))
@@ -1769,6 +1791,33 @@ mod tests {
         // It reappears in the listing.
         assert!(app.filtered().iter().any(|(n, _, _)| n == "mix-1.wav"));
         let _ = fs::remove_dir_all(&tmp);
+    }
+
+    #[test]
+    fn space_pauses_and_resumes_from_position() {
+        let mut app = App::new();
+        app.mixer.set_sample_rate(1000);
+        app.mixer.set_master_bpm(Some(120.0)); // 125 frames/step
+        app.timeline.set_step(0, 0, true);
+        app.mixer.assign_pad(0, vec![0.5; 64]);
+        app.on_key(key(' ')); // play
+        assert!(app.playing);
+        app.advance_playback(400); // a few steps in
+        let pos = app.play_step;
+        assert!(pos > 0, "advanced");
+        app.on_key(key(' ')); // pause
+        assert!(!app.playing);
+        app.advance_playback(2000); // paused → no advance
+        assert_eq!(app.play_step, pos, "paused holds position");
+        app.on_key(key(' ')); // resume
+        assert!(app.playing);
+        assert_eq!(
+            app.play_step, pos,
+            "resumes from where it paused, not the top"
+        );
+        // Backspace stops + rewinds.
+        app.on_key(KeyEvent::new(KeyCode::Backspace, KeyModifiers::NONE));
+        assert!(!app.playing && app.play_step == 0, "stop rewinds to top");
     }
 
     #[test]

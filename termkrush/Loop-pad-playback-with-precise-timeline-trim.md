@@ -2,11 +2,12 @@
 title: Loop pad playback with precise timeline trim
 type: feature
 created: "2026-06-07T11:10:19Z"
-modified: "2026-06-07T11:11:38Z"
+modified: "2026-06-07T12:10:48Z"
 author: Matt Reider
-status: unstarted
+status: started
 estimate: "3"
 project: termkrush
+started: "2026-06-07T12:10:48Z"
 ---
 
 ## Problem

@@ -31,13 +31,23 @@ struct SampleVoice {
     in_f: usize,         // trim in-point (frames)
     len_f: usize,        // playable length in frames
     t: usize,            // frames elapsed
+    looping: bool,       // repeat the region instead of stopping at the end
 }
 
 impl SampleVoice {
-    /// The next output frame, or `None` once the voice is finished.
+    /// The next output frame, or `None` once the voice is finished. A
+    /// looping voice wraps back to the start and never finishes on its own
+    /// (it's stopped by deactivating its pad).
     fn next_frame(&mut self) -> Option<(f32, f32)> {
-        if self.t >= self.len_f {
+        if self.len_f == 0 {
             return None;
+        }
+        if self.t >= self.len_f {
+            if self.looping {
+                self.t = 0;
+            } else {
+                return None;
+            }
         }
         let total = self.clip.len() / 2;
         let idx = (self.in_f + self.t).min(total.saturating_sub(1));
@@ -46,7 +56,7 @@ impl SampleVoice {
     }
 
     fn done(&self) -> bool {
-        self.t >= self.len_f
+        !self.looping && self.t >= self.len_f
     }
 }
 
@@ -264,6 +274,11 @@ impl Mixer {
     /// triggers stack (polyphonic).
     pub fn trigger_pad(&mut self, i: usize) {
         let (inp, out) = self.pad_trim.get(i).copied().unwrap_or((0, 0));
+        let looping = self.pad_kind(i) == PadKind::Loop;
+        // A loop pad holds a single voice — re-triggering restarts it.
+        if looping {
+            self.voices.retain(|v| v.pad != i);
+        }
         if let Some(Some(clip)) = self.pads.get(i) {
             let total = clip.len() / 2;
             let in_f = inp.min(total);
@@ -274,8 +289,9 @@ impl Mixer {
                 in_f,
                 len_f,
                 t: 0,
+                looping,
             });
-            // Triggering implies the pad is on (hard) so a one-shot always sounds.
+            // Triggering implies the pad is on (hard) so it always sounds.
             self.pad_env[i] = 1.0;
             self.pad_env_target[i] = 1.0;
         }
@@ -521,6 +537,25 @@ mod tests {
         assert_eq!(m.pad_trim(0).0, 99);
         m.nudge_pad_out(0, 1000); // can't pass the clip end
         assert_eq!(m.pad_trim(0).1, 100);
+    }
+
+    #[test]
+    fn loop_pad_repeats_until_deactivated() {
+        let mut m = Mixer::new();
+        m.assign_pad(0, vec![0.5; 200]); // 100 frames
+        m.cycle_pad_kind(0); // → Loop
+        assert_eq!(m.pad_kind(0), PadKind::Loop);
+        m.trigger_pad(0);
+        // Play well past the 100-frame length — a one-shot would have ended.
+        m.fill_mix(&mut [0.0f32; 1000]); // 500 frames
+        assert_eq!(m.active_voices(), 1, "loop keeps going past its length");
+        // Re-trigger doesn't stack a second loop voice.
+        m.trigger_pad(0);
+        assert_eq!(m.active_voices(), 1, "one loop voice per pad");
+        // Deactivating stops it.
+        m.set_pad_active(0, false, false);
+        m.fill_mix(&mut [0.0f32; 8]);
+        assert_eq!(m.active_voices(), 0, "loop stops when the pad is off");
     }
 
     #[test]

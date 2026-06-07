@@ -7,7 +7,9 @@
 use std::io;
 use std::path::Path;
 
-use mp3lame_encoder::{Bitrate, Builder, FlushNoGap, InterleavedPcm, Quality};
+use mp3lame_encoder::{
+    max_required_buffer_size, Bitrate, Builder, FlushNoGap, InterleavedPcm, Quality,
+};
 
 fn lame_err<E: std::fmt::Debug>(e: E) -> io::Error {
     io::Error::other(format!("mp3 encode: {e:?}"))
@@ -28,10 +30,21 @@ pub fn export_mp3(path: &Path, samples: &[f32], sample_rate: u32, channels: u16)
     builder.set_quality(Quality::Best).map_err(lame_err)?;
     let mut enc = builder.build().map_err(lame_err)?;
 
-    let mut out: Vec<u8> = Vec::new();
-    enc.encode_to_vec(InterleavedPcm(&pcm), &mut out)
+    // Explicit, generously-sized output buffer (the `*_to_vec` helpers can
+    // under-size for interleaved input, corrupting memory in libmp3lame).
+    let mut out: Vec<u8> = Vec::with_capacity(max_required_buffer_size(pcm.len()) + 7200);
+    let n = enc
+        .encode(InterleavedPcm(&pcm), out.spare_capacity_mut())
         .map_err(lame_err)?;
-    enc.flush_to_vec::<FlushNoGap>(&mut out).map_err(lame_err)?;
+    // SAFETY: lame initialized `n` bytes in the reserved capacity.
+    unsafe { out.set_len(n) };
+
+    out.reserve(7200); // headroom for the flush frame
+    let m = enc
+        .flush::<FlushNoGap>(out.spare_capacity_mut())
+        .map_err(lame_err)?;
+    unsafe { out.set_len(out.len() + m) };
+
     std::fs::write(path, &out)
 }
 

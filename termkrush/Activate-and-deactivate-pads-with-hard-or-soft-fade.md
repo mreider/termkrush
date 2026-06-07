@@ -2,12 +2,14 @@
 title: Activate and deactivate pads with hard or soft fade
 type: feature
 created: "2026-06-07T11:10:19Z"
-modified: "2026-06-07T12:07:03Z"
+modified: "2026-06-07T12:10:43Z"
 author: Matt Reider
-status: started
+status: accepted
 estimate: "3"
 project: termkrush
 started: "2026-06-07T12:07:03Z"
+delivered: "2026-06-07T12:10:43Z"
+accepted: "2026-06-07T12:10:43Z"
 ---
 
 ## Problem

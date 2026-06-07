@@ -7,7 +7,6 @@
 |---|---|:---:|---|
 |  | [First release dry run with rc tag](termkrush/First-release-dry-run-with-rc-tag.md) |  |  |
 |  | [Wire Buy Me A Coffee into README and site](termkrush/Wire-Buy-Me-A-Coffee-into-README-and-site.md) |  |  |
-|  | [Activate and deactivate pads with hard or soft fade](termkrush/Activate-and-deactivate-pads-with-hard-or-soft-fade.md) | 3 |  |
 |  | [Build a scratch phrase by tapping whips and wikis](termkrush/Build-a-scratch-phrase-by-tapping-whips-and-wikis.md) | 5 |  |
 |  | [Detect the scratch pivot onset in a short clip](termkrush/Detect-the-scratch-pivot-onset-in-a-short-clip.md) | 3 |  |
 |  | [Export a track to MP3](termkrush/Export-a-track-to-MP3.md) | 3 |  |
@@ -27,7 +26,7 @@
 |  | [Sync loop pads to the master tempo via varispeed](termkrush/Sync-loop-pads-to-the-master-tempo-via-varispeed.md) | 5 |  |
 |  | [V0.1.0 krush](termkrush/V010-krush.md) |  |  |
 |  | [Whip and wiki scratch primitives](termkrush/Whip-and-wiki-scratch-primitives.md) | 5 |  |
-| Total Points | | 68 | |
+| Total Points | | 65 | |
 
 ### Started
 | User | Title | Points | Tags |
@@ -113,6 +112,7 @@
 |  | [Rename delete and move tracks in the UI](termkrush/Rename-delete-and-move-tracks-in-the-UI.md) | 3 |  |
 |  | [Pad type model loop scratch or one-shot](termkrush/Pad-type-model-loop-scratch-or-one-shot.md) | 3 |  |
 |  | [Per-pad volume](termkrush/Per-pad-volume.md) | 2 |  |
+|  | [Activate and deactivate pads with hard or soft fade](termkrush/Activate-and-deactivate-pads-with-hard-or-soft-fade.md) | 3 |  |
 
 ### Rejected
 | User | Title | Points | Tags |

@@ -2,12 +2,14 @@
 title: Per-pad volume
 type: feature
 created: "2026-06-07T11:10:19Z"
-modified: "2026-06-07T12:03:37Z"
+modified: "2026-06-07T12:06:58Z"
 author: Matt Reider
-status: started
+status: accepted
 estimate: "2"
 project: termkrush
 started: "2026-06-07T12:03:37Z"
+delivered: "2026-06-07T12:06:58Z"
+accepted: "2026-06-07T12:06:58Z"
 ---
 
 ## Problem

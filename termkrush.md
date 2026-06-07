@@ -17,7 +17,6 @@
 |  | [Loop pad playback with precise timeline trim](termkrush/Loop-pad-playback-with-precise-timeline-trim.md) | 3 |  |
 |  | [Loop regions on the grid repeat to fill](termkrush/Loop-regions-on-the-grid-repeat-to-fill.md) | 3 |  |
 |  | [Master tempo from the first loop](termkrush/Master-tempo-from-the-first-loop.md) | 2 |  |
-|  | [Per-pad volume](termkrush/Per-pad-volume.md) | 2 |  |
 |  | [Play the arrangement through the mixer](termkrush/Play-the-arrangement-through-the-mixer.md) | 5 |  |
 |  | [Refresh GitHub Pages for the pad based model](termkrush/Refresh-GitHub-Pages-for-the-pad-based-model.md) | 2 |  |
 |  | [Reload a track onto a pad edit and save back](termkrush/Reload-a-track-onto-a-pad-edit-and-save-back.md) | 3 |  |
@@ -28,7 +27,7 @@
 |  | [Sync loop pads to the master tempo via varispeed](termkrush/Sync-loop-pads-to-the-master-tempo-via-varispeed.md) | 5 |  |
 |  | [V0.1.0 krush](termkrush/V010-krush.md) |  |  |
 |  | [Whip and wiki scratch primitives](termkrush/Whip-and-wiki-scratch-primitives.md) | 5 |  |
-| Total Points | | 70 | |
+| Total Points | | 68 | |
 
 ### Started
 | User | Title | Points | Tags |
@@ -113,6 +112,7 @@
 |  | [Track list with folders](termkrush/Track-list-with-folders.md) | 3 |  |
 |  | [Rename delete and move tracks in the UI](termkrush/Rename-delete-and-move-tracks-in-the-UI.md) | 3 |  |
 |  | [Pad type model loop scratch or one-shot](termkrush/Pad-type-model-loop-scratch-or-one-shot.md) | 3 |  |
+|  | [Per-pad volume](termkrush/Per-pad-volume.md) | 2 |  |
 
 ### Rejected
 | User | Title | Points | Tags |

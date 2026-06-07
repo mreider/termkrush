@@ -394,3 +394,6 @@
 2026-06-07T12:03:32Z	Matt Reider	delivered	termkrush/Pad-type-model-loop-scratch-or-one-shot.md	
 2026-06-07T12:03:32Z	Matt Reider	accepted	termkrush/Pad-type-model-loop-scratch-or-one-shot.md	Pads carry a kind: OneShot (default) / Loop / Scratch. mix: PadKind enum + pad_kind array + cycle_pad_kind + pad_kind getter. TUI: ; cycles the focused pad's kind; the pad cell labels it (1shot/loop/scratch). Per-kind behaviour (loop repeat, scratch phrases) arrives in C4/Epic E. Tests: kind cycles+wraps (mix); ; cycles on the focused pad (tui). fmt + clippy --workspace + 8 suites green.
 2026-06-07T12:03:37Z	Matt Reider	started	termkrush/Per-pad-volume.md	
+2026-06-07T12:06:58Z	Matt Reider	finished	termkrush/Per-pad-volume.md	
+2026-06-07T12:06:58Z	Matt Reider	delivered	termkrush/Per-pad-volume.md	
+2026-06-07T12:06:58Z	Matt Reider	accepted	termkrush/Per-pad-volume.md	Per-pad volume. Each SampleVoice carries its owning pad index; mix_voices multiplies by pad_gain[pad] live (so sustained voices follow volume changes). pad_gain array defaults to unity; nudge_pad_gain clamps 0..1.5. TUI: -/= nudge the focused pad's gain; pad cell shows kind + vol%. Test: gain 0.5 halves a flat clip's output (mix); -/= adjust on the focused pad (tui). fmt + clippy --workspace + 8 suites green.

@@ -40,3 +40,5 @@ Soft rules. The dev pair surfaces conflicts at the relevant moment; the PM can o
 - Release tags are `vX.Y.Z`. The `release` story carries `release_date`.
 - A release is a date marker only — no status flow, no estimate, no acceptance.
 - `v0.1.0 spins` is the first usable release. Nothing tagged before then.
+- Before self-accepting a story: run the FULL gate to completion and confirm it exits 0 — cargo fmt --check, cargo clippy --workspace --all-targets -D warnings, cargo test --workspace (check the exit code, not just grep 'ok'; a crash/segfault aborts the process and can look green).
+- Do NOT self-accept work whose real verification needs a live terminal (audio actually sounding, key feel, visuals). Stage it at 'delivered' and have the PM run docs/SMOKE.md first; only headless-provable engine/logic stories self-accept in autonomous mode.

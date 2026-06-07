@@ -226,6 +226,59 @@ impl App {
         }
     }
 
+    /// Render the whole arrangement to interleaved-stereo by playing it once
+    /// offline (via the mixer's recorder). Transport state is preserved.
+    pub fn render_arrangement(&mut self) -> Vec<f32> {
+        let fps = self.frames_per_step();
+        let total = self.timeline.total_steps();
+        if fps <= 0.0 || total == 0 {
+            return Vec::new();
+        }
+        let total_frames = (fps * total as f64).round() as usize;
+        let saved = (self.playing, self.play_acc, self.play_step, self.prev_run);
+
+        self.playing = true;
+        self.play_step = 0;
+        self.prev_run = [false; PADS];
+        self.play_acc = fps; // step 0 fires immediately
+        self.mixer.arm_record();
+
+        let block = 512usize;
+        let mut scratch = vec![0.0f32; block * 2];
+        let mut done = 0;
+        while done < total_frames {
+            let n = block.min(total_frames - done);
+            self.advance_playback(n);
+            scratch.resize(n * 2, 0.0);
+            self.mixer.fill_mix(&mut scratch);
+            done += n;
+        }
+        let out = self.mixer.take_recording();
+        (self.playing, self.play_acc, self.play_step, self.prev_run) = saved;
+        out
+    }
+
+    /// `w` (in the editor) — render the arrangement to a WAV in the current
+    /// library folder, then refresh the list so it appears.
+    fn render_to_library(&mut self) -> Action {
+        let samples = self.render_arrangement();
+        if samples.is_empty() {
+            return Action::None;
+        }
+        let dir = self.crate_lib.cwd().to_path_buf();
+        let mut n = 1;
+        let path = loop {
+            let p = dir.join(format!("mix-{n}.wav"));
+            if !p.exists() {
+                break p;
+            }
+            n += 1;
+        };
+        let _ = termkrush_core::audio::write_wav(&path, &samples, self.mixer.sample_rate(), 2);
+        self.crate_lib.refresh();
+        Action::Record
+    }
+
     /// The step the playhead last fired (for the editor's playhead marker).
     fn playhead(&self) -> Option<usize> {
         if self.playing {
@@ -265,6 +318,7 @@ impl App {
                 Some(Action::Timeline)
             }
             KeyCode::Char(' ') => Some(self.toggle_transport()),
+            KeyCode::Char('w') => Some(self.render_to_library()),
             KeyCode::Char('v') => {
                 // First `v` marks the region start; second fills to the cursor.
                 match self.tl_region_start {
@@ -1148,7 +1202,7 @@ fn draw_help(f: &mut Frame, area: Rect) {
   trim    a/d in   w/s out   (shift = fine)
   tempo   , / .  pad bpm
   mix     1-7 trigger   r record   - / = pad vol   [ ] master   { } tempo
-  arrange t timeline (arrows move, space toggles)\n  quit    esc (y/n)   C-c force   ? help";
+  arrange t timeline (enter hit, v region, space play, w render)\n  quit    esc (y/n)   C-c force   ? help";
     let block = Block::default()
         .borders(Borders::ALL)
         .border_style(Style::default().fg(AMBER))
@@ -1540,6 +1594,49 @@ mod tests {
         assert_eq!(app.mixer.pad_kind(0), PadKind::OneShot);
         assert_eq!(app.on_key(key(';')), Action::Mark);
         assert_eq!(app.mixer.pad_kind(0), PadKind::Loop);
+    }
+
+    #[test]
+    fn render_arrangement_produces_audio_of_the_right_length() {
+        let mut app = App::new();
+        app.mixer.set_sample_rate(1000);
+        app.mixer.set_master_bpm(Some(120.0)); // 125 frames/step
+        app.mixer.assign_pad(0, vec![0.5; 8000]);
+        app.timeline.set_step(0, 0, true);
+        let out = app.render_arrangement();
+        // 64 steps × 125 frames = 8000 frames → 16000 interleaved samples.
+        assert!(
+            (out.len() as i64 - 16_000).abs() < 1100,
+            "len {}",
+            out.len()
+        );
+        assert!(
+            out.iter().any(|&s| s.abs() > 0.01),
+            "rendered audio is non-silent"
+        );
+        assert!(!app.playing, "transport restored after render");
+    }
+
+    #[test]
+    fn w_renders_a_wav_into_the_library() {
+        use std::fs;
+        let tmp = std::env::temp_dir().join(format!("tk-render-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&tmp);
+        fs::create_dir_all(&tmp).unwrap();
+        let mut app = App::new();
+        app.set_crate(Crate::scan(&tmp));
+        app.mixer.set_master_bpm(Some(120.0));
+        app.mixer.assign_pad(0, vec![0.5; 8000]);
+        app.timeline.set_step(0, 0, true);
+        app.on_key(key('t')); // open editor
+        assert_eq!(app.on_key(key('w')), Action::Record); // render+save
+        assert!(
+            tmp.join("mix-1.wav").exists(),
+            "rendered WAV in the library"
+        );
+        // It reappears in the listing.
+        assert!(app.filtered().iter().any(|(n, _, _)| n == "mix-1.wav"));
+        let _ = fs::remove_dir_all(&tmp);
     }
 
     #[test]

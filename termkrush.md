@@ -20,8 +20,7 @@
 |  | [Step grid editor with cursor and step toggle](termkrush/Step-grid-editor-with-cursor-and-step-toggle.md) | 5 |  |
 |  | [Step grid timeline data model](termkrush/Step-grid-timeline-data-model.md) | 3 |  |
 |  | [V0.1.0 krush](termkrush/V010-krush.md) |  |  |
-|  | [Whip and wiki scratch primitives](termkrush/Whip-and-wiki-scratch-primitives.md) | 5 |  |
-| Total Points | | 49 | |
+| Total Points | | 44 | |
 
 ### Started
 | User | Title | Points | Tags |
@@ -113,6 +112,7 @@
 |  | [Sync loop pads to the master tempo via varispeed](termkrush/Sync-loop-pads-to-the-master-tempo-via-varispeed.md) | 5 |  |
 |  | [Global speed control all loops follow](termkrush/Global-speed-control-all-loops-follow.md) | 3 |  |
 |  | [Detect the scratch pivot onset in a short clip](termkrush/Detect-the-scratch-pivot-onset-in-a-short-clip.md) | 3 |  |
+|  | [Whip and wiki scratch primitives](termkrush/Whip-and-wiki-scratch-primitives.md) | 5 |  |
 
 ### Rejected
 | User | Title | Points | Tags |

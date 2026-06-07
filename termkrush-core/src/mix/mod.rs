@@ -1,12 +1,9 @@
-//! The mixer: owns the decks and combines them onto a master bus.
+//! The mixer: the master bus over the sampler pads.
 //!
-//! Responsibilities as the backlog fills in: crossfader between decks,
-//! per-deck gain, BPM sync and beat-matching, minimal FX (filter, echo,
-//! reverb), and the master tap that feeds the recorder.
-//!
-//! Today it owns the two decks, sums their pull-based output, and applies
-//! the **master gain** to the mix. The crossfader and N-deck generality
-//! arrive with their own stories; the array makes adding those mechanical.
+//! It owns the sampler pads, sums their currently-sounding one-shot voices,
+//! applies the **master gain**, and feeds the live-mix recorder. Pad types
+//! (loop / scratch), tempo sync, and the arrangement render layer on top in
+//! their own stories.
 
 use std::sync::Arc;
 
@@ -54,11 +51,11 @@ pub struct Mixer {
     master: f32,
     /// Applied master gain, ramped toward `master` per frame.
     smoothed: f32,
-    /// Output sample rate, so beat-synced pad patterns convert seconds→frames.
+    /// Output sample rate, for future tempo-synced features (seconds→frames).
     sample_rate: u32,
     /// Clip assigned to each sampler pad (interleaved stereo), if any.
     pads: [Option<Arc<Vec<f32>>>; PADS],
-    /// Manually-set BPM per pad (for later beat-sync / auto-bpm).
+    /// Manually-set BPM per pad (for loop sync, set on load).
     pad_bpm: [Option<f32>; PADS],
     /// Non-destructive trim bounds per pad, in frames `(in, out)`. The clip
     /// samples are never modified; triggering plays only `[in, out)`.
@@ -66,7 +63,7 @@ pub struct Mixer {
     /// Currently-sounding one-shot voices, summed onto the master bus.
     voices: Vec<SampleVoice>,
     /// When armed, `fill_mix` appends each block of master output here so the
-    /// live mix (decks + active pads) can be resampled into a clip.
+    /// live mix (active pads) can be resampled into a clip.
     recording: bool,
     record_buf: Vec<f32>,
 }
@@ -181,9 +178,9 @@ impl Mixer {
         i < PADS && self.pads[i].is_some()
     }
 
-    /// Trigger pad `i`: start a new one-shot voice from the start of its
-    /// clip, summed atop whatever the decks are playing. No-op if the pad
-    /// is empty. Overlapping triggers stack (polyphonic).
+    /// Trigger pad `i`: start a new one-shot voice over its trimmed clip,
+    /// summed onto the master bus. No-op if the pad is empty. Overlapping
+    /// triggers stack (polyphonic).
     pub fn trigger_pad(&mut self, i: usize) {
         let (inp, out) = self.pad_trim.get(i).copied().unwrap_or((0, 0));
         if let Some(Some(clip)) = self.pads.get(i) {
@@ -204,8 +201,8 @@ impl Mixer {
         self.voices.len()
     }
 
-    /// Set the output sample rate so beat-synced pad patterns know how many
-    /// frames a second is. Called once at startup by the event loop.
+    /// Set the output sample rate (frames per second) for future tempo features.
+    /// Called once at startup by the event loop.
     pub fn set_sample_rate(&mut self, rate: u32) {
         self.sample_rate = rate.max(1);
     }
@@ -351,7 +348,7 @@ mod tests {
         m.fill_mix(&mut buf);
         assert!(
             buf.iter().all(|&s| (s - 0.5).abs() < 1e-4),
-            "clip sums atop silent decks"
+            "clip plays on the master bus"
         );
         assert_eq!(m.active_voices(), 1, "voice still has tail");
 

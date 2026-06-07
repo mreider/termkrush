@@ -2,10 +2,11 @@
 title: Multipass cruft sweep for a clean pad based codebase
 type: chore
 created: "2026-06-07T11:10:18Z"
-modified: "2026-06-07T11:11:37Z"
+modified: "2026-06-07T11:46:37Z"
 author: Matt Reider
-status: unstarted
+status: started
 project: termkrush
+started: "2026-06-07T11:46:37Z"
 ---
 
 ## Problem

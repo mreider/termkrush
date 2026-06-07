@@ -604,12 +604,12 @@ fn draw_pad_cell(f: &mut Frame, area: Rect, app: &App, pad: usize) {
 /// The DJ tile's two-line 8-bit cat — bobs while voices play, else rests.
 fn dj_lines(app: &App) -> Vec<Line<'static>> {
     let bobbing = app.mixer.active_voices() > 0 && (app.tick / 8) % 2 == 1;
-    let (face, deck) = if bobbing {
+    let (face, body) = if bobbing {
         ("  =^o^=", "  ♫ DJ ♫")
     } else {
         ("  =^.^=", "  ♫ dj ♫")
     };
-    vec![Line::from(face), Line::from(deck)]
+    vec![Line::from(face), Line::from(body)]
 }
 
 /// A small centered "Quit?" confirmation modal. `y` quits, anything else cancels.

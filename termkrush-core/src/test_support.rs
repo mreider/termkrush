@@ -1,7 +1,7 @@
 //! Shared test rigging for the clip engine (and audio tests generally):
 //! deterministic interleaved-stereo signal generators plus simple
 //! measurements. Compiled only under `cfg(test)`. The record / trim /
-//! pattern / stretch stories assert against these known inputs so the
+//! sync stories assert against these known inputs so the
 //! engine's behavior is pinned to ground truth, not to itself.
 
 /// Interleaved-stereo frame count (samples / 2).
@@ -42,8 +42,8 @@ pub fn stereo_sine(freq: f32, secs: f32, rate: u32) -> Vec<f32> {
 }
 
 /// A stereo click track at `bpm` for `beats` beats: a short decaying tick at
-/// the start of each beat, silence between. Ground truth for beat-synced
-/// pattern + tempo tests.
+/// the start of each beat, silence between. Ground truth for tempo /
+/// loop-sync tests.
 pub fn beat_buffer(bpm: f32, beats: usize, rate: u32) -> Vec<f32> {
     let period = (rate as f32 * 60.0 / bpm) as usize; // frames per beat
     let n = period * beats;

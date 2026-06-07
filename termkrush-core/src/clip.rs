@@ -1,10 +1,9 @@
 //! A clip: a captured region of audio with metadata, the unit the sampler
-//! pads play. Sources are uniform — a region recorded off a deck, a crate
-//! track, or a resample of the live mix all become a `Clip`. Samples are
+//! pads play. Sources are uniform — a recorded region, a track, or a resample of the live mix all become a `Clip`. Samples are
 //! interleaved stereo at the mix rate (decoded/captured already at the
 //! output rate), so a pad voice can play one back directly.
 //!
-//! Editing (timeline trim) and playback patterns layer on top in later
+//! Editing (timeline trim) and pad-type behaviour layer on top in later
 //! stories; this owns the captured audio + its bounds + tempo.
 
 /// A captured audio clip.
@@ -12,10 +11,10 @@
 pub struct Clip {
     /// Interleaved stereo samples at the mix rate.
     pub samples: Vec<f32>,
-    /// Source tempo in BPM, if known (e.g. the deck's detected BPM at
-    /// capture time). Drives beat-synced patterns / auto-BPM later.
+    /// Source tempo in BPM, if known (e.g. the source track.s detected BPM at
+    /// capture time). Used for loop sync later.
     pub bpm: Option<f32>,
-    /// A short label for the clip (e.g. the source deck + position).
+    /// A short label for the clip (e.g. the source + position).
     pub name: String,
 }
 

@@ -5,7 +5,7 @@
 //! two channels (mono is duplicated; >2 channels keep L/R), and — when the
 //! source sample rate differs from the requested output rate — resample
 //! with `rubato`. The result is a flat `Vec<f32>` of `L, R, L, R, …` at
-//! the output rate, plus the metadata a deck wants to show: duration,
+//! the output rate, plus the metadata to show: duration,
 //! source format, and any ID3 title/artist.
 //!
 //! Output samples are interleaved stereo in `[-1.0, 1.0]`, matching the

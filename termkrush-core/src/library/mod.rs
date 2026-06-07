@@ -1,5 +1,5 @@
 //! Track library: the local "crate" of mp3 files the TUI browses and
-//! decks load from.
+//! pads load from.
 //!
 //! For now the crate is a recursive scan of a root directory for `*.mp3`.
 //! Downloads (direct URL, `yt-dlp`) and cached analysis (BPM, duration)

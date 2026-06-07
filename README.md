@@ -3,113 +3,101 @@
 [![CI](https://github.com/mreider/termkrush/actions/workflows/ci.yml/badge.svg)](https://github.com/mreider/termkrush/actions/workflows/ci.yml)
 [![codecov](https://codecov.io/gh/mreider/termkrush/branch/main/graph/badge.svg)](https://codecov.io/gh/mreider/termkrush)
 
-A keyboard-first (and **Xbox-first**) terminal DJ app. Two decks with
-auto-fade and beat-sync, a seven-pad clip sampler for live recording,
-scratching, and beat-matched playback, and an 8-bit DJ cat that bobs to the
-beat — all from your shell.
+A keyboard-first terminal **scratch/loop mixer**. Everything is a **pad**: load
+tracks into pads, let the software lock every loop to one tempo automatically,
+lay down old-school **whip/wiki** scratches, arrange it all on a tracker-style
+step grid, and render the mix to a file — all from your shell. No decks, no
+turntable skills required.
 
 **Site:** https://mreider.github.io/termkrush
 
-> Status: built one story at a time from the top of the backlog. The two-deck
-> mix, the clip/scratch sampler, and the keyboard + controller layer are all
-> in; release packaging is the current work. The backlog lives under
-> `termkrush/`; the working rules are in `CLAUDE.md`.
+> **Status: mid-rebuild.** TermKrush pivoted (2026-06-07) from a two-deck DJ
+> model to this pad-based scratch/loop mixer — see `.am/inception.md`. The
+> **foundation is in** (headless engine + pads-only TUI: a track list, a 7-pad
+> bank, load/trigger/trim, live-mix record, master volume). The pad types
+> (loop/scratch/one-shot), automatic loop **BPM sync**, the **whip/wiki**
+> scratch model, the **step-grid timeline**, and **render/export** are being
+> built one story at a time from the top of the backlog (`termkrush/`). Working
+> rules are in `CLAUDE.md`.
 
-## What it does
+## The idea
 
-- **Two decks** — load from a local crate, play/pause/cue, jog/scrub, varispeed
-  (pitch rides), set a hot cue, and **sync** one deck's tempo to the other.
-- **Transitions** — instant hard-cut A↔B, or a hands-free **auto-fade** over a
-  set number of seconds *or* bars (synced to the beat).
-- **Clip sampler (7 pads)** — fill a pad by recording a region off a deck,
-  resampling the live mix, or grabbing a crate track; then trigger it with a
-  **pattern**: straight, cut, baby-scratch, transformer, stutter, warble, or
-  reverse. Trim any clip on a timeline (non-destructive), and optionally
-  **beat-match** it to the active deck (pitch-preserving time-stretch).
-- **Focus → act controls** — one small key cluster acts on whatever cell you've
-  focused (a deck, the mixer, a pad). Mirrored 1:1 onto an Xbox controller, with
-  the right stick as a jog/scratch platter.
-- **BPM** — detected on load (cached), shown per deck, manually nudgeable.
+Make a good old-school-scratch mix without DJ chops or hardware:
+
+- **Everything is a pad.** Load a track into a pad as a **loop** (repeats,
+  auto-synced to the master tempo), a **scratch** pad (a short clip the software
+  finds the scratch point in, played with **whip/wiki** rubs), or a **one-shot**.
+- **Timing is automatic.** The first loop sets the master tempo; every other
+  loop varispeeds to it, so beats always land together — fire a pad and it's
+  never out of time.
+- **Old-school scratching, modeled.** *whip* = backward rub with the forward
+  motion muted; *wiki* = forward rub that sounds; chain them into phrases
+  ("whip whip wiki-whip").
+- **Per-pad volume**, activate/deactivate with a hard cut or soft fade, pads
+  stack — no crossfader.
+- **Arrange & render.** Place pads on a tempo-locked step grid and render the
+  result to a track (WAV native; MP3 import + export). Reload a render onto a
+  pad to trim/re-tempo and save back.
 
 ## Screenshot
 
-```
-                                            TermKrush
-                tab focus   j play  k cue   a/d jog   g/h cut  G/H fade   ? help
-┌Crate  (3 tracks)─────────────┐┌▸ Deck A  126 BPM─────────────┐┌Deck B  174 BPM───────────────┐
-│▶ Teo Laza - Doing Too Much.m…││  ▶ Teo Laza - Doing Too Much ││  ⏏ Yarin Primak - Trippin  lo│
-│  Yarin Primak - Trippin.mp3  ││  [░░░░░░]  00:00.0 / 02:39.0 ││  [░░░░░░]  00:00.0 / 02:20.0 │
-│  Lazerpunk - Hyperdrive.mp3  ││                              ││                              │
-│                              │└──────────────────────────────┘└──────────────────────────────┘
-│                              │┌Mix · soft────────────────────┐┌Mix · hard────────────────────┐
-│                              ││A + B                         ││A + B                         │
-│                              ││auto-fade 1s                  ││master 1.00  +0.0 dB          │
-│                              │└──────────────────────────────┘└──────────────────────────────┘
-│                              │┌Pad 1─────────────────────────┐┌Pad 2─────────────────────────┐
-│                              ││  ● play                      ││  ·                           │
-│                              ││  126 bpm                     ││  -- bpm                      │
-│                              │└──────────────────────────────┘└──────────────────────────────┘
-│                              │┌Pad 3 … Pad 7 ────────────────┐┌DJ────────────────────────────┐
-│                              ││  ● play                      ││  =^.^=                       │
-│                              ││                              ││  ♫ dj ♫                      │
-└──────────────────────────────┘└──────────────────────────────┘└──────────────────────────────┘
-```
+The screen is a uniform grid: the track list on the left, a 7-pad bank, and the
+DJ tile.
 
-The screen is a uniform grid of equal cells: the crate browser on the left,
-then decks, the soft/hard mixer, the seven clip pads, and the DJ.
+```
+                              TermKrush
+        tab focus  j play  l load  a/d/w/s trim  r record  ? help
+┌Crate  (3 tracks)───────────┐┌▸ Pad 1──────────┐┌Pad 2────────────┐
+│▶ Teo Laza - Doing Too Much ││  ●              ││  ·              │
+│  Yarin Primak - Trippin    ││  [░░██████░░]   ││  -- bpm         │
+│  Lazerpunk - Hyperdrive    │└─────────────────┘└─────────────────┘
+│                            │┌Pad 3────────────┐┌Pad 4────────────┐
+│                            ││  ●              ││  ·              │
+│                            ││  126 bpm        ││  -- bpm         │
+│                            │└─────────────────┘└─────────────────┘
+│                            │┌Pad 5────────────┐┌Pad 6────────────┐
+│                            ││  ·              ││  ·              │
+│                            │└─────────────────┘└─────────────────┘
+│                            │┌Pad 7────────────┐┌DJ───────────────┐
+│                            ││  ·              ││  =^.^=          │
+└────────────────────────────┘└─────────────────┘└─────────────────┘
+```
 
 ## Install
-
-_Placeholder until the first release publishes binaries (v0.1.0 "spins")._
-
-Until then, build from source:
 
 ```sh
 cargo run --release          # launches the TUI
 ```
 
-Set `crate_root` (see [Configuration](#configuration)) so your tracks show up,
-or press `\` for the bundled demo. On Linux you'll need ALSA + udev headers
-(`libasound2-dev libudev-dev`). Rust 1.75+ (MSRV); the toolchain pin lives in
-`rust-toolchain.toml`. For repeated runs during development, `scripts/dev-run.sh`
-builds once and reuses the binary.
+Set `crate_root` (see [Configuration](#configuration)) so your tracks show up.
+On Linux you'll need ALSA headers (`libasound2-dev`). Rust 1.75+ (MSRV); the
+toolchain pin lives in `rust-toolchain.toml`. For repeated runs during
+development, `scripts/dev-run.sh` builds once and reuses the binary.
 
 ## Keyboard cheatsheet
 
-The model is **focus → act**: pick any cell (a deck, the mixer, a pad), then a
-small fixed cluster of keys acts on it — meaning set by what's focused. Fewer
-keys, no per-deck duplication, and a 1:1 shape with the gamepad. (Full map is
-in the in-app `?` help; an Xbox controller is the preferred input.)
+The model is **focus → act**: pick a cell (the track list, a pad, the DJ) with
+`tab`/arrows, then a small fixed cluster of keys acts on it.
 
-**Xbox controller** (plug it in — picked up automatically; keyboard still
-works): `LB`/`RB` focus Deck A/B · D-pad moves the focus box · `A`/`B`/`X`/`Y`
-are the action cluster (play / cue / mark·assign / alt) · `LT`/`RT` auto-fade
-toward A/B · **right stick** = continuous crossfade, **left stick** =
-jog/scratch the focused deck · `Start` quit · `Back` help.
+> The control surface grows with the pad-type and timeline stories; this is the
+> current foundation. (The Xbox controller returns in the controls epic.)
 
-| Key            | Action (on the **focused** target)      |
-|----------------|-----------------------------------------|
-| `tab`          | step focus through every grid cell (decks · mixer · pads · DJ · crate) |
-| `↑↓←→`         | move the focus box around the grid; on the crate, `↑`/`↓` browse the list |
-| `j`            | primary — deck play/pause · clip trigger |
-| `k`            | secondary — deck cue/stop · on a **pad**: assign the latest recorded clip |
-| `l` / `;`      | **deck**: mark-in / mark-out → records that region as a clip; **pad**: `l` assigns the highlighted crate track, `;` cycles the playback pattern (play · cut · scratch · xform · stutter · warble · reverse) |
-| `w` / `s`      | value — deck volume · on a **pad**: trim the out-point ± (`shift` = fine) |
-| `a` / `d`      | deck: jog/scrub (`shift` = coarse) · on a **pad**: trim the in-point ∓ (non-destructive) |
-| `g` / `h`      | hard-cut the mix to deck A / deck B (instant) |
-| `G` / `H`      | auto-fade to deck A / deck B over the set duration |
-| `space`        | cycle the auto-fade duration — seconds (1/2/4/8 s) or **bars** (2/4/8/16, synced to the active deck's tempo) |
-| `1`–`7`        | trigger clip pads directly              |
-| `r`            | resample the live mix (arm/disarm) → a clip on the focused pad, else the recordings stash |
-| `b`            | beat-match — on a **deck**: sync its tempo (varispeed) to the other deck's BPM; on a **pad**: toggle auto-BPM (clip stretches to the active deck) |
-| `,` / `.`      | tempo: varispeed the focused **deck** ∓1% (`shift` = ∓0.1%) — pitch rides with speed, effective BPM = base × speed; on a **pad**, nudge its stored BPM |
-| `c` / `v`      | set / jump to the focused deck's hot cue |
-| `[` / `]`      | master volume down / up                 |
-| `/`            | filter the crate; `↑`/`↓` pick; `enter` load |
-| `\`            | load the demo track (or `$TERMKRUSH_DEMO_TRACK`) |
-| `z`            | hide / show the crate panel             |
-| `?`            | toggle help                             |
-| `esc` / `q`    | quit (confirm `y`/`n`); `C-c` force-quits |
+| Key            | Action                                            |
+|----------------|---------------------------------------------------|
+| `tab` / `↑↓←→` | move focus across cells; on the track list, `↑`/`↓` browse |
+| `/`            | filter the track list; `enter` loads the highlight onto the focused pad |
+| `l`            | load the highlighted track onto the focused pad   |
+| `j` / `1`–`7`  | trigger a pad                                     |
+| `a` / `d`      | trim the focused pad's in-point ∓ (`shift` = fine) |
+| `w` / `s`      | trim the focused pad's out-point ± (`shift` = fine) |
+| `,` / `.`      | nudge the focused pad's BPM                        |
+| `k`            | assign the latest recording to the focused pad    |
+| `r`            | record (resample) the live mix → focused pad, else the stash |
+| `[` / `]`      | master volume down / up                           |
+| `z`            | hide / show the track list                        |
+| `\`            | load the demo track (or `$TERMKRUSH_DEMO_TRACK`)  |
+| `?`            | toggle help                                       |
+| `esc` / `q`    | quit (confirm `y`/`n`); `C-c` force-quits         |
 
 ## Configuration
 
@@ -118,26 +106,23 @@ TermKrush reads an optional config file at
 Every key is optional; missing keys fall back to defaults.
 
 ```toml
-# Root directory scanned (recursively) for the local crate of mp3s.
+# Root directory scanned (recursively) for the local track list.
 # Default: ~/Music/termkrush
 crate_root = "~/Music/termkrush"
 ```
 
-The crate browser lists every `*.mp3` under `crate_root` at launch; press
-`enter` to load the highlighted track into the deck. A leading `~/` in
-`crate_root` expands to your home directory.
+The track list shows the audio files under `crate_root` at launch; the library
+is filesystem-managed (drop files in, move them around). A leading `~/` expands
+to your home directory.
 
 ## Layout
 
-| Module        | Responsibility                                          |
-|---------------|---------------------------------------------------------|
-| `src/audio`   | output device, decoding, resampling, pitch-preserving time-stretch, BPM detection |
-| `src/deck`    | a single track: transport, varispeed, seek/jog, hot cue, clip capture |
-| `src/clip`    | a captured clip (samples + tempo) — the sampler's unit    |
-| `src/mix`     | deck blend + auto-fade, master bus, the clip/scratch/pattern sampler |
-| `src/tui`     | ratatui/crossterm grid UI, focus→act keymap, Xbox mapping |
-| `src/library` | local track crate (scan + filter)                       |
-| `src/config`  | user configuration                                      |
+A two-crate workspace keeps the engine UI-free and directly testable:
+
+| Crate / module   | Responsibility                                          |
+|------------------|---------------------------------------------------------|
+| `termkrush-core` | **headless engine** (no UI dep): audio decode/resample/BPM/stretch, clip, master bus + sampler pads, library, config |
+| `termkrush` (bin)| the thin **TUI shell**: ratatui/crossterm grid, input mapping, the audio pump |
 
 ## Support
 

@@ -1,7 +1,7 @@
 //! Pitch-preserving time-stretch (offline).
 //!
 //! Beat-matching without "chipmunk" artifacts needs to change a clip's
-//! duration *without* changing its pitch — unlike the deck's varispeed,
+//! duration *without* changing its pitch — unlike plain resampling,
 //! which lets pitch ride with speed. This is an overlap-add (OLA) stretch:
 //! the signal is cut into overlapping Hann windows that are re-spaced at the
 //! target ratio and summed back. Because the windows themselves are never
@@ -9,9 +9,8 @@
 //!
 //! OLA is the simplest member of the WSOLA / phase-vocoder family — clean
 //! for the small ratios beat-matching needs (±~8%), at the cost of some
-//! smearing on sharp transients at larger ratios. The clip auto-BPM story
-//! consumes this; it runs offline on a captured clip, not in the realtime
-//! callback.
+//! smearing on sharp transients at larger ratios. Kept as a shelved future
+//! "warp" option; it runs offline on a clip, not in the realtime callback.
 
 use std::f32::consts::PI;
 

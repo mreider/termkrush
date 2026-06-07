@@ -385,3 +385,4 @@
 2026-06-07T11:55:20Z	Matt Reider	finished	termkrush/Track-list-with-folders.md	
 2026-06-07T11:55:20Z	Matt Reider	delivered	termkrush/Track-list-with-folders.md	
 2026-06-07T11:55:20Z	Matt Reider	accepted	termkrush/Track-list-with-folders.md	Library now navigates folders. Crate shows one directory (subfolders first, then .wav + .mp3 audio, alpha), with a '..' up-entry bounded by the root; enter()/cwd() drive navigation. CrateEntry gained is_dir. TUI: Enter on a folder navigates in (renders folders with a trailing /); folders are excluded from track loads (selected_path returns None for dirs). WAV added alongside mp3. Tests: library lists+enters+up+root-ceiling (real tmp dirs); tui folder-not-loadable. fmt + clippy --workspace + suites green.
+2026-06-07T11:55:24Z	Matt Reider	started	termkrush/Rename-delete-and-move-tracks-in-the-UI.md	

@@ -6,6 +6,7 @@
 //! folder and back up via the `..` entry; the root is the ceiling. Files move
 //! in and out of the directory normally — nothing special in the UI.
 
+use std::io;
 use std::path::{Path, PathBuf};
 
 /// One entry in the current directory — a subfolder or an audio file.
@@ -61,6 +62,36 @@ impl Crate {
     /// The directory currently shown.
     pub fn cwd(&self) -> &Path {
         &self.cwd
+    }
+
+    /// Re-read the current directory (after a filesystem change).
+    pub fn refresh(&mut self) {
+        self.entries = list_dir(&self.cwd, &self.root);
+    }
+
+    /// Rename `from` to `new_name` within its directory, then relist.
+    pub fn rename(&mut self, from: &Path, new_name: &str) -> io::Result<()> {
+        let dir = from.parent().unwrap_or(&self.root);
+        std::fs::rename(from, dir.join(new_name))?;
+        self.refresh();
+        Ok(())
+    }
+
+    /// Delete `path`, then relist.
+    pub fn delete(&mut self, path: &Path) -> io::Result<()> {
+        std::fs::remove_file(path)?;
+        self.refresh();
+        Ok(())
+    }
+
+    /// Move `path` into directory `dir` (keeping its file name), then relist.
+    pub fn move_into(&mut self, path: &Path, dir: &Path) -> io::Result<()> {
+        let name = path
+            .file_name()
+            .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidInput, "no file name"))?;
+        std::fs::rename(path, dir.join(name))?;
+        self.refresh();
+        Ok(())
     }
 
     /// All entries in the current directory (`..`, folders, then tracks).
@@ -199,6 +230,32 @@ mod tests {
         let outside = tmp.parent().unwrap().to_path_buf();
         lib.enter(&outside);
         assert_eq!(lib.cwd(), tmp, "root is the ceiling");
+
+        let _ = fs::remove_dir_all(&tmp);
+    }
+
+    #[test]
+    fn rename_delete_and_move_operate_on_disk() {
+        let tmp = std::env::temp_dir().join(format!("tk-libops-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&tmp);
+        fs::create_dir_all(tmp.join("box")).unwrap();
+        fs::write(tmp.join("one.wav"), b"x").unwrap();
+        fs::write(tmp.join("two.wav"), b"x").unwrap();
+        let mut lib = Crate::scan(&tmp);
+
+        // Rename one.wav → uno.wav.
+        lib.rename(&tmp.join("one.wav"), "uno.wav").unwrap();
+        assert!(tmp.join("uno.wav").exists() && !tmp.join("one.wav").exists());
+
+        // Move uno.wav into box/.
+        lib.move_into(&tmp.join("uno.wav"), &tmp.join("box"))
+            .unwrap();
+        assert!(tmp.join("box/uno.wav").exists() && !tmp.join("uno.wav").exists());
+
+        // Delete two.wav; the listing refreshes to just the folder.
+        lib.delete(&tmp.join("two.wav")).unwrap();
+        let names: Vec<&str> = lib.entries().iter().map(|e| e.name.as_str()).collect();
+        assert_eq!(names, vec!["box"]);
 
         let _ = fs::remove_dir_all(&tmp);
     }

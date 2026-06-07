@@ -2,11 +2,12 @@
 title: Rename delete and move tracks in the UI
 type: feature
 created: "2026-06-07T11:10:18Z"
-modified: "2026-06-07T11:11:37Z"
+modified: "2026-06-07T11:55:24Z"
 author: Matt Reider
-status: unstarted
+status: started
 estimate: "3"
 project: termkrush
+started: "2026-06-07T11:55:24Z"
 ---
 
 ## Problem

@@ -100,6 +100,12 @@ pub struct App {
     bpm_cache: HashMap<PathBuf, f32>,
     /// Frame counter, for the DJ cat's idle bob.
     tick: u64,
+    /// Track pending a delete confirmation, if the modal is open.
+    confirm_delete: Option<PathBuf>,
+    /// Active rename: `(target path, new-name buffer)`.
+    rename: Option<(PathBuf, String)>,
+    /// A track marked for move (cut); `p` pastes it into the current folder.
+    move_mark: Option<PathBuf>,
 }
 
 impl Default for App {
@@ -126,6 +132,59 @@ impl App {
             recordings: Vec::new(),
             bpm_cache: HashMap::new(),
             tick: 0,
+            confirm_delete: None,
+            rename: None,
+            move_mark: None,
+        }
+    }
+
+    /// `x` — arm a delete confirmation for the highlighted track.
+    fn arm_delete(&mut self) -> Action {
+        if self.focus == Focus::Crate {
+            if let Some(p) = self.selected_path() {
+                self.confirm_delete = Some(p);
+                return Action::Mark;
+            }
+        }
+        Action::None
+    }
+
+    /// `R` — begin renaming the highlighted track.
+    fn start_rename(&mut self) -> Action {
+        if self.focus == Focus::Crate {
+            if let Some(p) = self.selected_path() {
+                let name = p
+                    .file_name()
+                    .and_then(|n| n.to_str())
+                    .unwrap_or("")
+                    .to_string();
+                self.rename = Some((p, name));
+                return Action::Filter;
+            }
+        }
+        Action::None
+    }
+
+    /// `m` — mark the highlighted track for a move (cut).
+    fn mark_move(&mut self) -> Action {
+        if self.focus == Focus::Crate {
+            if let Some(p) = self.selected_path() {
+                self.move_mark = Some(p);
+                return Action::Mark;
+            }
+        }
+        Action::None
+    }
+
+    /// `p` — move the marked track into the current folder.
+    fn paste_move(&mut self) -> Action {
+        if let Some(p) = self.move_mark.take() {
+            let dir = self.crate_lib.cwd().to_path_buf();
+            let _ = self.crate_lib.move_into(&p, &dir);
+            self.crate_sel = 0;
+            Action::Mark
+        } else {
+            Action::None
         }
     }
 
@@ -350,6 +409,49 @@ impl App {
             return Action::Quit;
         }
 
+        // Delete-confirm modal.
+        if let Some(path) = self.confirm_delete.clone() {
+            return match key.code {
+                KeyCode::Char('y') | KeyCode::Char('Y') => {
+                    let _ = self.crate_lib.delete(&path);
+                    self.confirm_delete = None;
+                    self.crate_sel = 0;
+                    Action::Mark
+                }
+                _ => {
+                    self.confirm_delete = None;
+                    Action::None
+                }
+            };
+        }
+
+        // Rename-entry mode captures typing for the new file name.
+        if self.rename.is_some() {
+            return match key.code {
+                KeyCode::Char(c) => {
+                    self.rename.as_mut().unwrap().1.push(c);
+                    Action::Filter
+                }
+                KeyCode::Backspace => {
+                    self.rename.as_mut().unwrap().1.pop();
+                    Action::Filter
+                }
+                KeyCode::Esc => {
+                    self.rename = None;
+                    Action::Filter
+                }
+                KeyCode::Enter => {
+                    let (p, b) = self.rename.take().unwrap();
+                    if !b.is_empty() {
+                        let _ = self.crate_lib.rename(&p, &b);
+                        self.crate_sel = 0;
+                    }
+                    Action::Mark
+                }
+                _ => Action::None,
+            };
+        }
+
         // Filter-entry mode captures typing for the crate search.
         if let Some(q) = self.filter.as_mut() {
             return match key.code {
@@ -409,6 +511,11 @@ impl App {
                 self.crate_collapsed = !self.crate_collapsed;
                 Action::ToggleCrate
             }
+            // Library file ops (on the highlighted track).
+            KeyCode::Char('x') => self.arm_delete(),
+            KeyCode::Char('R') => self.start_rename(),
+            KeyCode::Char('m') => self.mark_move(),
+            KeyCode::Char('p') => self.paste_move(),
             KeyCode::Enter if self.focus == Focus::Crate && self.selected_is_dir() => {
                 self.enter_selected()
             }
@@ -499,6 +606,9 @@ pub fn draw(f: &mut Frame, app: &App) {
 fn return_help(f: &mut Frame, app: &App) {
     if app.confirm_quit {
         draw_quit_modal(f, f.area());
+    } else if let Some(path) = &app.confirm_delete {
+        let name = path.file_name().and_then(|n| n.to_str()).unwrap_or("track");
+        draw_confirm_modal(f, f.area(), &format!("Delete {name}?"));
     } else if app.show_help {
         draw_help(f, f.area());
     }
@@ -523,9 +633,15 @@ fn draw_header(f: &mut Frame, area: Rect) {
 fn draw_crate(f: &mut Frame, area: Rect, app: &App) {
     let focused = app.focus_cell() == Focus::Crate;
     let entries = app.filtered();
-    let title = match &app.filter {
-        Some(q) => format!("Library  /{q}"),
-        None => format!("Library  ({} items)", entries.len()),
+    let title = if let Some((_, buf)) = &app.rename {
+        format!("Library  rename: {buf}")
+    } else if app.move_mark.is_some() {
+        format!("Library  ({} items) [move: p to paste]", entries.len())
+    } else {
+        match &app.filter {
+            Some(q) => format!("Library  /{q}"),
+            None => format!("Library  ({} items)", entries.len()),
+        }
     };
     let block = cell_block(&title, focused);
     let inner = block.inner(area);
@@ -651,15 +767,20 @@ fn dj_lines(app: &App) -> Vec<Line<'static>> {
 
 /// A small centered "Quit?" confirmation modal. `y` quits, anything else cancels.
 fn draw_quit_modal(f: &mut Frame, area: Rect) {
-    let popup = centered(34, 5, area);
+    draw_confirm_modal(f, area, "Quit TermKrush?");
+}
+
+/// A small centered yes/no modal. `y` confirms, anything else cancels.
+fn draw_confirm_modal(f: &mut Frame, area: Rect, prompt: &str) {
+    let popup = centered((prompt.len() as u16 + 10).max(24), 5, area);
     f.render_widget(Clear, popup);
     let block = Block::default()
         .borders(Borders::ALL)
         .border_style(Style::default().fg(AMBER))
-        .title(" Quit? ");
+        .title(" Confirm ");
     let body = Paragraph::new(vec![
         Line::from(""),
-        Line::from("Quit TermKrush?  y / n").centered(),
+        Line::from(format!("{prompt}  y / n")).centered(),
     ])
     .block(block)
     .style(Style::default().fg(GREEN));
@@ -667,11 +788,12 @@ fn draw_quit_modal(f: &mut Frame, area: Rect) {
 }
 
 fn draw_help(f: &mut Frame, area: Rect) {
-    let popup = centered(54, 16, area);
+    let popup = centered(56, 17, area);
     f.render_widget(Clear, popup);
     let text = "\
-  focus   tab / arrows   (crate · pads · DJ)
-  crate   / filter   ↑↓ browse   enter load→pad   z hide
+  focus   tab / arrows   (library · pads · DJ)
+  library / filter   ↑↓ browse   enter open/load→pad   z hide
+  files   x delete   R rename   m mark / p move-here
   pad     j play   l load   k assign-rec
   trim    a/d in   w/s out   (shift = fine)
   tempo   , / .  pad bpm
@@ -931,6 +1053,45 @@ mod tests {
                 is_dir: false,
             },
         ])
+    }
+
+    #[test]
+    fn x_then_y_deletes_the_highlighted_track() {
+        use std::fs;
+        let tmp = std::env::temp_dir().join(format!("tk-del-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&tmp);
+        fs::create_dir_all(&tmp).unwrap();
+        fs::write(tmp.join("gone.wav"), b"x").unwrap();
+        let mut app = App::new();
+        app.set_crate(Crate::scan(&tmp));
+        app.set_focus(Focus::Crate);
+        assert_eq!(app.on_key(key('x')), Action::Mark); // arm
+        assert!(app.confirm_delete.is_some());
+        app.on_key(key('y')); // confirm
+        assert!(!tmp.join("gone.wav").exists(), "file deleted");
+        let _ = fs::remove_dir_all(&tmp);
+    }
+
+    #[test]
+    fn mark_and_paste_moves_a_track_into_a_folder() {
+        use std::fs;
+        let tmp = std::env::temp_dir().join(format!("tk-mv-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&tmp);
+        fs::create_dir_all(tmp.join("box")).unwrap();
+        fs::write(tmp.join("t.wav"), b"x").unwrap();
+        let mut app = App::new();
+        app.set_crate(Crate::scan(&tmp));
+        app.set_focus(Focus::Crate);
+        // Entries: ["box", "t.wav"] — move to the track, mark it.
+        app.on_key(KeyEvent::new(KeyCode::Down, KeyModifiers::NONE));
+        assert_eq!(app.selected_path(), Some(tmp.join("t.wav")));
+        assert_eq!(app.on_key(key('m')), Action::Mark);
+        // Back to the folder, enter it, paste.
+        app.crate_sel = 0;
+        app.on_key(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE)); // into box/
+        assert_eq!(app.on_key(key('p')), Action::Mark);
+        assert!(tmp.join("box/t.wav").exists() && !tmp.join("t.wav").exists());
+        let _ = fs::remove_dir_all(&tmp);
     }
 
     #[test]

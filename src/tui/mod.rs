@@ -120,9 +120,10 @@ pub struct App {
     tl_step: usize,
     /// First endpoint of a loop region being drawn (`v` marks, `v` fills).
     tl_region_start: Option<usize>,
-    /// Clip-edit modal: the pad being edited + the cursor position (frame).
+    /// Clip-edit modal: the pad being edited + which mark is active
+    /// (`false` = in/left, `true` = out/right).
     clip_edit: Option<usize>,
-    ce_cursor: usize,
+    ce_out: bool,
     /// Pending "sync all tracks to this BPM?" prompt (the candidate tempo).
     bpm_prompt: Option<f32>,
     /// Arrangement transport.
@@ -167,7 +168,7 @@ impl App {
             tl_step: 0,
             tl_region_start: None,
             clip_edit: None,
-            ce_cursor: 0,
+            ce_out: false,
             bpm_prompt: None,
             playing: false,
             play_acc: 0.0,
@@ -623,46 +624,52 @@ impl App {
         if let Focus::Pad(i) = self.focus {
             if self.mixer.pad_loaded(i) {
                 self.clip_edit = Some(i);
-                self.ce_cursor = self.mixer.pad_trim(i).0; // start at the in-point
+                self.ce_out = false; // start on the in (left) mark
                 return Action::Mark;
             }
         }
         Action::None
     }
 
-    /// Handle a key while the clip-edit modal is open. Arrows move the cursor
-    /// (shift = coarse); `i`/`o` set the trim in/out; `x` truncates the clip
-    /// at the cursor; `e`/esc close.
+    /// Handle a key while the clip-edit modal is open. `Tab` switches the
+    /// active mark (in/out), `←/→` move it (shift = coarse), `space` auditions
+    /// the selection, `x` snips both sides, `e`/esc close.
     fn on_clip_key(&mut self, key: KeyEvent) -> Option<Action> {
         let i = self.clip_edit?;
-        let len = self.mixer.pad_clip_frames(i);
         let rate = self.mixer.sample_rate() as usize;
         let shift = key.modifiers.contains(KeyModifiers::SHIFT);
-        let step = (if shift { rate / 10 } else { rate / 100 }).max(1); // 100ms / 10ms
+        let step = (if shift { rate / 10 } else { rate / 100 }).max(1) as i64; // 100ms / 10ms
+        let (inp, out) = self.mixer.pad_trim(i);
+        let nudge = |v: usize, d: i64| (v as i64 + d).max(0) as usize;
         match key.code {
             KeyCode::Char('e') | KeyCode::Esc => {
                 self.clip_edit = None;
                 Some(Action::Mark)
             }
-            KeyCode::Left => {
-                self.ce_cursor = self.ce_cursor.saturating_sub(step);
+            KeyCode::Tab | KeyCode::Up | KeyCode::Down => {
+                self.ce_out = !self.ce_out; // switch active mark
                 Some(Action::Mark)
             }
-            KeyCode::Right => {
-                self.ce_cursor = (self.ce_cursor + step).min(len);
+            KeyCode::Left | KeyCode::Right => {
+                let d = if key.code == KeyCode::Right {
+                    step
+                } else {
+                    -step
+                };
+                if self.ce_out {
+                    self.mixer.set_pad_trim_out(i, nudge(out, d));
+                } else {
+                    self.mixer.set_pad_trim_in(i, nudge(inp, d));
+                }
                 Some(Action::Mark)
             }
-            KeyCode::Char('i') => {
-                self.mixer.set_pad_trim_in(i, self.ce_cursor);
-                Some(Action::Mark)
-            }
-            KeyCode::Char('o') => {
-                self.mixer.set_pad_trim_out(i, self.ce_cursor);
+            KeyCode::Char(' ') => {
+                self.mixer.audition_pad(i); // preview the selection
                 Some(Action::Mark)
             }
             KeyCode::Char('x') => {
-                self.mixer.truncate_pad(i, self.ce_cursor);
-                self.ce_cursor = self.ce_cursor.min(self.mixer.pad_clip_frames(i));
+                self.mixer.snip_pad(i); // destructively keep only [in, out]
+                self.ce_out = false;
                 Some(Action::Mark)
             }
             KeyCode::Char('q') => {
@@ -1169,8 +1176,9 @@ fn draw_clip_edit(f: &mut Frame, area: Rect, app: &App, pad: usize) {
     let (inp, out) = app.mixer.pad_trim(pad);
     let rate = app.mixer.sample_rate().max(1) as f64;
     let secs = |fr: usize| fr as f64 / rate;
+    let active = if app.ce_out { "out ▸" } else { "◂ in" };
     let title = format!(
-        "Edit Pad {} — ←/→ move (shift coarse) · i in · o out · x cut · e close",
+        "Edit Pad {} [{active}] — tab switch · ←/→ move · space audition · x snip · e close",
         pad + 1
     );
     let block = cell_block(&title, true);
@@ -1187,18 +1195,18 @@ fn draw_clip_edit(f: &mut Frame, area: Rect, app: &App, pad: usize) {
             }
         })
         .collect();
-    bar[col(inp)] = '◂';
-    bar[col(out.saturating_sub(1))] = '▸';
-    bar[col(app.ce_cursor)] = '│'; // cursor on top
+    // In/out handles; the active one is doubled so it stands out.
+    bar[col(inp)] = if app.ce_out { '◂' } else { '◀' };
+    bar[col(out.saturating_sub(1))] = if app.ce_out { '▶' } else { '▸' };
     let lines = vec![
         Line::from(""),
         Line::from(format!("  [{}]", bar.iter().collect::<String>())),
         Line::from(""),
         Line::from(format!(
-            "  cursor {:.2}s   in {:.2}s   out {:.2}s   len {:.2}s",
-            secs(app.ce_cursor),
+            "  in {:.2}s   out {:.2}s   selection {:.2}s   (clip {:.2}s)",
             secs(inp),
             secs(out),
+            secs(out.saturating_sub(inp)),
             secs(len)
         )),
     ];
@@ -1486,7 +1494,8 @@ fn draw_help(f: &mut Frame, area: Rect) {
   focus   tab / arrows   (library · pads · DJ)
   library / filter   ↑↓ browse   enter open/load→pad   z hide
   files   x delete   R rename   m mark / p move-here
-  pad     j play/wiki   k whip   f on/off   l load   u unload   e edit-clip   ; kind   S save   O over   E mp3
+  pad     j play/wiki   k whip   f on/off   l load   u unload   e edit   ; kind   S save   O over   E mp3
+  edit    tab switch in/out   ←/→ move   space audition   x snip   e close
   trim    a/d in   w/s out   (shift = fine)
   tempo   , / .  pad bpm
   mix     1-7 trigger   space pause   r record   - / = vol   [ ] master   { } tempo
@@ -1866,24 +1875,35 @@ mod tests {
     }
 
     #[test]
-    fn clip_edit_modal_sets_in_out_and_cuts() {
+    fn clip_edit_marks_audition_and_snips_both_sides() {
         let mut app = App::new();
-        app.mixer.set_sample_rate(1000); // 10ms = 10 frames, 100ms = 100
+        app.mixer.set_sample_rate(1000); // 10ms = 10 frames
         app.mixer.assign_pad(0, vec![0.5; 4000]); // 2000 frames
         app.set_focus(Focus::Pad(0));
-        assert_eq!(app.on_key(key('e')), Action::Mark); // open
-        assert_eq!(app.clip_edit, Some(0));
-        // Move right ~5 fine steps (50 frames), set the in-point there.
+        assert_eq!(app.on_key(key('e')), Action::Mark); // open (in mark active)
+        assert!(!app.ce_out);
+        // Move the IN mark right 5×10 = 50 frames.
         for _ in 0..5 {
             app.on_key(KeyEvent::new(KeyCode::Right, KeyModifiers::NONE));
         }
-        assert_eq!(app.ce_cursor, 50);
-        app.on_key(key('i'));
-        assert_eq!(app.mixer.pad_trim(0).0, 50, "in-point set at cursor");
-        // Cut destructively at the cursor → clip shortened to 50 frames.
+        assert_eq!(app.mixer.pad_trim(0).0, 50, "in mark moved");
+        // Tab to the OUT mark, pull it left 5×10 = 50 → out 1950.
+        app.on_key(KeyEvent::new(KeyCode::Tab, KeyModifiers::NONE));
+        assert!(app.ce_out);
+        for _ in 0..5 {
+            app.on_key(KeyEvent::new(KeyCode::Left, KeyModifiers::NONE));
+        }
+        assert_eq!(app.mixer.pad_trim(0).1, 1950, "out mark moved");
+        // Audition plays the selection.
+        app.on_key(key(' '));
+        assert_eq!(app.mixer.active_voices(), 1, "audition the selection");
+        // Snip keeps only [50, 1950) = 1900 frames (both sides dropped).
         app.on_key(key('x'));
-        assert_eq!(app.mixer.pad_clip_frames(0), 50, "clip truncated at cursor");
-        // Close.
+        assert_eq!(
+            app.mixer.pad_clip_frames(0),
+            1900,
+            "snipped to the selection"
+        );
         assert_eq!(app.on_key(key('e')), Action::Mark);
         assert!(app.clip_edit.is_none());
     }
@@ -2221,12 +2241,12 @@ mod tests {
         app.on_key(key(';'));
         assert_eq!(app.mixer.pad_kind(0), PadKind::Loop);
         app.set_focus(Focus::Pad(1));
-        app.on_key(key('e'));
+        app.on_key(key('e')); // clip-edit
         for _ in 0..3 {
-            app.on_key(KeyEvent::new(KeyCode::Right, KeyModifiers::NONE));
+            app.on_key(KeyEvent::new(KeyCode::Right, KeyModifiers::NONE)); // move in-mark
         }
-        app.on_key(key('o')); // set out
-        app.on_key(key('x')); // truncate
+        app.on_key(key(' ')); // audition
+        app.on_key(key('x')); // snip both sides
         app.on_key(key('e')); // close
         assert!(app.clip_edit.is_none());
 

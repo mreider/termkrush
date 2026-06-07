@@ -299,6 +299,49 @@ impl Mixer {
         }
     }
 
+    /// Audition pad `i`'s current trimmed selection `[in, out)` once, at
+    /// native rate — stops any prior preview on that pad first.
+    pub fn audition_pad(&mut self, i: usize) {
+        self.voices.retain(|v| v.pad != i);
+        self.scratch_voices.retain(|v| v.pad != i);
+        let (inp, out) = self.pad_trim.get(i).copied().unwrap_or((0, 0));
+        if let Some(Some(clip)) = self.pads.get(i) {
+            let total = clip.len() / 2;
+            let in_f = inp.min(total);
+            let len_f = out.min(total).saturating_sub(in_f);
+            self.voices.push(SampleVoice {
+                clip: Arc::clone(clip),
+                pad: i,
+                in_f,
+                len_f,
+                pos: 0.0,
+                speed: 1.0,
+                looping: false,
+            });
+            self.pad_env[i] = 1.0;
+            self.pad_env_target[i] = 1.0;
+        }
+    }
+
+    /// **Destructively** snip pad `i` to its trimmed region `[in, out)` —
+    /// drop both the head before `in` and the tail after `out`.
+    pub fn snip_pad(&mut self, i: usize) {
+        if i >= PADS {
+            return;
+        }
+        let (inp, out) = self.pad_trim(i);
+        if let Some(clip) = self.pads.get(i).and_then(|p| p.as_ref()) {
+            let total = clip.len() / 2;
+            let (a, b) = ((inp.min(total)) * 2, (out.min(total)) * 2);
+            if b > a {
+                let kept = clip[a..b].to_vec();
+                let len = kept.len() / 2;
+                self.pads[i] = Some(Arc::new(kept));
+                self.pad_trim[i] = (0, len);
+            }
+        }
+    }
+
     /// **Destructively** truncate pad `i`'s clip to end at `frame` — drop
     /// everything past it and reset the trim to the new full length.
     pub fn truncate_pad(&mut self, i: usize, frame: usize) {

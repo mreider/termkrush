@@ -179,21 +179,44 @@ impl App {
 
     // ---- crate browsing ----------------------------------------------------
 
-    /// Crate entries after the active filter, as `(name, path)` pairs.
-    fn filtered(&self) -> Vec<(String, PathBuf)> {
+    /// Track-list entries after the active filter, as `(name, path, is_dir)`.
+    fn filtered(&self) -> Vec<(String, PathBuf, bool)> {
         let q = self.filter.as_deref().unwrap_or("");
         self.crate_lib
             .filtered(q)
             .into_iter()
-            .map(|e| (e.name.clone(), e.path.clone()))
+            .map(|e| (e.name.clone(), e.path.clone(), e.is_dir))
             .collect()
     }
 
-    /// Highlighted crate path, if any.
-    pub fn selected_path(&self) -> Option<PathBuf> {
+    /// The highlighted entry's `(path, is_dir)`, if any.
+    fn selected(&self) -> Option<(PathBuf, bool)> {
         let f = self.filtered();
         f.get(self.crate_sel.min(f.len().saturating_sub(1)))
-            .map(|(_, p)| p.clone())
+            .map(|(_, p, d)| (p.clone(), *d))
+    }
+
+    /// Highlighted track path (folders excluded), if any.
+    pub fn selected_path(&self) -> Option<PathBuf> {
+        match self.selected() {
+            Some((p, false)) => Some(p),
+            _ => None,
+        }
+    }
+
+    fn selected_is_dir(&self) -> bool {
+        matches!(self.selected(), Some((_, true)))
+    }
+
+    /// Navigate into the highlighted folder (including `..`).
+    fn enter_selected(&mut self) -> Action {
+        if let Some((p, true)) = self.selected() {
+            self.crate_lib.enter(&p);
+            self.crate_sel = 0;
+            Action::CrateNav
+        } else {
+            Action::None
+        }
     }
 
     fn crate_nav(&mut self, delta: isize) -> Action {
@@ -345,7 +368,11 @@ impl App {
                 }
                 KeyCode::Enter => {
                     self.filter = None;
-                    self.load_selected_onto(self.active_pad())
+                    if self.selected_is_dir() {
+                        self.enter_selected()
+                    } else {
+                        self.load_selected_onto(self.active_pad())
+                    }
                 }
                 KeyCode::Up => self.crate_nav(-1),
                 KeyCode::Down => self.crate_nav(1),
@@ -381,6 +408,9 @@ impl App {
             KeyCode::Char('z') => {
                 self.crate_collapsed = !self.crate_collapsed;
                 Action::ToggleCrate
+            }
+            KeyCode::Enter if self.focus == Focus::Crate && self.selected_is_dir() => {
+                self.enter_selected()
             }
             KeyCode::Enter => self.load_selected_onto(self.active_pad()),
             KeyCode::Char('\\') => {
@@ -494,14 +524,21 @@ fn draw_crate(f: &mut Frame, area: Rect, app: &App) {
     let focused = app.focus_cell() == Focus::Crate;
     let entries = app.filtered();
     let title = match &app.filter {
-        Some(q) => format!("Crate  /{q}"),
-        None => format!("Crate  ({} tracks)", entries.len()),
+        Some(q) => format!("Library  /{q}"),
+        None => format!("Library  ({} items)", entries.len()),
     };
     let block = cell_block(&title, focused);
     let inner = block.inner(area);
     let items: Vec<ListItem> = entries
         .iter()
-        .map(|(name, _)| ListItem::new(ellipsize(name, inner.width as usize)))
+        .map(|(name, _, is_dir)| {
+            let label = if *is_dir && name != ".." {
+                format!("{name}/")
+            } else {
+                name.clone()
+            };
+            ListItem::new(ellipsize(&label, inner.width as usize))
+        })
         .collect();
     let mut state = ListState::default();
     if !entries.is_empty() {
@@ -886,12 +923,28 @@ mod tests {
             CrateEntry {
                 name: "Alpha.mp3".into(),
                 path: "/m/a.mp3".into(),
+                is_dir: false,
             },
             CrateEntry {
                 name: "Beta.mp3".into(),
                 path: "/m/b.mp3".into(),
+                is_dir: false,
             },
         ])
+    }
+
+    #[test]
+    fn folder_entries_are_not_loadable_as_tracks() {
+        let mut app = App::new();
+        app.set_crate(Crate::from_entries(vec![CrateEntry {
+            name: "sub".into(),
+            path: "/m/sub".into(),
+            is_dir: true,
+        }]));
+        app.set_focus(Focus::Pad(0));
+        // A folder is highlighted; `l` must not queue it as a track load.
+        assert_eq!(app.selected_path(), None, "folders aren't track paths");
+        assert_eq!(app.on_key(key('l')), Action::None);
     }
 
     #[test]

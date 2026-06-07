@@ -29,34 +29,49 @@ struct SampleVoice {
     clip: Arc<Vec<f32>>, // interleaved stereo at the mix rate
     pad: usize,          // owning pad, for live per-pad volume
     in_f: usize,         // trim in-point (frames)
-    len_f: usize,        // playable length in frames
-    t: usize,            // frames elapsed
+    len_f: usize,        // playable length in source frames
+    pos: f64,            // fractional read offset within the region
+    speed: f64,          // read rate (1.0 = native; loop = bpm/master)
     looping: bool,       // repeat the region instead of stopping at the end
 }
 
 impl SampleVoice {
-    /// The next output frame, or `None` once the voice is finished. A
-    /// looping voice wraps back to the start and never finishes on its own
-    /// (it's stopped by deactivating its pad).
+    /// Linearly-interpolated stereo frame at fractional region offset `p`.
+    fn frame_at(&self, p: f64) -> (f32, f32) {
+        let total = self.clip.len() / 2;
+        if total == 0 {
+            return (0.0, 0.0);
+        }
+        let base = (self.in_f as f64 + p).max(0.0);
+        let i0 = (base.floor() as usize).min(total - 1);
+        let i1 = (i0 + 1).min(total - 1);
+        let frac = (base - base.floor()) as f32;
+        (
+            self.clip[i0 * 2] * (1.0 - frac) + self.clip[i1 * 2] * frac,
+            self.clip[i0 * 2 + 1] * (1.0 - frac) + self.clip[i1 * 2 + 1] * frac,
+        )
+    }
+
+    /// The next output frame, or `None` once finished. A looping voice wraps
+    /// and never finishes on its own (stopped by deactivating its pad).
     fn next_frame(&mut self) -> Option<(f32, f32)> {
         if self.len_f == 0 {
             return None;
         }
-        if self.t >= self.len_f {
+        if self.pos >= self.len_f as f64 {
             if self.looping {
-                self.t = 0;
+                self.pos %= self.len_f as f64;
             } else {
                 return None;
             }
         }
-        let total = self.clip.len() / 2;
-        let idx = (self.in_f + self.t).min(total.saturating_sub(1));
-        self.t += 1;
-        Some((self.clip[idx * 2], self.clip[idx * 2 + 1]))
+        let out = self.frame_at(self.pos);
+        self.pos += self.speed;
+        Some(out)
     }
 
     fn done(&self) -> bool {
-        !self.looping && self.t >= self.len_f
+        !self.looping && self.pos >= self.len_f as f64
     }
 }
 
@@ -291,6 +306,8 @@ impl Mixer {
                 }
             }
         }
+        // Loops varispeed to the master tempo (pitch rides); others native.
+        let speed = self.pad_play_speed(i, looping);
         if let Some(Some(clip)) = self.pads.get(i) {
             let total = clip.len() / 2;
             let in_f = inp.min(total);
@@ -300,13 +317,28 @@ impl Mixer {
                 pad: i,
                 in_f,
                 len_f,
-                t: 0,
+                pos: 0.0,
+                speed,
                 looping,
             });
             // Triggering implies the pad is on (hard) so it always sounds.
             self.pad_env[i] = 1.0;
             self.pad_env_target[i] = 1.0;
         }
+    }
+
+    /// Playback speed for pad `i`. A loop with a known tempo and a known
+    /// master tempo varispeeds by `pad_bpm / master_bpm` so its beats lock to
+    /// the grid (pitch rides); everything else plays native (1.0).
+    fn pad_play_speed(&self, i: usize, looping: bool) -> f64 {
+        if looping {
+            if let (Some(pad), Some(master)) = (self.pad_bpm(i), self.master_bpm) {
+                if pad > 0.0 && master > 0.0 {
+                    return (pad / master) as f64;
+                }
+            }
+        }
+        1.0
     }
 
     /// The project's master tempo (BPM), if set (seeded by the first loop).
@@ -559,6 +591,27 @@ mod tests {
         assert_eq!(m.pad_trim(0).0, 99);
         m.nudge_pad_out(0, 1000); // can't pass the clip end
         assert_eq!(m.pad_trim(0).1, 100);
+    }
+
+    #[test]
+    fn loop_varispeeds_to_the_master_tempo() {
+        let mut m = Mixer::new();
+        // Ramp clip (value = i/100), 100 frames; loop at 100 BPM.
+        let clip: Vec<f32> = (0..100).flat_map(|i| [i as f32 / 100.0; 2]).collect();
+        m.assign_pad(0, clip);
+        m.set_pad_bpm(0, Some(100.0));
+        m.cycle_pad_kind(0); // → Loop
+        m.set_master_bpm(Some(50.0)); // master half the clip's tempo → speed 2.0
+        m.trigger_pad(0);
+        let mut buf = vec![0.0f32; 100]; // 50 output frames
+        m.fill_mix(&mut buf);
+        // At speed 2.0, output frame 25 reads source frame 50 → value ~0.5
+        // (native speed would read frame 25 → ~0.25).
+        assert!(
+            (buf[25 * 2] - 0.5).abs() < 0.02,
+            "loop ran at ~2x, got {}",
+            buf[25 * 2]
+        );
     }
 
     #[test]

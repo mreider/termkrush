@@ -132,6 +132,7 @@
 |  | [Export a track to MP3](termkrush/Export-a-track-to-MP3.md) | 3 |  |
 |  | [Usability + integration test pass for the TUI flows](termkrush/Usability-integration-test-pass-for-the-TUI-flows.md) |  |  |
 |  | [Launch quantization engine: master bar clock and next-bar triggers](termkrush/Launch-quantization-engine-master-bar-clock-and-next-bar-triggers.md) | 5 |  |
+|  | [Cruft pass: remove dead code left by the looper refactors](termkrush/Cruft-pass-remove-dead-code-left-by-the-looper-refactors.md) |  |  |
 
 ### Rejected
 | User | Title | Points | Tags |

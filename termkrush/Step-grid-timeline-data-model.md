@@ -2,12 +2,14 @@
 title: Step grid timeline data model
 type: feature
 created: "2026-06-07T11:10:21Z"
-modified: "2026-06-07T12:33:17Z"
+modified: "2026-06-07T12:34:43Z"
 author: Matt Reider
-status: started
+status: accepted
 estimate: "3"
 project: termkrush
 started: "2026-06-07T12:33:17Z"
+delivered: "2026-06-07T12:34:42Z"
+accepted: "2026-06-07T12:34:43Z"
 ---
 
 ## Problem

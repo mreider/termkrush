@@ -99,6 +99,16 @@ impl Timeline {
         (0..PADS).filter(|&l| self.step(l, step)).collect()
     }
 
+    /// **Destructively** cut the arrangement to end at `step` — nothing plays
+    /// past the bar that contains it. Shortens every lane to match.
+    pub fn cut_at(&mut self, step: usize) {
+        self.bars = (step + 1).div_ceil(self.steps_per_bar).max(1);
+        let len = self.bars * self.steps_per_bar;
+        for lane in &mut self.hits {
+            lane.resize(len, false);
+        }
+    }
+
     /// Clear all hits.
     pub fn clear(&mut self) {
         for l in &mut self.hits {
@@ -143,6 +153,15 @@ mod tests {
         assert!(!t.step(0, 3) && !t.step(0, 9));
         assert_eq!(t.run_at(0, 6), Some((4, 5)), "run start 4, length 5");
         assert_eq!(t.run_at(0, 0), None, "no hit, no run");
+    }
+
+    #[test]
+    fn cut_at_truncates_to_the_bar() {
+        let mut t = Timeline::new(4, 16); // 64 steps
+        t.set_step(0, 60, true); // a hit late in the arrangement
+        t.cut_at(20); // cut in bar 2 → keep 2 bars (32 steps)
+        assert_eq!(t.total_steps(), 32, "cut to the end of the cut step's bar");
+        assert!(!t.step(0, 60), "content past the cut is gone");
     }
 
     #[test]

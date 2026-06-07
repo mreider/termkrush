@@ -120,6 +120,9 @@ pub struct App {
     tl_step: usize,
     /// First endpoint of a loop region being drawn (`v` marks, `v` fills).
     tl_region_start: Option<usize>,
+    /// Clip-edit modal: the pad being edited + the cursor position (frame).
+    clip_edit: Option<usize>,
+    ce_cursor: usize,
     /// Arrangement transport.
     playing: bool,
     play_acc: f64,          // frames accumulated toward the next step
@@ -161,6 +164,8 @@ impl App {
             tl_lane: 0,
             tl_step: 0,
             tl_region_start: None,
+            clip_edit: None,
+            ce_cursor: 0,
             playing: false,
             play_acc: 0.0,
             play_step: 0,
@@ -342,6 +347,13 @@ impl App {
             }
             KeyCode::Char(' ') => Some(self.toggle_transport()),
             KeyCode::Backspace => Some(self.stop_transport()),
+            KeyCode::Char('x') => {
+                self.timeline.cut_at(self.tl_step);
+                self.tl_step = self
+                    .tl_step
+                    .min(self.timeline.total_steps().saturating_sub(1));
+                Some(Action::Timeline)
+            }
             KeyCode::Char('w') => Some(self.render_to_library()),
             KeyCode::Char('v') => {
                 // First `v` marks the region start; second fills to the cursor.
@@ -594,6 +606,61 @@ impl App {
         Action::None
     }
 
+    /// `e` — open the clip-edit modal on the focused (loaded) pad.
+    fn open_clip_edit(&mut self) -> Action {
+        if let Focus::Pad(i) = self.focus {
+            if self.mixer.pad_loaded(i) {
+                self.clip_edit = Some(i);
+                self.ce_cursor = self.mixer.pad_trim(i).0; // start at the in-point
+                return Action::Mark;
+            }
+        }
+        Action::None
+    }
+
+    /// Handle a key while the clip-edit modal is open. Arrows move the cursor
+    /// (shift = coarse); `i`/`o` set the trim in/out; `x` truncates the clip
+    /// at the cursor; `e`/esc close.
+    fn on_clip_key(&mut self, key: KeyEvent) -> Option<Action> {
+        let i = self.clip_edit?;
+        let len = self.mixer.pad_clip_frames(i);
+        let rate = self.mixer.sample_rate() as usize;
+        let shift = key.modifiers.contains(KeyModifiers::SHIFT);
+        let step = (if shift { rate / 10 } else { rate / 100 }).max(1); // 100ms / 10ms
+        match key.code {
+            KeyCode::Char('e') | KeyCode::Esc => {
+                self.clip_edit = None;
+                Some(Action::Mark)
+            }
+            KeyCode::Left => {
+                self.ce_cursor = self.ce_cursor.saturating_sub(step);
+                Some(Action::Mark)
+            }
+            KeyCode::Right => {
+                self.ce_cursor = (self.ce_cursor + step).min(len);
+                Some(Action::Mark)
+            }
+            KeyCode::Char('i') => {
+                self.mixer.set_pad_trim_in(i, self.ce_cursor);
+                Some(Action::Mark)
+            }
+            KeyCode::Char('o') => {
+                self.mixer.set_pad_trim_out(i, self.ce_cursor);
+                Some(Action::Mark)
+            }
+            KeyCode::Char('x') => {
+                self.mixer.truncate_pad(i, self.ce_cursor);
+                self.ce_cursor = self.ce_cursor.min(self.mixer.pad_clip_frames(i));
+                Some(Action::Mark)
+            }
+            KeyCode::Char('q') => {
+                self.confirm_quit = true;
+                Some(Action::ConfirmQuit)
+            }
+            _ => None,
+        }
+    }
+
     /// `u` — unload the focused pad (clear its clip + state).
     fn unload(&mut self) -> Action {
         if let Focus::Pad(i) = self.focus {
@@ -805,6 +872,13 @@ impl App {
             };
         }
 
+        // Clip-edit modal captures keys while open.
+        if self.clip_edit.is_some() {
+            if let Some(a) = self.on_clip_key(key) {
+                return a;
+            }
+        }
+
         // Timeline editor captures navigation + toggling while it's open.
         if self.tl_visible {
             if let Some(a) = self.on_timeline_key(key) {
@@ -854,6 +928,7 @@ impl App {
             KeyCode::Char('p') => self.paste_move(),
             KeyCode::Char(';') => self.cycle_kind(),
             KeyCode::Char('u') => self.unload(),
+            KeyCode::Char('e') => self.open_clip_edit(),
             KeyCode::Char('f') => self.toggle_active(),
             KeyCode::Char('P') => self.toggle_phrase_rec(),
             KeyCode::Char('C') => self.clear_phrase(),
@@ -1025,6 +1100,12 @@ pub fn draw(f: &mut Frame, app: &App) {
         return_help(f, app);
         return;
     }
+    // Clip-edit modal overlays everything else.
+    if let Some(pad) = app.clip_edit {
+        draw_clip_edit(f, rows[1], app, pad);
+        return_help(f, app);
+        return;
+    }
 
     // Body: crate on the left (unless collapsed), pads + DJ on the right.
     let body = if app.crate_collapsed {
@@ -1038,6 +1119,55 @@ pub fn draw(f: &mut Frame, app: &App) {
     draw_crate(f, body[0], app);
     draw_pads(f, body[1], app);
     return_help(f, app);
+}
+
+/// The clip-edit modal: the focused pad's clip as a bar, with the trimmed
+/// region filled, the in/out handles, and a movable cursor. Arrows move the
+/// cursor; i/o set in/out; x truncates at the cursor.
+fn draw_clip_edit(f: &mut Frame, area: Rect, app: &App, pad: usize) {
+    let len = app.mixer.pad_clip_frames(pad).max(1);
+    let (inp, out) = app.mixer.pad_trim(pad);
+    let rate = app.mixer.sample_rate().max(1) as f64;
+    let secs = |fr: usize| fr as f64 / rate;
+    let title = format!(
+        "Edit Pad {} — ←/→ move (shift coarse) · i in · o out · x cut · e close",
+        pad + 1
+    );
+    let block = cell_block(&title, true);
+    let inner = block.inner(area);
+    let w = (inner.width as usize).saturating_sub(2).max(8);
+    let col = |fr: usize| (fr.min(len) * w / len).min(w.saturating_sub(1));
+    let mut bar: Vec<char> = (0..w)
+        .map(|c| {
+            let fr = c * len / w;
+            if fr >= inp && fr < out {
+                '█'
+            } else {
+                '░'
+            }
+        })
+        .collect();
+    bar[col(inp)] = '◂';
+    bar[col(out.saturating_sub(1))] = '▸';
+    bar[col(app.ce_cursor)] = '│'; // cursor on top
+    let lines = vec![
+        Line::from(""),
+        Line::from(format!("  [{}]", bar.iter().collect::<String>())),
+        Line::from(""),
+        Line::from(format!(
+            "  cursor {:.2}s   in {:.2}s   out {:.2}s   len {:.2}s",
+            secs(app.ce_cursor),
+            secs(inp),
+            secs(out),
+            secs(len)
+        )),
+    ];
+    f.render_widget(
+        Paragraph::new(lines)
+            .block(block)
+            .style(Style::default().fg(GREEN)),
+        area,
+    );
 }
 
 /// The tracker step-grid editor: one row per pad, columns are steps. The
@@ -1314,11 +1444,11 @@ fn draw_help(f: &mut Frame, area: Rect) {
   focus   tab / arrows   (library · pads · DJ)
   library / filter   ↑↓ browse   enter open/load→pad   z hide
   files   x delete   R rename   m mark / p move-here
-  pad     j play/wiki   k whip   f on/off   l load   u unload   ; kind   S save   O over   E mp3
+  pad     j play/wiki   k whip   f on/off   l load   u unload   e edit-clip   ; kind   S save   O over   E mp3
   trim    a/d in   w/s out   (shift = fine)
   tempo   , / .  pad bpm
   mix     1-7 trigger   r record   - / = pad vol   [ ] master   { } tempo
-  arrange t timeline (enter hit, v region, space play/pause, backspace stop, w render)\n  quit    esc (y/n)   C-c force   ? help";
+  arrange t timeline (enter hit, v region, x cut, space play/pause, backspace stop, w render)\n  quit    esc (y/n)   C-c force   ? help";
     let block = Block::default()
         .borders(Borders::ALL)
         .border_style(Style::default().fg(AMBER))
@@ -1691,6 +1821,42 @@ mod tests {
         assert!(app.mixer.pad_active(0));
         assert_eq!(app.on_key(key('f')), Action::Mark);
         assert!(!app.mixer.pad_active(0));
+    }
+
+    #[test]
+    fn clip_edit_modal_sets_in_out_and_cuts() {
+        let mut app = App::new();
+        app.mixer.set_sample_rate(1000); // 10ms = 10 frames, 100ms = 100
+        app.mixer.assign_pad(0, vec![0.5; 4000]); // 2000 frames
+        app.set_focus(Focus::Pad(0));
+        assert_eq!(app.on_key(key('e')), Action::Mark); // open
+        assert_eq!(app.clip_edit, Some(0));
+        // Move right ~5 fine steps (50 frames), set the in-point there.
+        for _ in 0..5 {
+            app.on_key(KeyEvent::new(KeyCode::Right, KeyModifiers::NONE));
+        }
+        assert_eq!(app.ce_cursor, 50);
+        app.on_key(key('i'));
+        assert_eq!(app.mixer.pad_trim(0).0, 50, "in-point set at cursor");
+        // Cut destructively at the cursor → clip shortened to 50 frames.
+        app.on_key(key('x'));
+        assert_eq!(app.mixer.pad_clip_frames(0), 50, "clip truncated at cursor");
+        // Close.
+        assert_eq!(app.on_key(key('e')), Action::Mark);
+        assert!(app.clip_edit.is_none());
+    }
+
+    #[test]
+    fn timeline_x_cuts_the_arrangement() {
+        let mut app = App::new();
+        app.on_key(key('t')); // open timeline
+        app.timeline.set_step(0, 60, true);
+        for _ in 0..20 {
+            app.on_key(KeyEvent::new(KeyCode::Right, KeyModifiers::NONE));
+        }
+        app.on_key(key('x')); // cut at step 20 → bar 2 → 32 steps
+        assert_eq!(app.timeline.total_steps(), 32);
+        assert!(!app.timeline.step(0, 60));
     }
 
     #[test]

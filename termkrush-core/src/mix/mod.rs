@@ -278,6 +278,38 @@ impl Mixer {
         self.pad_trim[i].1 = out;
     }
 
+    /// Set pad `i`'s trim in-point to `frame` (clamped below the out-point).
+    pub fn set_pad_trim_in(&mut self, i: usize, frame: usize) {
+        if i < PADS {
+            let out = self.pad_trim[i].1;
+            self.pad_trim[i].0 = frame.min(out.saturating_sub(1));
+        }
+    }
+
+    /// Set pad `i`'s trim out-point to `frame` (clamped above in, ≤ length).
+    pub fn set_pad_trim_out(&mut self, i: usize, frame: usize) {
+        if i < PADS {
+            let len = self.pad_clip_frames(i);
+            let inp = self.pad_trim[i].0;
+            self.pad_trim[i].1 = frame.clamp(inp + 1, len);
+        }
+    }
+
+    /// **Destructively** truncate pad `i`'s clip to end at `frame` — drop
+    /// everything past it and reset the trim to the new full length.
+    pub fn truncate_pad(&mut self, i: usize, frame: usize) {
+        if i >= PADS {
+            return;
+        }
+        if let Some(clip) = self.pads.get(i).and_then(|p| p.as_ref()) {
+            let total = clip.len() / 2;
+            let end = frame.clamp(1, total);
+            let truncated = clip[..end * 2].to_vec();
+            self.pads[i] = Some(Arc::new(truncated));
+            self.pad_trim[i] = (self.pad_trim[i].0.min(end - 1), end);
+        }
+    }
+
     /// Manually nudge pad `i`'s BPM by `delta` (from 120 if unset), clamped.
     pub fn nudge_pad_bpm(&mut self, i: usize, delta: f32) {
         if i < PADS {

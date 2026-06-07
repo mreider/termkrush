@@ -10,7 +10,6 @@
 |  | [Import a YouTube song as WAV to the track list](termkrush/Import-a-YouTube-song-as-WAV-to-the-track-list.md) | 5 |  |
 |  | [Refresh GitHub Pages for the pad based model](termkrush/Refresh-GitHub-Pages-for-the-pad-based-model.md) | 2 |  |
 |  | [V0.1.0 krush](termkrush/V010-krush.md) |  |  |
-|  | [Usability + integration test pass for the TUI flows](termkrush/Usability-integration-test-pass-for-the-TUI-flows.md) |  |  |
 | Total Points | | 7 | |
 
 ### Started
@@ -119,6 +118,7 @@
 |  | [Reload a track onto a pad edit and save back](termkrush/Reload-a-track-onto-a-pad-edit-and-save-back.md) | 3 |  |
 |  | [Import MP3 files into the track list](termkrush/Import-MP3-files-into-the-track-list.md) | 2 |  |
 |  | [Export a track to MP3](termkrush/Export-a-track-to-MP3.md) | 3 |  |
+|  | [Usability + integration test pass for the TUI flows](termkrush/Usability-integration-test-pass-for-the-TUI-flows.md) |  |  |
 
 ### Rejected
 | User | Title | Points | Tags |

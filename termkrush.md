@@ -10,12 +10,14 @@
 |  | [Import a YouTube song as WAV to the track list](termkrush/Import-a-YouTube-song-as-WAV-to-the-track-list.md) | 5 |  |
 |  | [Refresh GitHub Pages for the pad based model](termkrush/Refresh-GitHub-Pages-for-the-pad-based-model.md) | 2 |  |
 |  | [V0.1.0 krush](termkrush/V010-krush.md) |  |  |
-|  | [Auto-BPM: first track sets master and every pad locks, no prompt](termkrush/Auto-BPM-first-track-sets-master-and-every-pad-locks-no-prompt.md) | 3 |  |
 |  | [Edit captured blocks on the timeline (move and trim)](termkrush/Edit-captured-blocks-on-the-timeline-move-and-trim.md) | 5 |  |
 |  | [Master timeline as a permanent top strip](termkrush/Master-timeline-as-a-permanent-top-strip.md) | 5 |  |
 |  | [Record pad performance into the timeline (launch-quantized capture)](termkrush/Record-pad-performance-into-the-timeline-launch-quantized-capture.md) | 8 |  |
 |  | [Retire the step-grid cell-toggle and tracker-only tests](termkrush/Retire-the-step-grid-cell-toggle-and-tracker-only-tests.md) |  |  |
-| Total Points | | 28 | |
+|  | [Bug: scratch whip/wiki is not discoverable - no cue to set a pad to scratch](termkrush/Bug-scratch-whip-wiki-is-not-discoverable-no-cue-to-set-a-pad-to-scratch.md) |  |  |
+|  | [Bug: volume should be up/down arrows for the master track and pads](termkrush/Bug-volume-should-be-up-down-arrows-for-the-master-track-and-pads.md) |  |  |
+|  | [Fade in and fade out on timeline blocks](termkrush/Fade-in-and-fade-out-on-timeline-blocks.md) | 5 |  |
+| Total Points | | 30 | |
 
 ### Started
 | User | Title | Points | Tags |
@@ -37,6 +39,7 @@
 |  | [Bug: clip-edit needs audition preview and two-sided snip](termkrush/Bug-clip-edit-needs-audition-preview-and-two-sided-snip.md) |  |  |
 |  | [Bug: space is not a global play/pause - cannot pause the mix](termkrush/Bug-space-is-not-a-global-play-pause-cannot-pause-the-mix.md) |  |  |
 |  | [Bug: escape should leave the timeline modal then open quit on a second press](termkrush/Bug-escape-should-leave-the-timeline-modal-then-open-quit-on-a-second-press.md) |  |  |
+|  | [Auto-BPM: first track sets master and every pad locks, no prompt](termkrush/Auto-BPM-first-track-sets-master-and-every-pad-locks-no-prompt.md) | 3 |  |
 
 ### Accepted
 | User | Title | Points | Tags |

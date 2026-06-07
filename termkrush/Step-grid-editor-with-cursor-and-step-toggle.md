@@ -2,12 +2,14 @@
 title: Step grid editor with cursor and step toggle
 type: feature
 created: "2026-06-07T11:10:21Z"
-modified: "2026-06-07T12:34:47Z"
+modified: "2026-06-07T12:37:45Z"
 author: Matt Reider
-status: started
+status: accepted
 estimate: "5"
 project: termkrush
 started: "2026-06-07T12:34:47Z"
+delivered: "2026-06-07T12:37:45Z"
+accepted: "2026-06-07T12:37:45Z"
 ---
 
 ## Problem

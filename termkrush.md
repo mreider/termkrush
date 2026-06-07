@@ -22,7 +22,6 @@
 |  | [Play the arrangement through the mixer](termkrush/Play-the-arrangement-through-the-mixer.md) | 5 |  |
 |  | [Refresh GitHub Pages for the pad based model](termkrush/Refresh-GitHub-Pages-for-the-pad-based-model.md) | 2 |  |
 |  | [Reload a track onto a pad edit and save back](termkrush/Reload-a-track-onto-a-pad-edit-and-save-back.md) | 3 |  |
-|  | [Rename delete and move tracks in the UI](termkrush/Rename-delete-and-move-tracks-in-the-UI.md) | 3 |  |
 |  | [Render the arrangement to a WAV in the track list](termkrush/Render-the-arrangement-to-a-WAV-in-the-track-list.md) | 5 |  |
 |  | [Scratch pad controls and display](termkrush/Scratch-pad-controls-and-display.md) | 3 |  |
 |  | [Step grid editor with cursor and step toggle](termkrush/Step-grid-editor-with-cursor-and-step-toggle.md) | 5 |  |
@@ -30,7 +29,7 @@
 |  | [Sync loop pads to the master tempo via varispeed](termkrush/Sync-loop-pads-to-the-master-tempo-via-varispeed.md) | 5 |  |
 |  | [V0.1.0 krush](termkrush/V010-krush.md) |  |  |
 |  | [Whip and wiki scratch primitives](termkrush/Whip-and-wiki-scratch-primitives.md) | 5 |  |
-| Total Points | | 76 | |
+| Total Points | | 73 | |
 
 ### Started
 | User | Title | Points | Tags |
@@ -113,6 +112,7 @@
 |  | [Drop the crossfader deck blend sync cue and old patterns](termkrush/Drop-the-crossfader-deck-blend-sync-cue-and-old-patterns.md) | 3 |  |
 |  | [Multipass cruft sweep for a clean pad based codebase](termkrush/Multipass-cruft-sweep-for-a-clean-pad-based-codebase.md) |  |  |
 |  | [Track list with folders](termkrush/Track-list-with-folders.md) | 3 |  |
+|  | [Rename delete and move tracks in the UI](termkrush/Rename-delete-and-move-tracks-in-the-UI.md) | 3 |  |
 
 ### Rejected
 | User | Title | Points | Tags |

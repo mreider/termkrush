@@ -144,6 +144,8 @@ pub struct Mixer {
     pad_kind: [PadKind; PADS],
     /// Per-pad scratch pivot (onset frame), computed on assign.
     pad_pivot: [usize; PADS],
+    /// Per-pad recorded scratch phrase (sequence of whip/wiki units).
+    pad_phrase: [Vec<crate::scratch::ScratchUnit>; PADS],
     /// Per-pad linear volume (1.0 = unity), applied live to its voices.
     pad_gain: [f32; PADS],
     /// Per-pad activation envelope (0 = off … 1 = on), ramped toward target.
@@ -184,6 +186,7 @@ impl Mixer {
             pad_trim: Default::default(),
             pad_kind: Default::default(),
             pad_pivot: [0; PADS],
+            pad_phrase: std::array::from_fn(|_| Vec::new()),
             pad_gain: [1.0; PADS],
             pad_env: [1.0; PADS],
             pad_env_target: [1.0; PADS],
@@ -448,19 +451,70 @@ impl Mixer {
     }
 
     fn push_scratch(&mut self, i: usize, build: fn(usize, usize) -> Vec<crate::scratch::Stroke>) {
-        let slice = ((self.sample_rate as f64 * 0.08) as usize).max(1); // ~80 ms rub
-        let pivot = self.pad_pivot(i);
+        let (slice, pivot) = (self.scratch_slice(), self.pad_pivot(i));
         if let Some(Some(clip)) = self.pads.get(i) {
             let strokes = build(pivot, slice);
-            self.scratch_voices.push(ScratchVoice {
-                clip: Arc::clone(clip),
-                pad: i,
-                strokes,
-                seg: 0,
-                t: 0.0,
-            });
-            self.pad_env[i] = 1.0;
-            self.pad_env_target[i] = 1.0;
+            self.push_scratch_voice(i, Arc::clone(clip), strokes);
+        }
+    }
+
+    /// Half-rub length in frames: a sixteenth of the master beat when known,
+    /// else ~80 ms — so phrases lock to the grid.
+    fn scratch_slice(&self) -> usize {
+        match self.master_bpm {
+            Some(b) if b > 0.0 => ((self.sample_rate as f64 * 60.0 / b as f64) / 4.0) as usize,
+            _ => (self.sample_rate as f64 * 0.08) as usize,
+        }
+        .max(1)
+    }
+
+    fn push_scratch_voice(
+        &mut self,
+        i: usize,
+        clip: Arc<Vec<f32>>,
+        strokes: Vec<crate::scratch::Stroke>,
+    ) {
+        self.scratch_voices.push(ScratchVoice {
+            clip,
+            pad: i,
+            strokes,
+            seg: 0,
+            t: 0.0,
+        });
+        self.pad_env[i] = 1.0;
+        self.pad_env_target[i] = 1.0;
+    }
+
+    /// Append a unit to pad `i`'s scratch phrase.
+    pub fn push_phrase(&mut self, i: usize, unit: crate::scratch::ScratchUnit) {
+        if i < PADS {
+            self.pad_phrase[i].push(unit);
+        }
+    }
+
+    /// Clear pad `i`'s scratch phrase.
+    pub fn clear_phrase(&mut self, i: usize) {
+        if i < PADS {
+            self.pad_phrase[i].clear();
+        }
+    }
+
+    /// Number of units in pad `i`'s scratch phrase.
+    pub fn pad_phrase_len(&self, i: usize) -> usize {
+        self.pad_phrase.get(i).map(|p| p.len()).unwrap_or(0)
+    }
+
+    /// Play pad `i`'s recorded phrase (or a single wiki if it's empty).
+    pub fn play_phrase(&mut self, i: usize) {
+        let (slice, pivot) = (self.scratch_slice(), self.pad_pivot(i));
+        let strokes = if self.pad_phrase_len(i) > 0 {
+            crate::scratch::phrase_strokes(&self.pad_phrase[i], pivot, slice)
+        } else {
+            crate::scratch::wiki(pivot, slice)
+        };
+        if let Some(Some(clip)) = self.pads.get(i) {
+            let clip = Arc::clone(clip);
+            self.push_scratch_voice(i, clip, strokes);
         }
     }
 
@@ -717,6 +771,30 @@ mod tests {
         assert_eq!(m.pad_trim(0).0, 99);
         m.nudge_pad_out(0, 1000); // can't pass the clip end
         assert_eq!(m.pad_trim(0).1, 100);
+    }
+
+    #[test]
+    fn phrase_records_and_plays() {
+        use crate::scratch::ScratchUnit;
+        let mut m = Mixer::new();
+        m.set_sample_rate(1000);
+        m.assign_pad(0, vec![0.5; 8000]);
+        assert_eq!(m.pad_phrase_len(0), 0);
+        m.push_phrase(0, ScratchUnit::Whip);
+        m.push_phrase(0, ScratchUnit::Wiki);
+        m.push_phrase(0, ScratchUnit::Whip);
+        assert_eq!(m.pad_phrase_len(0), 3);
+        m.play_phrase(0);
+        assert_eq!(
+            m.active_voices(),
+            1,
+            "the phrase plays as one scratch voice"
+        );
+        m.clear_phrase(0);
+        assert_eq!(m.pad_phrase_len(0), 0);
+        // An empty phrase still plays a single wiki (no crash).
+        m.play_phrase(0);
+        assert_eq!(m.active_voices(), 2);
     }
 
     #[test]

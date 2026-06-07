@@ -97,9 +97,39 @@ pub fn wiki(pivot: usize, slice: usize) -> Vec<Stroke> {
     ]
 }
 
+/// One unit in a scratch phrase.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ScratchUnit {
+    Whip,
+    Wiki,
+}
+
+/// Expand a phrase of units into one back-to-back stroke list (each unit a
+/// whip or wiki around `pivot`, `slice` frames per half-rub) — tempo-locked
+/// when `slice` is derived from the beat grid.
+pub fn phrase_strokes(units: &[ScratchUnit], pivot: usize, slice: usize) -> Vec<Stroke> {
+    let mut out = Vec::new();
+    for u in units {
+        match u {
+            ScratchUnit::Whip => out.extend(whip(pivot, slice)),
+            ScratchUnit::Wiki => out.extend(wiki(pivot, slice)),
+        }
+    }
+    out
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn phrase_expands_to_concatenated_strokes() {
+        let units = [ScratchUnit::Whip, ScratchUnit::Wiki];
+        let s = phrase_strokes(&units, 100, 50);
+        assert_eq!(s.len(), 4, "two units × two strokes");
+        assert_eq!(s[0].gain, 0.0, "whip forward muted first");
+        assert_eq!(s[2].gain, 1.0, "wiki forward audible");
+    }
 
     #[test]
     fn whip_mutes_forward_sounds_backward() {

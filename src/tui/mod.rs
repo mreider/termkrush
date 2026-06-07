@@ -33,6 +33,7 @@ use termkrush_core::clip::Clip;
 use termkrush_core::config::Config;
 use termkrush_core::library::Crate;
 use termkrush_core::mix::{Mixer, PadKind, PADS};
+use termkrush_core::scratch::ScratchUnit;
 
 /// Per-keypress master-gain nudge (linear).
 const GAIN_NUDGE: f32 = 0.05;
@@ -106,6 +107,8 @@ pub struct App {
     rename: Option<(PathBuf, String)>,
     /// A track marked for move (cut); `p` pastes it into the current folder.
     move_mark: Option<PathBuf>,
+    /// The scratch pad currently recording a phrase (taps append to it).
+    phrase_rec: Option<usize>,
 }
 
 impl Default for App {
@@ -135,6 +138,7 @@ impl App {
             confirm_delete: None,
             rename: None,
             move_mark: None,
+            phrase_rec: None,
         }
     }
 
@@ -308,25 +312,51 @@ impl App {
 
     // ---- pad actions -------------------------------------------------------
 
-    /// Fire pad `pad`: a wiki scratch on a scratch pad, else a normal trigger.
+    /// Fire pad `pad` (`j`): on a scratch pad, append+play a wiki while
+    /// recording a phrase, else play its phrase; otherwise a normal trigger.
     fn trigger(&mut self, pad: usize) -> Action {
         if self.mixer.pad_kind(pad) == PadKind::Scratch {
-            self.mixer.scratch_wiki(pad);
+            if self.phrase_rec == Some(pad) {
+                self.mixer.push_phrase(pad, ScratchUnit::Wiki);
+                self.mixer.scratch_wiki(pad);
+            } else {
+                self.mixer.play_phrase(pad);
+            }
         } else {
             self.mixer.trigger_pad(pad);
         }
         Action::TriggerPad
     }
 
-    /// `k` — whip on a scratch pad, else assign the latest recording.
+    /// `k` — whip on a scratch pad (append while recording), else assign the
+    /// latest recording.
     fn secondary(&mut self) -> Action {
         if let Focus::Pad(i) = self.focus {
             if self.mixer.pad_kind(i) == PadKind::Scratch {
+                if self.phrase_rec == Some(i) {
+                    self.mixer.push_phrase(i, ScratchUnit::Whip);
+                }
                 self.mixer.scratch_whip(i);
                 return Action::TriggerPad;
             }
         }
         self.assign_recording()
+    }
+
+    /// `P` — toggle phrase-record on the focused scratch pad (clears on arm).
+    fn toggle_phrase_rec(&mut self) -> Action {
+        if let Focus::Pad(i) = self.focus {
+            if self.mixer.pad_kind(i) == PadKind::Scratch {
+                if self.phrase_rec == Some(i) {
+                    self.phrase_rec = None;
+                } else {
+                    self.mixer.clear_phrase(i);
+                    self.phrase_rec = Some(i);
+                }
+                return Action::Mark;
+            }
+        }
+        Action::None
     }
 
     /// `;` — cycle the focused pad's kind (one-shot / loop / scratch).
@@ -565,6 +595,7 @@ impl App {
             KeyCode::Char('p') => self.paste_move(),
             KeyCode::Char(';') => self.cycle_kind(),
             KeyCode::Char('f') => self.toggle_active(),
+            KeyCode::Char('P') => self.toggle_phrase_rec(),
             KeyCode::Char('-') => self.pad_volume(false),
             KeyCode::Char('=') => self.pad_volume(true),
             KeyCode::Enter if self.focus == Focus::Crate && self.selected_is_dir() => {
@@ -809,7 +840,16 @@ fn draw_pad_cell(f: &mut Frame, area: Rect, app: &App, pad: usize) {
         )
     };
     let line2 = if loaded && app.mixer.pad_kind(pad) == PadKind::Scratch {
-        format!("  piv {}", app.mixer.pad_pivot(pad))
+        let rec = if app.phrase_rec == Some(pad) {
+            " REC"
+        } else {
+            ""
+        };
+        format!(
+            "  piv{} ph{}{rec}",
+            app.mixer.pad_pivot(pad),
+            app.mixer.pad_phrase_len(pad)
+        )
     } else if focused && loaded {
         let (inp, out) = app.mixer.pad_trim(pad);
         let len = app.mixer.pad_clip_frames(pad);
@@ -872,7 +912,7 @@ fn draw_help(f: &mut Frame, area: Rect) {
   focus   tab / arrows   (library · pads · DJ)
   library / filter   ↑↓ browse   enter open/load→pad   z hide
   files   x delete   R rename   m mark / p move-here
-  pad     j play/wiki   k whip/assign-rec   f on/off   l load   ; kind
+  pad     j play/wiki   k whip/assign-rec   P rec-phrase   f on/off   l load   ; kind
   trim    a/d in   w/s out   (shift = fine)
   tempo   , / .  pad bpm
   mix     1-7 trigger   r record   - / = pad vol   [ ] master   { } tempo
@@ -1264,6 +1304,27 @@ mod tests {
         assert_eq!(app.mixer.pad_kind(0), PadKind::OneShot);
         assert_eq!(app.on_key(key(';')), Action::Mark);
         assert_eq!(app.mixer.pad_kind(0), PadKind::Loop);
+    }
+
+    #[test]
+    fn p_records_a_scratch_phrase_by_tapping() {
+        let mut app = App::new();
+        app.mixer.assign_pad(0, vec![0.5; 8000]);
+        app.set_focus(Focus::Pad(0));
+        app.mixer.cycle_pad_kind(0);
+        app.mixer.cycle_pad_kind(0); // → Scratch
+        assert_eq!(app.on_key(key('P')), Action::Mark); // arm phrase record
+        assert_eq!(app.phrase_rec, Some(0));
+        app.on_key(key('j')); // tap wiki
+        app.on_key(key('k')); // tap whip
+        app.on_key(key('j')); // tap wiki
+        assert_eq!(app.mixer.pad_phrase_len(0), 3);
+        app.on_key(key('P')); // stop recording
+        assert_eq!(app.phrase_rec, None);
+        // Now j plays the stored phrase as one voice.
+        let before = app.mixer.active_voices();
+        app.on_key(key('j'));
+        assert_eq!(app.mixer.active_voices(), before + 1);
     }
 
     #[test]

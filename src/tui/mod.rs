@@ -38,9 +38,6 @@ use termkrush_core::timeline::Timeline;
 
 /// Per-keypress master-gain nudge (linear).
 const GAIN_NUDGE: f32 = 0.05;
-/// Trim nudge in frames: ~0.1 s coarse, ~0.01 s fine (44.1k-ish).
-const TRIM_COARSE: i64 = 4410;
-const TRIM_FINE: i64 = 441;
 
 /// CRT amber, `#ffb000` — the wordmark and accents.
 pub const AMBER: Color = Color::Rgb(0xff, 0xb0, 0x00);
@@ -58,9 +55,7 @@ pub enum Action {
     None,
     Quit,
     ConfirmQuit,
-    ToggleHelp,
     Focus,
-    ToggleCrate,
     Filter,
     CrateNav,
     /// A track (crate selection or demo) is pending decode onto a pad.
@@ -77,11 +72,49 @@ pub enum Action {
 pub enum Focus {
     Crate,
     Pad(usize),
+    Timeline,
+}
+
+/// An action a context-menu item runs (routes to existing handlers).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum MenuAction {
+    // Library
+    Rename,
+    Delete,
+    MarkMove,
+    PasteHere,
+    Filter,
+    // Pad
+    Load,
+    CycleKind,
+    ToggleActive,
+    SaveNew,
+    SaveOver,
+    Export,
+    Unload,
+    PhraseRec,
+    ClearPhrase,
+    // Timeline
+    Record,
+    Cut,
+    Region,
+    Clear,
+    Render,
+    TempoUp,
+    TempoDown,
+    MasterUp,
+    MasterDown,
+}
+
+/// An open context menu: a titled list navigated with arrows, run with Enter.
+struct MenuState {
+    title: &'static str,
+    items: Vec<(&'static str, MenuAction)>,
+    sel: usize,
 }
 
 /// State of the keyboard-first pads UI.
 pub struct App {
-    pub show_help: bool,
     pub should_quit: bool,
     pub confirm_quit: bool,
     pub mixer: Mixer,
@@ -112,13 +145,14 @@ pub struct App {
     phrase_rec: Option<usize>,
     /// Source file each pad was loaded from (for save-over).
     pad_source: [Option<PathBuf>; PADS],
-    /// The arrangement grid, and whether its editor is showing.
+    /// The arrangement grid (edited in-place via the focused Timeline strip).
     timeline: Timeline,
-    tl_visible: bool,
     tl_lane: usize,
     tl_step: usize,
     /// First endpoint of a loop region being drawn (`v` marks, `v` fills).
     tl_region_start: Option<usize>,
+    /// Open context menu (M), if any.
+    menu: Option<MenuState>,
     /// Clip-edit modal: the pad being edited + which mark is active
     /// (`false` = in/left, `true` = out/right).
     clip_edit: Option<usize>,
@@ -139,7 +173,6 @@ impl Default for App {
 impl App {
     pub fn new() -> Self {
         App {
-            show_help: false,
             should_quit: false,
             confirm_quit: false,
             mixer: Mixer::new(),
@@ -160,10 +193,10 @@ impl App {
             phrase_rec: None,
             pad_source: std::array::from_fn(|_| None),
             timeline: Timeline::default(),
-            tl_visible: false,
             tl_lane: 0,
             tl_step: 0,
             tl_region_start: None,
+            menu: None,
             clip_edit: None,
             ce_out: false,
             playing: false,
@@ -187,17 +220,7 @@ impl App {
         Action::Timeline
     }
 
-    /// Stop and rewind the transport to the top (Backspace).
-    fn stop_transport(&mut self) -> Action {
-        self.playing = false;
-        self.silence_pads();
-        self.play_step = 0;
-        self.play_acc = 0.0;
-        self.prev_run = [false; PADS];
-        Action::Timeline
-    }
-
-    /// Fade every pad out (used on pause/stop so the mix goes quiet).
+    /// Fade every pad out (used on pause so the mix goes quiet).
     fn silence_pads(&mut self) {
         for i in 0..PADS {
             self.mixer.set_pad_active(i, false, true);
@@ -317,64 +340,226 @@ impl App {
         }
     }
 
-    /// Handle a key while the timeline editor is showing. Returns `None` to
-    /// fall through to the normal handler (for keys the editor ignores).
-    fn on_timeline_key(&mut self, key: KeyEvent) -> Option<Action> {
-        match key.code {
-            KeyCode::Char('t') | KeyCode::Esc => {
-                self.tl_visible = false;
-                Some(Action::Timeline)
+    /// Tab / Shift-Tab — jump between the three areas (Library → Pads →
+    /// Timeline).
+    fn next_area(&mut self, fwd: bool) -> Action {
+        self.focus = match (self.focus, fwd) {
+            (Focus::Crate, true) => Focus::Pad(self.last_pad),
+            (Focus::Pad(_), true) => Focus::Timeline,
+            (Focus::Timeline, true) => Focus::Crate,
+            (Focus::Crate, false) => Focus::Timeline,
+            (Focus::Pad(_), false) => Focus::Crate,
+            (Focus::Timeline, false) => Focus::Pad(self.last_pad),
+        };
+        if let Focus::Pad(i) = self.focus {
+            self.last_pad = i;
+        }
+        Action::Focus
+    }
+
+    /// Arrow keys — context navigation: browse the library, pick a pad +
+    /// adjust its volume, or move the timeline cursor.
+    fn nav(&mut self, dir: KeyCode) -> Action {
+        match self.focus {
+            Focus::Crate => match dir {
+                KeyCode::Up => self.crate_nav(-1),
+                KeyCode::Down => self.crate_nav(1),
+                _ => Action::None,
+            },
+            Focus::Pad(i) => match dir {
+                KeyCode::Up => self.volume(true),
+                KeyCode::Down => self.volume(false),
+                KeyCode::Left => {
+                    self.set_focus(Focus::Pad(i.saturating_sub(1)));
+                    Action::Focus
+                }
+                KeyCode::Right => {
+                    self.set_focus(Focus::Pad((i + 1).min(PADS - 1)));
+                    Action::Focus
+                }
+                _ => Action::None,
+            },
+            Focus::Timeline => {
+                let last = self.timeline.total_steps().saturating_sub(1);
+                match dir {
+                    KeyCode::Left => self.tl_step = self.tl_step.saturating_sub(1),
+                    KeyCode::Right => self.tl_step = (self.tl_step + 1).min(last),
+                    KeyCode::Up => self.tl_lane = self.tl_lane.saturating_sub(1),
+                    KeyCode::Down => self.tl_lane = (self.tl_lane + 1).min(PADS - 1),
+                    _ => {}
+                }
+                Action::Timeline
             }
-            KeyCode::Up => {
-                self.tl_lane = self.tl_lane.saturating_sub(1);
-                Some(Action::Timeline)
+        }
+    }
+
+    /// The context hint shown under the title — what the keys do right now,
+    /// so the UI teaches itself and needs no help screen.
+    fn hint(&self) -> &'static str {
+        if self.menu.is_some() {
+            return "↑↓ choose · enter do · esc close";
+        }
+        if self.clip_edit.is_some() {
+            return "←→ move · tab in/out · space hear · enter snip · esc done";
+        }
+        match self.focus {
+            Focus::Crate => "↑↓ browse · enter load→pad · tab→pads · M menu",
+            Focus::Pad(_) => "←→ pad · ↑↓ vol · space play · enter edit · tab→timeline · M menu",
+            Focus::Timeline => "←→ step · ↑↓ lane · space play · enter hit · tab→library · M menu",
+        }
+    }
+
+    /// Space — play the focused pad, or play/stop the arrangement.
+    fn play(&mut self) -> Action {
+        match self.focus {
+            Focus::Pad(i) => self.trigger(i),
+            Focus::Timeline => self.toggle_transport(),
+            Focus::Crate => Action::None,
+        }
+    }
+
+    /// Enter — the primary action: load/open in the library, edit (or whip on
+    /// a scratch pad), or toggle a timeline hit.
+    fn primary(&mut self) -> Action {
+        match self.focus {
+            Focus::Crate => {
+                if self.selected_is_dir() {
+                    self.enter_selected()
+                } else {
+                    self.load_selected_onto(self.active_pad())
+                }
             }
-            KeyCode::Down => {
-                self.tl_lane = (self.tl_lane + 1).min(PADS - 1);
-                Some(Action::Timeline)
+            Focus::Pad(i) => {
+                if self.mixer.pad_kind(i) == PadKind::Scratch {
+                    self.secondary()
+                } else {
+                    self.open_clip_edit()
+                }
             }
-            KeyCode::Left => {
-                self.tl_step = self.tl_step.saturating_sub(1);
-                Some(Action::Timeline)
-            }
-            KeyCode::Right => {
-                self.tl_step = (self.tl_step + 1).min(self.timeline.total_steps() - 1);
-                Some(Action::Timeline)
-            }
-            KeyCode::Enter => {
+            Focus::Timeline => {
                 self.timeline.toggle(self.tl_lane, self.tl_step);
-                Some(Action::Timeline)
+                Action::Timeline
             }
-            KeyCode::Char(' ') | KeyCode::Char('p') => Some(self.toggle_transport()),
-            KeyCode::Backspace => Some(self.stop_transport()),
-            KeyCode::Char('x') => {
+        }
+    }
+
+    /// Toggle the timeline loop region (first call marks the start, second
+    /// fills to the cursor).
+    fn toggle_region(&mut self) -> Action {
+        match self.tl_region_start {
+            None => self.tl_region_start = Some(self.tl_step),
+            Some(s) => {
+                self.timeline.fill_region(self.tl_lane, s, self.tl_step);
+                self.tl_region_start = None;
+            }
+        }
+        Action::Timeline
+    }
+
+    /// M — open the context menu for the focused area.
+    fn open_menu(&mut self) -> Action {
+        use MenuAction::*;
+        let (title, items): (&str, Vec<(&str, MenuAction)>) = match self.focus {
+            Focus::Crate => (
+                "Library",
+                vec![
+                    ("rename", Rename),
+                    ("delete", Delete),
+                    ("mark to move", MarkMove),
+                    ("move here", PasteHere),
+                    ("filter", Filter),
+                ],
+            ),
+            Focus::Pad(_) => (
+                "Pad",
+                vec![
+                    ("load track", Load),
+                    ("kind (loop/scratch/1-shot)", CycleKind),
+                    ("on / off", ToggleActive),
+                    ("save as new", SaveNew),
+                    ("save over", SaveOver),
+                    ("export mp3", Export),
+                    ("unload", Unload),
+                    ("record phrase", PhraseRec),
+                    ("clear phrase", ClearPhrase),
+                ],
+            ),
+            Focus::Timeline => (
+                "Timeline",
+                vec![
+                    ("record", Record),
+                    ("cut here", Cut),
+                    ("loop region", Region),
+                    ("clear", Clear),
+                    ("render to library", Render),
+                    ("tempo +", TempoUp),
+                    ("tempo -", TempoDown),
+                    ("master +", MasterUp),
+                    ("master -", MasterDown),
+                ],
+            ),
+        };
+        self.menu = Some(MenuState {
+            title,
+            items,
+            sel: 0,
+        });
+        Action::Mark
+    }
+
+    /// Run a chosen menu action (closes the menu first).
+    fn run_menu(&mut self, a: MenuAction) -> Action {
+        use MenuAction::*;
+        self.menu = None;
+        match a {
+            Rename => self.start_rename(),
+            Delete => self.arm_delete(),
+            MarkMove => self.mark_move(),
+            PasteHere => self.paste_move(),
+            Filter => {
+                self.filter = Some(String::new());
+                self.crate_sel = 0;
+                Action::Filter
+            }
+            Load => self.load_selected_onto(self.active_pad()),
+            CycleKind => self.cycle_kind(),
+            ToggleActive => self.toggle_active(),
+            SaveNew => self.save_pad_new(),
+            SaveOver => self.save_pad_over(),
+            Export => self.export_pad_mp3(),
+            Unload => self.unload(),
+            PhraseRec => self.toggle_phrase_rec(),
+            ClearPhrase => self.clear_phrase(),
+            Record => self.toggle_record(),
+            Cut => {
                 self.timeline.cut_at(self.tl_step);
                 self.tl_step = self
                     .tl_step
                     .min(self.timeline.total_steps().saturating_sub(1));
-                Some(Action::Timeline)
+                Action::Timeline
             }
-            KeyCode::Char('w') => Some(self.render_to_library()),
-            KeyCode::Char('v') => {
-                // First `v` marks the region start; second fills to the cursor.
-                match self.tl_region_start {
-                    None => self.tl_region_start = Some(self.tl_step),
-                    Some(s) => {
-                        self.timeline.fill_region(self.tl_lane, s, self.tl_step);
-                        self.tl_region_start = None;
-                    }
-                }
-                Some(Action::Timeline)
+            Region => self.toggle_region(),
+            Clear => {
+                self.timeline.clear();
+                Action::Timeline
             }
-            KeyCode::Char('?') => {
-                self.show_help = !self.show_help;
-                Some(Action::ToggleHelp)
+            Render => self.render_to_library(),
+            TempoUp => {
+                self.mixer.nudge_global_speed(0.02);
+                Action::MasterGain
             }
-            KeyCode::Char('q') => {
-                self.confirm_quit = true;
-                Some(Action::ConfirmQuit)
+            TempoDown => {
+                self.mixer.nudge_global_speed(-0.02);
+                Action::MasterGain
             }
-            _ => None,
+            MasterUp => {
+                self.mixer.nudge_master(GAIN_NUDGE);
+                Action::MasterGain
+            }
+            MasterDown => {
+                self.mixer.nudge_master(-GAIN_NUDGE);
+                Action::MasterGain
+            }
         }
     }
 
@@ -445,34 +630,11 @@ impl App {
         }
     }
 
-    // ---- focus order: Crate, Pad0..PADS-1 ----------------------------------
-
-    fn focus_order() -> Vec<Focus> {
-        let mut v = vec![Focus::Crate];
-        v.extend((0..PADS).map(Focus::Pad));
-        v
-    }
-
-    fn focus_index(&self) -> usize {
-        Self::focus_order()
-            .iter()
-            .position(|&f| f == self.focus)
-            .unwrap_or(0)
-    }
-
     fn set_focus(&mut self, f: Focus) {
         if let Focus::Pad(i) = f {
             self.last_pad = i;
         }
         self.focus = f;
-    }
-
-    fn step_focus(&mut self, delta: isize) -> Action {
-        let order = Self::focus_order();
-        let n = order.len() as isize;
-        let i = (self.focus_index() as isize + delta).rem_euclid(n) as usize;
-        self.set_focus(order[i]);
-        Action::Focus
     }
 
     // ---- crate browsing ----------------------------------------------------
@@ -628,7 +790,7 @@ impl App {
         let (inp, out) = self.mixer.pad_trim(i);
         let nudge = |v: usize, d: i64| (v as i64 + d).max(0) as usize;
         match key.code {
-            KeyCode::Char('e') | KeyCode::Esc => {
+            KeyCode::Esc => {
                 self.clip_edit = None;
                 Some(Action::Mark)
             }
@@ -653,14 +815,10 @@ impl App {
                 self.mixer.audition_pad(i); // preview the selection
                 Some(Action::Mark)
             }
-            KeyCode::Char('x') => {
+            KeyCode::Enter => {
                 self.mixer.snip_pad(i); // destructively keep only [in, out]
                 self.ce_out = false;
                 Some(Action::Mark)
-            }
-            KeyCode::Char('q') => {
-                self.confirm_quit = true;
-                Some(Action::ConfirmQuit)
             }
             _ => None,
         }
@@ -698,62 +856,13 @@ impl App {
         }
     }
 
-    /// `-` / `=` — nudge the focused pad's volume.
-    fn pad_volume(&mut self, up: bool) -> Action {
+    /// Up/Down on a focused pad → its volume. (Master volume is in the
+    /// Timeline menu, since ↑/↓ there move between lanes.)
+    fn volume(&mut self, up: bool) -> Action {
         if let Focus::Pad(i) = self.focus {
             self.mixer.nudge_pad_gain(i, if up { 0.05 } else { -0.05 });
-            Action::Mark
-        } else {
-            Action::None
         }
-    }
-
-    /// Up/Down volume: a focused pad → its volume; anything else (the master
-    /// timeline) → master volume.
-    fn volume(&mut self, up: bool) -> Action {
-        match self.focus {
-            Focus::Pad(i) => {
-                self.mixer.nudge_pad_gain(i, if up { 0.05 } else { -0.05 });
-                Action::Mark
-            }
-            _ => {
-                self.mixer
-                    .nudge_master(if up { GAIN_NUDGE } else { -GAIN_NUDGE });
-                Action::MasterGain
-            }
-        }
-    }
-
-    fn trim_in(&mut self, forward: bool, fine: bool) -> Action {
-        if let Focus::Pad(i) = self.focus {
-            let step = if fine { TRIM_FINE } else { TRIM_COARSE };
-            self.mixer
-                .nudge_pad_in(i, if forward { step } else { -step });
-            Action::Mark
-        } else {
-            Action::None
-        }
-    }
-
-    fn trim_out(&mut self, forward: bool, fine: bool) -> Action {
-        if let Focus::Pad(i) = self.focus {
-            let step = if fine { TRIM_FINE } else { TRIM_COARSE };
-            self.mixer
-                .nudge_pad_out(i, if forward { step } else { -step });
-            Action::Mark
-        } else {
-            Action::None
-        }
-    }
-
-    fn nudge_bpm(&mut self, up: bool, fine: bool) -> Action {
-        if let Focus::Pad(i) = self.focus {
-            let step = if fine { 0.1 } else { 1.0 } * if up { 1.0 } else { -1.0 };
-            self.mixer.nudge_pad_bpm(i, step);
-            Action::Mark
-        } else {
-            Action::None
-        }
+        Action::Mark
     }
 
     /// Assign the most-recent recording to the focused pad.
@@ -893,6 +1002,29 @@ impl App {
             };
         }
 
+        // Context menu (M) captures input while open.
+        if let Some(m) = self.menu.as_mut() {
+            return match key.code {
+                KeyCode::Up => {
+                    m.sel = m.sel.saturating_sub(1);
+                    Action::Mark
+                }
+                KeyCode::Down => {
+                    m.sel = (m.sel + 1).min(m.items.len().saturating_sub(1));
+                    Action::Mark
+                }
+                KeyCode::Enter => {
+                    let a = m.items[m.sel].1;
+                    self.run_menu(a)
+                }
+                KeyCode::Esc | KeyCode::Char('m') => {
+                    self.menu = None;
+                    Action::Mark
+                }
+                _ => Action::None,
+            };
+        }
+
         // Clip-edit modal captures keys while open.
         if self.clip_edit.is_some() {
             if let Some(a) = self.on_clip_key(key) {
@@ -900,107 +1032,18 @@ impl App {
             }
         }
 
-        // Timeline editor captures navigation + toggling while it's open.
-        if self.tl_visible {
-            if let Some(a) = self.on_timeline_key(key) {
-                return a;
-            }
-        }
-
-        let shift = key.modifiers.contains(KeyModifiers::SHIFT);
+        // The whole control surface: arrows · Tab · Space · Enter · M · Esc.
         match key.code {
-            KeyCode::Esc | KeyCode::Char('q') => {
+            KeyCode::Esc => {
                 self.confirm_quit = true;
                 Action::ConfirmQuit
             }
-            KeyCode::Char('?') => {
-                self.show_help = !self.show_help;
-                Action::ToggleHelp
-            }
-            // Focus moves with Tab / Shift-Tab and Left / Right.
-            KeyCode::Tab | KeyCode::Right => self.step_focus(1),
-            KeyCode::BackTab | KeyCode::Left => self.step_focus(-1),
-
-            // Up/Down = volume — except on the library, where they browse.
-            KeyCode::Up if self.focus == Focus::Crate => self.crate_nav(-1),
-            KeyCode::Down if self.focus == Focus::Crate => self.crate_nav(1),
-            KeyCode::Up => self.volume(true),
-            KeyCode::Down => self.volume(false),
-
-            // Crate.
-            KeyCode::Char('/') => {
-                self.filter = Some(String::new());
-                self.crate_sel = 0;
-                Action::Filter
-            }
-            KeyCode::Char('z') => {
-                self.crate_collapsed = !self.crate_collapsed;
-                Action::ToggleCrate
-            }
-            KeyCode::Char('t') => {
-                self.tl_visible = true;
-                Action::Timeline
-            }
-            // Space plays the focused pad.
-            KeyCode::Char(' ') => self.trigger(self.active_pad()),
-            // Library file ops (on the highlighted track).
-            KeyCode::Char('x') => self.arm_delete(),
-            KeyCode::Char('R') => self.start_rename(),
-            KeyCode::Char('m') => self.mark_move(),
-            KeyCode::Char('p') => self.paste_move(),
-            KeyCode::Char(';') => self.cycle_kind(),
-            KeyCode::Char('u') => self.unload(),
-            KeyCode::Char('e') => self.open_clip_edit(),
-            KeyCode::Char('f') => self.toggle_active(),
-            KeyCode::Char('P') => self.toggle_phrase_rec(),
-            KeyCode::Char('C') => self.clear_phrase(),
-            KeyCode::Char('S') => self.save_pad_new(),
-            KeyCode::Char('O') => self.save_pad_over(),
-            KeyCode::Char('E') => self.export_pad_mp3(),
-            KeyCode::Char('-') => self.pad_volume(false),
-            KeyCode::Char('=') => self.pad_volume(true),
-            KeyCode::Enter if self.focus == Focus::Crate && self.selected_is_dir() => {
-                self.enter_selected()
-            }
-            KeyCode::Enter => self.load_selected_onto(self.active_pad()),
-            KeyCode::Char('\\') => {
-                self.pending_pad_load = Some((self.active_pad(), demo_track_path()));
-                Action::AssignPad
-            }
-
-            // Pad action cluster (on the focused pad).
-            KeyCode::Char('j') => self.trigger(self.active_pad()),
-            KeyCode::Char('l') => self.load_selected_onto(self.active_pad()),
-            KeyCode::Char('k') => self.secondary(),
-            KeyCode::Char('a') => self.trim_in(false, shift),
-            KeyCode::Char('d') => self.trim_in(true, shift),
-            KeyCode::Char('w') => self.trim_out(true, shift),
-            KeyCode::Char('s') => self.trim_out(false, shift),
-            KeyCode::Char(',') => self.nudge_bpm(false, shift),
-            KeyCode::Char('.') => self.nudge_bpm(true, shift),
-
-            // Globals.
-            KeyCode::Char('r') => self.toggle_record(),
-            KeyCode::Char('}') => {
-                self.mixer.nudge_global_speed(0.02);
-                Action::MasterGain
-            }
-            KeyCode::Char('{') => {
-                self.mixer.nudge_global_speed(-0.02);
-                Action::MasterGain
-            }
-            KeyCode::Char('[') => {
-                self.mixer.nudge_master(-GAIN_NUDGE);
-                Action::MasterGain
-            }
-            KeyCode::Char(']') => {
-                self.mixer.nudge_master(GAIN_NUDGE);
-                Action::MasterGain
-            }
-            KeyCode::Char(c @ '1'..='8') => {
-                let pad = c.to_digit(10).unwrap() as usize - 1;
-                self.trigger(pad)
-            }
+            KeyCode::Tab => self.next_area(true),
+            KeyCode::BackTab => self.next_area(false),
+            KeyCode::Up | KeyCode::Down | KeyCode::Left | KeyCode::Right => self.nav(key.code),
+            KeyCode::Char(' ') => self.play(),
+            KeyCode::Enter => self.primary(),
+            KeyCode::Char('m') => self.open_menu(),
             _ => Action::None,
         }
     }
@@ -1122,12 +1165,6 @@ pub fn draw(f: &mut Frame, app: &App) {
     let rows = Layout::vertical([Constraint::Length(2), Constraint::Min(0)]).split(f.area());
     draw_header(f, rows[0], app);
 
-    // The timeline editor takes over the body while it's open.
-    if app.tl_visible {
-        draw_timeline(f, rows[1], app);
-        return_help(f, app);
-        return;
-    }
     // Clip-edit modal overlays everything else.
     if let Some(pad) = app.clip_edit {
         draw_clip_edit(f, rows[1], app, pad);
@@ -1208,35 +1245,26 @@ fn draw_clip_edit(f: &mut Frame, area: Rect, app: &App, pad: usize) {
 
 /// The tracker step-grid editor: one row per pad, columns are steps. The
 /// cursor cell is boxed; bar boundaries are spaced for legibility.
-fn draw_timeline(f: &mut Frame, area: Rect, app: &App) {
+/// The master-timeline strip across the top: one lane per pad, hits as `█`,
+/// playhead `▶`/`:`, and — when the Timeline is focused — an edit cursor
+/// (`▣`/`▢`). Edited in place; no separate editor.
+fn draw_timeline_strip(f: &mut Frame, area: Rect, app: &App) {
     let tl = &app.timeline;
     let spb = tl.steps_per_bar();
-    let region = if app.tl_region_start.is_some() {
-        "  [v: set region end]"
-    } else {
-        ""
-    };
+    let focused = app.focus_cell() == Focus::Timeline;
     let transport = if app.playing { "▶" } else { "■" };
+    let title = format!("TIMELINE {transport} {}×{}", tl.bars(), spb);
+    let block = cell_block(&title, focused);
     let head = app.playhead();
-    let title = format!(
-        "Timeline {transport} {}×{}  (enter hit · v region · space play · t close){region}",
-        tl.bars(),
-        spb
-    );
-    let block = cell_block(&title, true);
     let mut lines: Vec<Line> = Vec::with_capacity(PADS);
     for lane in 0..PADS {
-        let mut s = format!(
-            "{}P{} ",
-            if lane == app.tl_lane { "▸" } else { " " },
-            lane + 1
-        );
+        let mut s = format!(" P{} ", lane + 1);
         for step in 0..tl.total_steps() {
             if step > 0 && step % spb == 0 {
                 s.push('|'); // bar boundary
             }
             let hit = tl.step(lane, step);
-            let cursor = lane == app.tl_lane && step == app.tl_step;
+            let cursor = focused && lane == app.tl_lane && step == app.tl_step;
             let on_head = head == Some(step);
             s.push(match (cursor, hit, on_head) {
                 (true, true, _) => '▣',
@@ -1257,49 +1285,48 @@ fn draw_timeline(f: &mut Frame, area: Rect, app: &App) {
     );
 }
 
-/// The persistent master-timeline strip at the top of the body: one lane per
-/// pad, hits as `█`, the playhead as `▶`/`:`. Read-only overview — `t` opens
-/// the full editor.
-fn draw_timeline_strip(f: &mut Frame, area: Rect, app: &App) {
-    let tl = &app.timeline;
-    let spb = tl.steps_per_bar();
-    let transport = if app.playing { "▶" } else { "■" };
-    let title = format!("TIMELINE {transport} {}×{}  ·  t edit", tl.bars(), spb);
-    let block = cell_block(&title, false);
-    let head = app.playhead();
-    let mut lines: Vec<Line> = Vec::with_capacity(PADS);
-    for lane in 0..PADS {
-        let mut s = format!(" P{} ", lane + 1);
-        for step in 0..tl.total_steps() {
-            if step > 0 && step % spb == 0 {
-                s.push('|'); // bar boundary
-            }
-            s.push(match (tl.step(lane, step), head == Some(step)) {
-                (true, true) => '▶',
-                (true, false) => '█',
-                (false, true) => ':',
-                (false, false) => '·',
-            });
-        }
-        lines.push(Line::from(s));
-    }
-    f.render_widget(
-        Paragraph::new(lines)
-            .block(block)
-            .style(Style::default().fg(GREEN)),
-        area,
-    );
-}
-
 fn return_help(f: &mut Frame, app: &App) {
     if app.confirm_quit {
         draw_quit_modal(f, f.area());
     } else if let Some(path) = &app.confirm_delete {
         let name = path.file_name().and_then(|n| n.to_str()).unwrap_or("track");
         draw_confirm_modal(f, f.area(), &format!("Delete {name}?"));
-    } else if app.show_help {
-        draw_help(f, f.area());
+    } else if let Some(menu) = &app.menu {
+        draw_menu(f, f.area(), menu);
     }
+}
+
+/// The context menu (M): a titled list, the selected row reversed.
+fn draw_menu(f: &mut Frame, area: Rect, menu: &MenuState) {
+    let w = menu
+        .items
+        .iter()
+        .map(|(l, _)| l.chars().count())
+        .chain(std::iter::once(menu.title.chars().count()))
+        .max()
+        .unwrap_or(20) as u16
+        + 6;
+    let h = menu.items.len() as u16 + 2;
+    let popup = centered(w, h, area);
+    f.render_widget(Clear, popup);
+    let items: Vec<ListItem> = menu
+        .items
+        .iter()
+        .map(|(label, _)| ListItem::new(*label))
+        .collect();
+    let mut state = ListState::default();
+    state.select(Some(menu.sel.min(menu.items.len().saturating_sub(1))));
+    let list = List::new(items)
+        .block(
+            Block::default()
+                .borders(Borders::ALL)
+                .border_style(Style::default().fg(AMBER))
+                .title(format!(" {} ", menu.title)),
+        )
+        .style(Style::default().fg(GREEN))
+        .highlight_style(Style::default().fg(AMBER).add_modifier(Modifier::REVERSED))
+        .highlight_symbol("▶ ");
+    f.render_stateful_widget(list, popup, &mut state);
 }
 
 fn draw_header(f: &mut Frame, area: Rect, app: &App) {
@@ -1313,7 +1340,8 @@ fn draw_header(f: &mut Frame, area: Rect, app: &App) {
             Style::default().fg(AMBER).add_modifier(Modifier::BOLD),
         ))
         .centered(),
-        Line::from(Span::styled("? help", Style::default().fg(GREEN))).centered(),
+        // Context hint — what the keys do *right now*. No help screen needed.
+        Line::from(Span::styled(app.hint(), Style::default().fg(GREEN))).centered(),
     ];
     f.render_widget(Paragraph::new(lines), area);
 }
@@ -1491,36 +1519,6 @@ fn draw_confirm_modal(f: &mut Frame, area: Rect, prompt: &str) {
     f.render_widget(body, popup);
 }
 
-fn draw_help(f: &mut Frame, area: Rect) {
-    let lines = [
-        "  move      tab · shift-tab · ← →     (library ↔ pads)",
-        "  volume    ↑ ↓   (focused pad)",
-        "  play      space   ·   1-8 pad",
-        "  load      enter   (library track → focused pad)",
-        "  pad       ; kind   f on/off   u unload   e edit",
-        "  scratch   space wiki · k whip · P phrase · C clear",
-        "  edit clip tab in/out · ← → move · space audition · x snip · e close",
-        "  timeline  t open · enter hit · v region · x cut · space play · w render",
-        "  files     x delete · R rename · m mark · p move-here · / filter",
-        "  master    [ ] vol · { } tempo · r record",
-        "  quit      esc (y/n) · ctrl-c force",
-    ];
-    let w = lines.iter().map(|l| l.chars().count()).max().unwrap_or(40) as u16 + 4;
-    let h = lines.len() as u16 + 2;
-    let popup = centered(w, h, area);
-    f.render_widget(Clear, popup);
-    let block = Block::default()
-        .borders(Borders::ALL)
-        .border_style(Style::default().fg(AMBER))
-        .title(" Help ");
-    f.render_widget(
-        Paragraph::new(lines.join("\n"))
-            .block(block)
-            .style(Style::default().fg(GREEN)),
-        popup,
-    );
-}
-
 fn centered(w: u16, h: u16, area: Rect) -> Rect {
     let w = w.min(area.width);
     let h = h.min(area.height);
@@ -1607,13 +1605,6 @@ fn apply_pad_assign(
         load_tx.clone(),
     );
     true
-}
-
-/// The bundled demo track path (`$TERMKRUSH_DEMO_TRACK`, else a default).
-fn demo_track_path() -> PathBuf {
-    std::env::var_os("TERMKRUSH_DEMO_TRACK")
-        .map(PathBuf::from)
-        .unwrap_or_else(|| PathBuf::from("assets/demo.mp3"))
 }
 
 // ---- terminal lifecycle ----------------------------------------------------
@@ -1779,7 +1770,7 @@ mod tests {
         let mut app = App::new();
         app.set_crate(Crate::scan(&tmp));
         app.set_focus(Focus::Crate);
-        assert_eq!(app.on_key(key('x')), Action::Mark); // arm
+        app.run_menu(MenuAction::Delete); // arm
         assert!(app.confirm_delete.is_some());
         app.on_key(key('y')); // confirm
         assert!(!tmp.join("gone.wav").exists(), "file deleted");
@@ -1799,11 +1790,11 @@ mod tests {
         // Entries: ["box", "t.wav"] — move to the track, mark it.
         app.on_key(KeyEvent::new(KeyCode::Down, KeyModifiers::NONE));
         assert_eq!(app.selected_path(), Some(tmp.join("t.wav")));
-        assert_eq!(app.on_key(key('m')), Action::Mark);
+        app.run_menu(MenuAction::MarkMove);
         // Back to the folder, enter it, paste.
         app.crate_sel = 0;
         app.on_key(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE)); // into box/
-        assert_eq!(app.on_key(key('p')), Action::Mark);
+        app.run_menu(MenuAction::PasteHere);
         assert!(tmp.join("box/t.wav").exists() && !tmp.join("t.wav").exists());
         let _ = fs::remove_dir_all(&tmp);
     }
@@ -1823,32 +1814,30 @@ mod tests {
     }
 
     #[test]
-    fn tab_cycles_focus_through_crate_and_pads() {
+    fn tab_jumps_between_the_three_areas() {
+        let tab = || KeyEvent::new(KeyCode::Tab, KeyModifiers::NONE);
         let mut app = App::new();
         app.set_focus(Focus::Crate);
-        assert_eq!(app.focus_cell(), Focus::Crate);
-        assert_eq!(
-            app.on_key(KeyEvent::new(KeyCode::Tab, KeyModifiers::NONE)),
-            Action::Focus
-        );
-        assert_eq!(app.focus_cell(), Focus::Pad(0));
-        // Step to the last pad and wrap back to Crate.
-        for _ in 0..PADS - 1 {
-            app.on_key(KeyEvent::new(KeyCode::Tab, KeyModifiers::NONE));
-        }
-        assert_eq!(app.focus_cell(), Focus::Pad(PADS - 1));
-        app.on_key(KeyEvent::new(KeyCode::Tab, KeyModifiers::NONE));
-        assert_eq!(app.focus_cell(), Focus::Crate);
+        assert_eq!(app.on_key(tab()), Action::Focus);
+        assert_eq!(app.focus_cell(), Focus::Pad(0)); // Library → Pads
+        app.on_key(tab());
+        assert_eq!(app.focus_cell(), Focus::Timeline); // Pads → Timeline
+        app.on_key(tab());
+        assert_eq!(app.focus_cell(), Focus::Crate); // Timeline → Library
     }
 
     #[test]
-    fn crate_browse_and_load_targets_the_focused_pad() {
+    fn library_enter_loads_onto_the_selected_pad() {
         let mut app = App::new();
         app.set_crate(demo_crate());
-        app.set_focus(Focus::Pad(3));
+        app.set_focus(Focus::Pad(3)); // remembers pad 3 as the target
+        app.set_focus(Focus::Crate); // go to the library
         assert_eq!(app.selected_path(), Some("/m/a.mp3".into()));
-        // `l` queues the highlighted track onto the focused pad.
-        assert_eq!(app.on_key(key('l')), Action::AssignPad);
+        // Enter queues the highlighted track onto the last-selected pad.
+        assert_eq!(
+            app.on_key(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE)),
+            Action::AssignPad
+        );
         assert_eq!(app.take_pending_pad_load(), Some((3, "/m/a.mp3".into())));
     }
 
@@ -1857,29 +1846,30 @@ mod tests {
         let mut app = App::new();
         app.set_crate(demo_crate());
         app.set_focus(Focus::Crate);
-        app.on_key(key('/'));
+        app.run_menu(MenuAction::Filter); // open filter from the menu
         app.on_key(key('b')); // matches "Beta"
         assert_eq!(app.selected_path(), Some("/m/b.mp3".into()));
     }
 
     #[test]
-    fn brace_keys_nudge_global_tempo() {
+    fn menu_nudges_global_tempo() {
         let mut app = App::new();
         app.mixer.set_master_bpm(Some(120.0));
+        app.set_focus(Focus::Timeline);
         assert_eq!(app.mixer.global_speed(), 1.0);
-        assert_eq!(app.on_key(key('}')), Action::MasterGain);
+        app.run_menu(MenuAction::TempoUp);
         assert!(app.mixer.global_speed() > 1.0);
         assert!(app.mixer.effective_bpm().unwrap() > 120.0);
-        assert_eq!(app.on_key(key('{')), Action::MasterGain);
+        app.run_menu(MenuAction::TempoDown);
     }
 
     #[test]
-    fn f_toggles_pad_activation() {
+    fn menu_toggles_pad_activation() {
         let mut app = App::new();
         app.mixer.assign_pad(0, vec![0.5; 64]);
         app.set_focus(Focus::Pad(0));
         assert!(app.mixer.pad_active(0));
-        assert_eq!(app.on_key(key('f')), Action::Mark);
+        app.run_menu(MenuAction::ToggleActive);
         assert!(!app.mixer.pad_active(0));
     }
 
@@ -1889,8 +1879,9 @@ mod tests {
         app.mixer.set_sample_rate(1000); // 10ms = 10 frames
         app.mixer.assign_pad(0, vec![0.5; 4000]); // 2000 frames
         app.set_focus(Focus::Pad(0));
-        assert_eq!(app.on_key(key('e')), Action::Mark); // open (in mark active)
-        assert!(!app.ce_out);
+        let enter = || KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE);
+        assert_eq!(app.on_key(enter()), Action::Mark); // Enter opens the editor
+        assert!(app.clip_edit.is_some() && !app.ce_out);
         // Move the IN mark right 5×10 = 50 frames.
         for _ in 0..5 {
             app.on_key(KeyEvent::new(KeyCode::Right, KeyModifiers::NONE));
@@ -1903,29 +1894,29 @@ mod tests {
             app.on_key(KeyEvent::new(KeyCode::Left, KeyModifiers::NONE));
         }
         assert_eq!(app.mixer.pad_trim(0).1, 1950, "out mark moved");
-        // Audition plays the selection.
+        // Space auditions the selection.
         app.on_key(key(' '));
         assert_eq!(app.mixer.active_voices(), 1, "audition the selection");
-        // Snip keeps only [50, 1950) = 1900 frames (both sides dropped).
-        app.on_key(key('x'));
+        // Enter snips, keeping only [50, 1950) = 1900 frames.
+        app.on_key(enter());
         assert_eq!(
             app.mixer.pad_clip_frames(0),
             1900,
             "snipped to the selection"
         );
-        assert_eq!(app.on_key(key('e')), Action::Mark);
+        app.on_key(KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE));
         assert!(app.clip_edit.is_none());
     }
 
     #[test]
-    fn timeline_x_cuts_the_arrangement() {
+    fn menu_cut_truncates_the_arrangement() {
         let mut app = App::new();
-        app.on_key(key('t')); // open timeline
+        app.set_focus(Focus::Timeline);
         app.timeline.set_step(0, 60, true);
         for _ in 0..20 {
-            app.on_key(KeyEvent::new(KeyCode::Right, KeyModifiers::NONE));
+            app.on_key(KeyEvent::new(KeyCode::Right, KeyModifiers::NONE)); // cursor → step 20
         }
-        app.on_key(key('x')); // cut at step 20 → bar 2 → 32 steps
+        app.run_menu(MenuAction::Cut); // cut at step 20 → bar 2 → 32 steps
         assert_eq!(app.timeline.total_steps(), 32);
         assert!(!app.timeline.step(0, 60));
     }
@@ -1937,20 +1928,29 @@ mod tests {
         app.mixer.cycle_pad_kind(0); // → Loop
         app.set_focus(Focus::Pad(0));
         assert!(app.mixer.pad_loaded(0));
-        assert_eq!(app.on_key(key('u')), Action::Mark);
+        app.run_menu(MenuAction::Unload);
         assert!(!app.mixer.pad_loaded(0), "pad cleared");
         assert_eq!(app.mixer.pad_kind(0), PadKind::OneShot, "kind reset");
         assert!(app.pad_source[0].is_none());
     }
 
     #[test]
-    fn minus_equals_adjust_focused_pad_volume() {
+    fn menu_opens_and_runs_an_action() {
+        // Full menu UX: open with M, arrow to an item, Enter runs it.
         let mut app = App::new();
+        app.mixer.assign_pad(0, vec![0.5; 64]);
         app.set_focus(Focus::Pad(0));
-        assert_eq!(app.mixer.pad_gain(0), 1.0);
-        assert_eq!(app.on_key(key('-')), Action::Mark);
-        assert!(app.mixer.pad_gain(0) < 1.0);
-        assert_eq!(app.on_key(key('=')), Action::Mark);
+        assert_eq!(app.on_key(key('m')), Action::Mark);
+        assert!(app.menu.is_some(), "M opens the menu");
+        // First item on a pad is "load track"; second is "kind".
+        app.on_key(KeyEvent::new(KeyCode::Down, KeyModifiers::NONE));
+        app.on_key(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE));
+        assert!(app.menu.is_none(), "running an item closes the menu");
+        assert_eq!(
+            app.mixer.pad_kind(0),
+            PadKind::Loop,
+            "kind cycled via the menu"
+        );
     }
 
     #[test]
@@ -1974,11 +1974,11 @@ mod tests {
     }
 
     #[test]
-    fn semicolon_cycles_the_focused_pad_kind() {
+    fn menu_cycles_the_focused_pad_kind() {
         let mut app = App::new();
         app.set_focus(Focus::Pad(0));
         assert_eq!(app.mixer.pad_kind(0), PadKind::OneShot);
-        assert_eq!(app.on_key(key(';')), Action::Mark);
+        app.run_menu(MenuAction::CycleKind);
         assert_eq!(app.mixer.pad_kind(0), PadKind::Loop);
     }
 
@@ -1997,11 +1997,11 @@ mod tests {
         app.pad_source[0] = Some(src.clone());
         app.mixer.nudge_pad_out(0, -10_000); // trim it down
                                              // Save as new → a -edit file appears.
-        assert_eq!(app.on_key(key('S')), Action::Record);
+        assert_eq!(app.run_menu(MenuAction::SaveNew), Action::Record);
         assert!(tmp.join("loop-edit1.wav").exists());
         // Overwrite the source with the (smaller) trimmed clip.
         let before = fs::metadata(&src).unwrap().len();
-        assert_eq!(app.on_key(key('O')), Action::Record);
+        assert_eq!(app.run_menu(MenuAction::SaveOver), Action::Record);
         let after = fs::metadata(&src).unwrap().len();
         assert!(after < before, "source overwritten with the shorter trim");
         let _ = fs::remove_dir_all(&tmp);
@@ -2039,8 +2039,7 @@ mod tests {
         app.mixer.set_master_bpm(Some(120.0));
         app.mixer.assign_pad(0, vec![0.5; 8000]);
         app.timeline.set_step(0, 0, true);
-        app.on_key(key('t')); // open editor
-        assert_eq!(app.on_key(key('w')), Action::Record); // render+save
+        assert_eq!(app.run_menu(MenuAction::Render), Action::Record); // render+save
         assert!(
             tmp.join("mix-1.wav").exists(),
             "rendered WAV in the library"
@@ -2078,8 +2077,6 @@ mod tests {
         assert_eq!(app.play_step, pos, "paused holds position");
         app.toggle_transport(); // resume
         assert_eq!(app.play_step, pos, "resumes from where it paused");
-        app.stop_transport();
-        assert!(!app.playing && app.play_step == 0, "stop rewinds to top");
     }
 
     #[test]
@@ -2098,15 +2095,15 @@ mod tests {
     }
 
     #[test]
-    fn v_draws_a_loop_region_across_steps() {
+    fn loop_region_fills_across_steps() {
         let mut app = App::new();
-        app.on_key(key('t')); // open editor (lane 0, step 0)
-        assert_eq!(app.on_key(key('v')), Action::Timeline); // mark start at 0
+        app.set_focus(Focus::Timeline);
+        app.toggle_region(); // mark start at step 0, lane 0
         assert!(app.tl_region_start.is_some());
         for _ in 0..4 {
-            app.on_key(KeyEvent::new(KeyCode::Right, KeyModifiers::NONE));
+            app.on_key(KeyEvent::new(KeyCode::Right, KeyModifiers::NONE)); // step → 4
         }
-        app.on_key(key('v')); // fill 0..=4 on lane 0
+        app.toggle_region(); // fill 0..=4 on lane 0
         assert!(app.tl_region_start.is_none());
         for s in 0..=4 {
             assert!(app.timeline.step(0, s), "region filled at {s}");
@@ -2115,13 +2112,13 @@ mod tests {
     }
 
     #[test]
-    fn esc_leaves_the_timeline_then_opens_quit() {
+    fn esc_closes_the_menu_then_opens_quit() {
         let esc = || KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE);
         let mut app = App::new();
-        app.on_key(key('t'));
-        assert!(app.tl_visible);
+        app.on_key(key('m'));
+        assert!(app.menu.is_some());
         app.on_key(esc());
-        assert!(!app.tl_visible, "first esc closes the timeline");
+        assert!(app.menu.is_none(), "first esc closes the menu");
         assert!(!app.confirm_quit, "and does not open quit yet");
         app.on_key(esc());
         assert!(app.confirm_quit, "second esc opens the quit modal");
@@ -2133,7 +2130,7 @@ mod tests {
         let mut app = App::new();
         app.mixer.assign_pad(0, vec![0.5; 64]);
         app.set_focus(Focus::Pad(0));
-        app.on_key(key('e'));
+        app.on_key(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE)); // enter = edit clip
         assert!(app.clip_edit.is_some());
         app.on_key(esc());
         assert!(app.clip_edit.is_none(), "first esc closes the clip editor");
@@ -2143,12 +2140,9 @@ mod tests {
     }
 
     #[test]
-    fn t_opens_timeline_and_cursor_toggles_a_step() {
+    fn timeline_enter_toggles_a_step_at_the_cursor() {
         let mut app = App::new();
-        assert!(!app.tl_visible);
-        assert_eq!(app.on_key(key('t')), Action::Timeline);
-        assert!(app.tl_visible);
-        // Move the cursor and toggle a step.
+        app.set_focus(Focus::Timeline);
         app.on_key(KeyEvent::new(KeyCode::Down, KeyModifiers::NONE)); // lane 1
         app.on_key(KeyEvent::new(KeyCode::Right, KeyModifiers::NONE)); // step 1
         assert_eq!(
@@ -2157,10 +2151,6 @@ mod tests {
         );
         assert!(app.timeline.step(1, 1), "step placed at the cursor");
         assert_eq!(app.timeline.pads_at(1), vec![1]);
-        // Render shows the grid; t closes it.
-        assert!(buffer_text(&render(&app, 96, 24)).contains("Timeline"));
-        assert_eq!(app.on_key(key('t')), Action::Timeline);
-        assert!(!app.tl_visible);
     }
 
     #[test]
@@ -2173,7 +2163,7 @@ mod tests {
         app.mixer.push_phrase(0, ScratchUnit::Wiki);
         app.mixer.push_phrase(0, ScratchUnit::Whip);
         assert_eq!(app.mixer.pad_phrase_glyphs(0), "><");
-        assert_eq!(app.on_key(key('C')), Action::Mark);
+        app.run_menu(MenuAction::ClearPhrase);
         assert_eq!(app.mixer.pad_phrase_len(0), 0);
     }
 
@@ -2184,31 +2174,33 @@ mod tests {
         app.set_focus(Focus::Pad(0));
         app.mixer.cycle_pad_kind(0);
         app.mixer.cycle_pad_kind(0); // → Scratch
-        assert_eq!(app.on_key(key('P')), Action::Mark); // arm phrase record
+        app.run_menu(MenuAction::PhraseRec); // arm phrase record
         assert_eq!(app.phrase_rec, Some(0));
-        app.on_key(key('j')); // tap wiki
-        app.on_key(key('k')); // tap whip
-        app.on_key(key('j')); // tap wiki
+        let enter = || KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE);
+        app.on_key(key(' ')); // tap wiki
+        app.on_key(enter()); // tap whip
+        app.on_key(key(' ')); // tap wiki
         assert_eq!(app.mixer.pad_phrase_len(0), 3);
-        app.on_key(key('P')); // stop recording
+        app.run_menu(MenuAction::PhraseRec); // stop recording
         assert_eq!(app.phrase_rec, None);
-        // Now j plays the stored phrase as one voice.
+        // Now space plays the stored phrase as one voice.
         let before = app.mixer.active_voices();
-        app.on_key(key('j'));
+        app.on_key(key(' '));
         assert_eq!(app.mixer.active_voices(), before + 1);
     }
 
     #[test]
-    fn scratch_pad_j_and_k_play_wiki_and_whip() {
+    fn scratch_pad_space_and_enter_play_wiki_and_whip() {
         let mut app = App::new();
         app.mixer.assign_pad(0, vec![0.5; 4000]);
         app.set_focus(Focus::Pad(0));
         app.mixer.cycle_pad_kind(0); // OneShot → Loop
         app.mixer.cycle_pad_kind(0); // → Scratch
         assert_eq!(app.mixer.pad_kind(0), PadKind::Scratch);
-        assert_eq!(app.on_key(key('j')), Action::TriggerPad); // wiki
+        assert_eq!(app.on_key(key(' ')), Action::TriggerPad); // space = wiki
         assert_eq!(app.mixer.active_voices(), 1);
-        assert_eq!(app.on_key(key('k')), Action::TriggerPad); // whip
+        let enter = KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE);
+        assert_eq!(app.on_key(enter), Action::TriggerPad); // enter = whip
         assert_eq!(app.mixer.active_voices(), 2);
     }
 
@@ -2217,47 +2209,45 @@ mod tests {
         let mut app = App::new();
         app.mixer.assign_pad(0, vec![0.5; 64]);
         app.set_focus(Focus::Pad(0));
-        assert_eq!(app.on_key(key('j')), Action::TriggerPad);
+        assert_eq!(app.on_key(key(' ')), Action::TriggerPad); // space plays
         assert_eq!(app.mixer.active_voices(), 1);
-        // A number key triggers directly too.
-        assert_eq!(app.on_key(key('1')), Action::TriggerPad);
-        assert_eq!(app.mixer.active_voices(), 2);
     }
 
     #[test]
-    fn pad_trim_keys_move_bounds_nondestructively() {
+    fn pad_trim_is_nondestructive_via_the_clip_editor() {
         let mut app = App::new();
-        app.mixer.assign_pad(0, vec![0.5; 20_000]);
+        app.mixer.set_sample_rate(1000);
+        app.mixer.assign_pad(0, vec![0.5; 20_000]); // 10_000 frames
         app.set_focus(Focus::Pad(0));
         assert_eq!(app.mixer.pad_trim(0), (0, 10_000));
-        assert_eq!(app.on_key(key('d')), Action::Mark); // in-point forward
+        app.on_key(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE)); // open editor
+        app.on_key(KeyEvent::new(KeyCode::Right, KeyModifiers::NONE)); // move in-mark
         assert!(app.mixer.pad_trim(0).0 > 0);
-        assert_eq!(app.on_key(key('s')), Action::Mark); // out-point in
-        assert!(app.mixer.pad_trim(0).1 < 10_000);
         assert_eq!(app.mixer.pad_clip_frames(0), 10_000, "source untouched");
     }
 
     #[test]
-    fn r_records_the_live_mix_into_the_stash() {
+    fn menu_records_the_live_mix_into_the_stash() {
         let mut app = App::new();
-        app.set_focus(Focus::Crate); // not a pad → goes to the stash
+        app.set_focus(Focus::Timeline); // not a pad → goes to the stash
         app.mixer.assign_pad(0, vec![0.4; 4096]);
         app.mixer.trigger_pad(0);
-        assert_eq!(app.on_key(key('r')), Action::Record); // arm
+        assert_eq!(app.run_menu(MenuAction::Record), Action::Record); // arm
         assert!(app.mixer.is_recording());
         app.mixer.fill_mix(&mut [0.0f32; 256]);
-        assert_eq!(app.on_key(key('r')), Action::Record); // disarm → stash
+        assert_eq!(app.run_menu(MenuAction::Record), Action::Record); // disarm → stash
         assert!(!app.mixer.is_recording());
         assert_eq!(app.recordings.len(), 1);
     }
 
     #[test]
-    fn master_volume_keys_adjust_gain() {
+    fn menu_adjusts_master_volume() {
         let mut app = App::new();
+        app.set_focus(Focus::Timeline);
         let g0 = app.mixer.master_gain();
-        assert_eq!(app.on_key(key(']')), Action::MasterGain);
+        app.run_menu(MenuAction::MasterUp);
         assert!(app.mixer.master_gain() > g0);
-        assert_eq!(app.on_key(key('[')), Action::MasterGain);
+        app.run_menu(MenuAction::MasterDown);
     }
 
     #[test]
@@ -2293,36 +2283,36 @@ mod tests {
         app.mixer.set_pad_bpm(0, Some(120.0));
         app.mixer.set_master_bpm(Some(120.0));
 
-        // Pad 0 → loop; pad 1 → clip-edit (trim + cut) then back.
+        let enter = || KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE);
+        // Pad 0 → loop (via menu); pad 1 → clip-edit (trim + snip) then back.
         app.set_focus(Focus::Pad(0));
-        app.on_key(key(';'));
+        app.run_menu(MenuAction::CycleKind);
         assert_eq!(app.mixer.pad_kind(0), PadKind::Loop);
         app.set_focus(Focus::Pad(1));
-        app.on_key(key('e')); // clip-edit
+        app.on_key(enter()); // Enter opens the clip editor (non-scratch)
         for _ in 0..3 {
             app.on_key(KeyEvent::new(KeyCode::Right, KeyModifiers::NONE)); // move in-mark
         }
         app.on_key(key(' ')); // audition
-        app.on_key(key('x')); // snip both sides
-        app.on_key(key('e')); // close
+        app.on_key(enter()); // snip
+        app.on_key(KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE)); // close
         assert!(app.clip_edit.is_none());
 
-        // Arrange: place a hit, play (p), pause (p), render the mix.
-        app.on_key(key('t'));
-        app.on_key(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE)); // lane 0, step 0
-        app.on_key(key('p')); // play the arrangement
+        // Arrange on the timeline: place a hit, play, pause, render.
+        app.set_focus(Focus::Timeline);
+        app.on_key(enter()); // toggle a hit at lane 0, step 0
+        app.on_key(key(' ')); // space plays the arrangement
         app.advance_playback(600);
-        app.on_key(key('p')); // pause
+        app.on_key(key(' ')); // pause
         let mix = app.render_arrangement();
         assert!(
             mix.iter().any(|&s| s.abs() > 0.01),
             "arrangement renders audio"
         );
-        app.on_key(key('t')); // close timeline
 
-        // Export pad 1 to mp3, then unload pad 0.
+        // Export pad 1 to mp3 (menu), then unload pad 0 (menu).
         app.set_focus(Focus::Pad(1));
-        assert_eq!(app.on_key(key('E')), Action::Record);
+        assert_eq!(app.run_menu(MenuAction::Export), Action::Record);
         assert!(
             fs::read_dir(&tmp).unwrap().any(|e| e
                 .unwrap()
@@ -2332,7 +2322,7 @@ mod tests {
             "mp3 exported"
         );
         app.set_focus(Focus::Pad(0));
-        app.on_key(key('u'));
+        app.run_menu(MenuAction::Unload);
         assert!(!app.mixer.pad_loaded(0), "unloaded");
         let _ = fs::remove_dir_all(&tmp);
     }

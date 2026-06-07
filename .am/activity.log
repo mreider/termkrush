@@ -536,3 +536,7 @@
 2026-06-07T20:27:41Z	Matt Reider	started	termkrush/Bug-help-modal-is-cut-off-and-the-header-keymap-is-stale-and-misleading.md	
 2026-06-07T20:31:49Z	Matt Reider	finished	termkrush/Bug-help-modal-is-cut-off-and-the-header-keymap-is-stale-and-misleading.md	
 2026-06-07T20:31:49Z	Matt Reider	delivered	termkrush/Bug-help-modal-is-cut-off-and-the-header-keymap-is-stale-and-misleading.md	Per your call: (1) SPACE PLAYS the focused pad (main view) and plays the arrangement in the timeline editor — removed the global-pause-on-space I'd wrongly added. (2) Removed the stale/misleading top hint line from the header (just '? help' now). (3) The Help modal now sizes to its content so it's never cut off, and lists space=play. Test (exit 0): space → the focused pad sounds (active_voices 0→1). Run scripts/dev-run.sh build && scripts/dev-run.sh tui to check: space plays, header is clean, ? shows a full readable help. fmt+clippy+8 suites exit 0.
+2026-06-07T20:43:46Z	Matt Reider	created	termkrush/Minimal-context-mapped-controls-move-Space-Enter-M-menu.md	target=icebox position=bottom
+2026-06-07T20:43:46Z	Matt Reider	set-type	termkrush/Minimal-context-mapped-controls-move-Space-Enter-M-menu.md	feature
+2026-06-07T20:43:46Z	Matt Reider	estimate	termkrush/Minimal-context-mapped-controls-move-Space-Enter-M-menu.md	8
+2026-06-07T20:43:46Z	Matt Reider	started	termkrush/Minimal-context-mapped-controls-move-Space-Enter-M-menu.md	

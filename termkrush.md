@@ -28,6 +28,9 @@
 ### Delivered
 | User | Title | Points | Tags |
 |---|---|:---:|---|
+|  | [Bug: BPM sync should prompt on a mismatching load not on pad 1](termkrush/Bug-BPM-sync-should-prompt-on-a-mismatching-load-not-on-pad-1.md) |  |  |
+|  | [Bug: clip-edit needs audition preview and two-sided snip](termkrush/Bug-clip-edit-needs-audition-preview-and-two-sided-snip.md) |  |  |
+|  | [Bug: space is not a global play/pause - cannot pause the mix](termkrush/Bug-space-is-not-a-global-play-pause-cannot-pause-the-mix.md) |  |  |
 
 ### Accepted
 | User | Title | Points | Tags |

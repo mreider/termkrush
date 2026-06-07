@@ -104,6 +104,8 @@ pub struct Mixer {
     pad_trim: [(usize, usize); PADS],
     /// Per-pad kind (one-shot / loop / scratch).
     pad_kind: [PadKind; PADS],
+    /// Per-pad scratch pivot (onset frame), computed on assign.
+    pad_pivot: [usize; PADS],
     /// Per-pad linear volume (1.0 = unity), applied live to its voices.
     pad_gain: [f32; PADS],
     /// Per-pad activation envelope (0 = off … 1 = on), ramped toward target.
@@ -141,6 +143,7 @@ impl Mixer {
             pad_bpm: Default::default(),
             pad_trim: Default::default(),
             pad_kind: Default::default(),
+            pad_pivot: [0; PADS],
             pad_gain: [1.0; PADS],
             pad_env: [1.0; PADS],
             pad_env_target: [1.0; PADS],
@@ -174,6 +177,7 @@ impl Mixer {
     pub fn assign_pad(&mut self, i: usize, clip: Vec<f32>) {
         if i < PADS {
             let frames = clip.len() / 2;
+            self.pad_pivot[i] = crate::scratch::detect_pivot(&clip, 2);
             self.pads[i] = Some(Arc::new(clip));
             self.pad_trim[i] = (0, frames); // full clip by default
         }
@@ -244,6 +248,11 @@ impl Mixer {
     /// Pad `i`'s kind (one-shot / loop / scratch).
     pub fn pad_kind(&self, i: usize) -> PadKind {
         self.pad_kind.get(i).copied().unwrap_or_default()
+    }
+
+    /// Pad `i`'s scratch pivot (onset frame), found on assign.
+    pub fn pad_pivot(&self, i: usize) -> usize {
+        self.pad_pivot.get(i).copied().unwrap_or(0)
     }
 
     /// Cycle pad `i`'s kind: OneShot → Loop → Scratch → …
@@ -622,6 +631,21 @@ mod tests {
         assert_eq!(m.pad_trim(0).0, 99);
         m.nudge_pad_out(0, 1000); // can't pass the clip end
         assert_eq!(m.pad_trim(0).1, 100);
+    }
+
+    #[test]
+    fn assign_finds_the_scratch_pivot() {
+        let mut m = Mixer::new();
+        let mut clip = vec![0.0f32; 2000]; // 1000 frames, burst at 500
+        for f in 500..540 {
+            clip[f * 2] = 0.8;
+            clip[f * 2 + 1] = 0.8;
+        }
+        m.assign_pad(0, clip);
+        assert!(
+            (m.pad_pivot(0) as i64 - 500).abs() < 25,
+            "pivot near the onset"
+        );
     }
 
     #[test]

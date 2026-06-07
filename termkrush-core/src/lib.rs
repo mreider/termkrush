@@ -18,6 +18,7 @@ pub mod config;
 pub mod library;
 pub mod logging;
 pub mod mix;
+pub mod scratch;
 
 /// Shared test rigging (signal generators + measurements) for the engine
 /// tests. Compiled only under test.

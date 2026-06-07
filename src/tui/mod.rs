@@ -792,7 +792,9 @@ fn draw_pad_cell(f: &mut Frame, area: Rect, app: &App, pad: usize) {
             app.mixer.pad_gain(pad) * 100.0
         )
     };
-    let line2 = if focused && loaded {
+    let line2 = if loaded && app.mixer.pad_kind(pad) == PadKind::Scratch {
+        format!("  piv {}", app.mixer.pad_pivot(pad))
+    } else if focused && loaded {
         let (inp, out) = app.mixer.pad_trim(pad);
         let len = app.mixer.pad_clip_frames(pad);
         let w = (area.width as usize).saturating_sub(6).clamp(4, 12);

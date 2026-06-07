@@ -417,3 +417,4 @@
 2026-06-07T12:19:34Z	Matt Reider	finished	termkrush/Global-speed-control-all-loops-follow.md	
 2026-06-07T12:19:34Z	Matt Reider	delivered	termkrush/Global-speed-control-all-loops-follow.md	
 2026-06-07T12:19:34Z	Matt Reider	accepted	termkrush/Global-speed-control-all-loops-follow.md	Global speed. mix.global_speed multiplies into pad_play_speed; set_global_speed/nudge_global_speed re-sync every playing loop voice live; effective_bpm() = master×speed. One-shots stay native. TUI: { / } nudge global tempo; header shows the effective BPM. Test: two 120 loops, set_global_speed(2.0) → effective 240, voices re-synced, output finite. fmt + clippy --workspace + 8 suites green.
+2026-06-07T12:20:04Z	Matt Reider	started	termkrush/Detect-the-scratch-pivot-onset-in-a-short-clip.md	

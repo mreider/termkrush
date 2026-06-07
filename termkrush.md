@@ -17,7 +17,6 @@
 |  | [Loop pad playback with precise timeline trim](termkrush/Loop-pad-playback-with-precise-timeline-trim.md) | 3 |  |
 |  | [Loop regions on the grid repeat to fill](termkrush/Loop-regions-on-the-grid-repeat-to-fill.md) | 3 |  |
 |  | [Master tempo from the first loop](termkrush/Master-tempo-from-the-first-loop.md) | 2 |  |
-|  | [Multipass cruft sweep for a clean pad based codebase](termkrush/Multipass-cruft-sweep-for-a-clean-pad-based-codebase.md) |  |  |
 |  | [Pad type model loop scratch or one-shot](termkrush/Pad-type-model-loop-scratch-or-one-shot.md) | 3 |  |
 |  | [Per-pad volume](termkrush/Per-pad-volume.md) | 2 |  |
 |  | [Play the arrangement through the mixer](termkrush/Play-the-arrangement-through-the-mixer.md) | 5 |  |
@@ -113,6 +112,7 @@
 |  | [Polish README for first release](termkrush/Polish-README-for-first-release.md) |  | [docs](.am/tags/docs.md) [release](.am/tags/release.md) |
 |  | [Split a headless core from the TUI shell and remove decks](termkrush/Split-a-headless-core-from-the-TUI-shell-and-remove-decks.md) | 5 |  |
 |  | [Drop the crossfader deck blend sync cue and old patterns](termkrush/Drop-the-crossfader-deck-blend-sync-cue-and-old-patterns.md) | 3 |  |
+|  | [Multipass cruft sweep for a clean pad based codebase](termkrush/Multipass-cruft-sweep-for-a-clean-pad-based-codebase.md) |  |  |
 
 ### Rejected
 | User | Title | Points | Tags |

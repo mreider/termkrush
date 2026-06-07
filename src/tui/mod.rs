@@ -187,14 +187,6 @@ impl App {
         Action::Timeline
     }
 
-    /// `space` — master play/pause: freeze + silence the whole mix (live pads
-    /// and the arrangement), or resume.
-    fn toggle_global_pause(&mut self) -> Action {
-        let p = self.mixer.is_paused();
-        self.mixer.set_paused(!p);
-        Action::Mark
-    }
-
     /// Stop and rewind the transport to the top (Backspace).
     fn stop_transport(&mut self) -> Action {
         self.playing = false;
@@ -353,8 +345,7 @@ impl App {
                 self.timeline.toggle(self.tl_lane, self.tl_step);
                 Some(Action::Timeline)
             }
-            KeyCode::Char(' ') => Some(self.toggle_global_pause()),
-            KeyCode::Char('p') => Some(self.toggle_transport()),
+            KeyCode::Char(' ') | KeyCode::Char('p') => Some(self.toggle_transport()),
             KeyCode::Backspace => Some(self.stop_transport()),
             KeyCode::Char('x') => {
                 self.timeline.cut_at(self.tl_step);
@@ -950,7 +941,8 @@ impl App {
                 self.tl_visible = true;
                 Action::Timeline
             }
-            KeyCode::Char(' ') => self.toggle_global_pause(),
+            // Space plays the focused pad.
+            KeyCode::Char(' ') => self.trigger(self.active_pad()),
             // Library file ops (on the highlighted track).
             KeyCode::Char('x') => self.arm_delete(),
             KeyCode::Char('R') => self.start_rename(),
@@ -1321,11 +1313,7 @@ fn draw_header(f: &mut Frame, area: Rect, app: &App) {
             Style::default().fg(AMBER).add_modifier(Modifier::BOLD),
         ))
         .centered(),
-        Line::from(Span::styled(
-            "tab focus  j play  l load  a/d/w/s trim  r record  ? help",
-            Style::default().fg(GREEN),
-        ))
-        .centered(),
+        Line::from(Span::styled("? help", Style::default().fg(GREEN))).centered(),
     ];
     f.render_widget(Paragraph::new(lines), area);
 }
@@ -1504,24 +1492,29 @@ fn draw_confirm_modal(f: &mut Frame, area: Rect, prompt: &str) {
 }
 
 fn draw_help(f: &mut Frame, area: Rect) {
-    let popup = centered(56, 17, area);
+    let lines = [
+        "  move      tab · shift-tab · ← →     (library ↔ pads)",
+        "  volume    ↑ ↓   (focused pad)",
+        "  play      space   ·   1-8 pad",
+        "  load      enter   (library track → focused pad)",
+        "  pad       ; kind   f on/off   u unload   e edit",
+        "  scratch   space wiki · k whip · P phrase · C clear",
+        "  edit clip tab in/out · ← → move · space audition · x snip · e close",
+        "  timeline  t open · enter hit · v region · x cut · space play · w render",
+        "  files     x delete · R rename · m mark · p move-here · / filter",
+        "  master    [ ] vol · { } tempo · r record",
+        "  quit      esc (y/n) · ctrl-c force",
+    ];
+    let w = lines.iter().map(|l| l.chars().count()).max().unwrap_or(40) as u16 + 4;
+    let h = lines.len() as u16 + 2;
+    let popup = centered(w, h, area);
     f.render_widget(Clear, popup);
-    let text = "\
-  focus   tab · ←/→   (library · pads)   vol ↑/↓
-  library / filter   ↑↓ browse   enter open/load→pad   z hide
-  files   x delete   R rename   m mark / p move-here
-  pad     j play/wiki   k whip   f on/off   l load   u unload   e edit   ; kind   S save   O over   E mp3
-  edit    tab switch in/out   ←/→ move   space audition   x snip   e close
-  trim    a/d in   w/s out   (shift = fine)
-  tempo   , / .  pad bpm
-  mix     1-7 trigger   space pause   r record   - / = vol   [ ] master   { } tempo
-  arrange t timeline (enter hit · v region · x cut · p play · backspace stop · w render)\n  quit    esc (y/n)   C-c force   ? help";
     let block = Block::default()
         .borders(Borders::ALL)
         .border_style(Style::default().fg(AMBER))
         .title(" Help ");
     f.render_widget(
-        Paragraph::new(text)
+        Paragraph::new(lines.join("\n"))
             .block(block)
             .style(Style::default().fg(GREEN)),
         popup,
@@ -2058,13 +2051,13 @@ mod tests {
     }
 
     #[test]
-    fn space_toggles_global_pause() {
+    fn space_plays_the_focused_pad() {
         let mut app = App::new();
-        assert!(!app.mixer.is_paused());
-        assert_eq!(app.on_key(key(' ')), Action::Mark);
-        assert!(app.mixer.is_paused(), "space pauses the whole mix");
-        app.on_key(key(' '));
-        assert!(!app.mixer.is_paused(), "space resumes");
+        app.set_focus(Focus::Pad(0));
+        app.mixer.assign_pad(0, vec![0.5; 64]);
+        assert_eq!(app.mixer.active_voices(), 0);
+        assert_eq!(app.on_key(key(' ')), Action::TriggerPad);
+        assert_eq!(app.mixer.active_voices(), 1, "space plays the focused pad");
     }
 
     #[test]

@@ -15,11 +15,10 @@
 |  | [Refresh GitHub Pages for the pad based model](termkrush/Refresh-GitHub-Pages-for-the-pad-based-model.md) | 2 |  |
 |  | [Reload a track onto a pad edit and save back](termkrush/Reload-a-track-onto-a-pad-edit-and-save-back.md) | 3 |  |
 |  | [Render the arrangement to a WAV in the track list](termkrush/Render-the-arrangement-to-a-WAV-in-the-track-list.md) | 5 |  |
-|  | [Scratch pad controls and display](termkrush/Scratch-pad-controls-and-display.md) | 3 |  |
 |  | [Step grid editor with cursor and step toggle](termkrush/Step-grid-editor-with-cursor-and-step-toggle.md) | 5 |  |
 |  | [Step grid timeline data model](termkrush/Step-grid-timeline-data-model.md) | 3 |  |
 |  | [V0.1.0 krush](termkrush/V010-krush.md) |  |  |
-| Total Points | | 39 | |
+| Total Points | | 36 | |
 
 ### Started
 | User | Title | Points | Tags |
@@ -113,6 +112,7 @@
 |  | [Detect the scratch pivot onset in a short clip](termkrush/Detect-the-scratch-pivot-onset-in-a-short-clip.md) | 3 |  |
 |  | [Whip and wiki scratch primitives](termkrush/Whip-and-wiki-scratch-primitives.md) | 5 |  |
 |  | [Build a scratch phrase by tapping whips and wikis](termkrush/Build-a-scratch-phrase-by-tapping-whips-and-wikis.md) | 5 |  |
+|  | [Scratch pad controls and display](termkrush/Scratch-pad-controls-and-display.md) | 3 |  |
 
 ### Rejected
 | User | Title | Points | Tags |

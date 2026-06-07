@@ -2,12 +2,14 @@
 title: 'Minimal context-mapped controls: move + Space/Enter/M menu'
 type: feature
 created: "2026-06-07T20:43:46Z"
-modified: "2026-06-07T20:43:46Z"
+modified: "2026-06-07T23:21:39Z"
 author: Matt Reider
-status: started
+status: delivered
 estimate: "8"
 epic: looper
 started: "2026-06-07T20:43:46Z"
+delivered: "2026-06-07T23:21:39Z"
+project: termkrush
 ---
 
 ## Goal

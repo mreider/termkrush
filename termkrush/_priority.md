@@ -110,3 +110,4 @@ Stack-rank order. Top is the highest priority. Edit by hand or via `am rank` / `
 - [Launch quantization engine: master bar clock and next-bar triggers](Launch-quantization-engine-master-bar-clock-and-next-bar-triggers.md)
 - [Auto-BPM: first track sets master and every pad locks, no prompt](Auto-BPM-first-track-sets-master-and-every-pad-locks-no-prompt.md)
 - [Master timeline as a permanent top strip](Master-timeline-as-a-permanent-top-strip.md)
+- [Minimal context-mapped controls: move + Space/Enter/M menu](Minimal-context-mapped-controls-move-Space-Enter-M-menu.md)

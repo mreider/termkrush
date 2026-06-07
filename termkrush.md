@@ -40,6 +40,7 @@
 |  | [Auto-BPM: first track sets master and every pad locks, no prompt](termkrush/Auto-BPM-first-track-sets-master-and-every-pad-locks-no-prompt.md) | 3 |  |
 |  | [Master timeline as a permanent top strip](termkrush/Master-timeline-as-a-permanent-top-strip.md) | 8 |  |
 |  | [Bug: help modal is cut off and the header keymap is stale and misleading](termkrush/Bug-help-modal-is-cut-off-and-the-header-keymap-is-stale-and-misleading.md) |  |  |
+|  | [Minimal context-mapped controls: move + Space/Enter/M menu](termkrush/Minimal-context-mapped-controls-move-Space-Enter-M-menu.md) | 8 |  |
 
 ### Accepted
 | User | Title | Points | Tags |

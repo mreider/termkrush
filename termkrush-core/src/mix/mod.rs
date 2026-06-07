@@ -364,6 +364,13 @@ impl Mixer {
         self.pad_pivot.get(i).copied().unwrap_or(0)
     }
 
+    /// Set pad `i`'s kind directly.
+    pub fn set_pad_kind(&mut self, i: usize, kind: PadKind) {
+        if i < PADS {
+            self.pad_kind[i] = kind;
+        }
+    }
+
     /// Cycle pad `i`'s kind: OneShot → Loop → Scratch → …
     pub fn cycle_pad_kind(&mut self, i: usize) {
         if i < PADS {

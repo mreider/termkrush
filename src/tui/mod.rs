@@ -123,6 +123,8 @@ pub struct App {
     /// Clip-edit modal: the pad being edited + the cursor position (frame).
     clip_edit: Option<usize>,
     ce_cursor: usize,
+    /// Pending "sync all tracks to this BPM?" prompt (the candidate tempo).
+    bpm_prompt: Option<f32>,
     /// Arrangement transport.
     playing: bool,
     play_acc: f64,          // frames accumulated toward the next step
@@ -166,6 +168,7 @@ impl App {
             tl_region_start: None,
             clip_edit: None,
             ce_cursor: 0,
+            bpm_prompt: None,
             playing: false,
             play_acc: 0.0,
             play_step: 0,
@@ -872,6 +875,14 @@ impl App {
             };
         }
 
+        // "Sync all tracks?" prompt swallows input until answered.
+        if self.bpm_prompt.is_some() {
+            return match key.code {
+                KeyCode::Char('y') | KeyCode::Char('Y') => self.answer_bpm_prompt(true),
+                _ => self.answer_bpm_prompt(false),
+            };
+        }
+
         // Clip-edit modal captures keys while open.
         if self.clip_edit.is_some() {
             if let Some(a) = self.on_clip_key(key) {
@@ -990,11 +1001,32 @@ impl App {
         if let Some(b) = d.bpm {
             self.mixer.set_pad_bpm(i, Some(b));
             self.bpm_cache.insert(d.path.clone(), b);
+            // First track with a tempo: offer to make it the project master
+            // and sync everything to it.
+            if self.mixer.master_bpm().is_none() {
+                self.bpm_prompt = Some(b);
+            }
         }
         if i < PADS {
             self.loading[i] = false;
             self.pad_source[i] = Some(d.path);
         }
+    }
+
+    /// Answer the "sync all tracks?" prompt. `yes` makes every loaded pad a
+    /// loop at the candidate tempo (all synced); either way it becomes master.
+    fn answer_bpm_prompt(&mut self, yes: bool) -> Action {
+        if let Some(b) = self.bpm_prompt.take() {
+            self.mixer.set_master_bpm(Some(b));
+            if yes {
+                for i in 0..PADS {
+                    if self.mixer.pad_loaded(i) {
+                        self.mixer.set_pad_kind(i, PadKind::Loop);
+                    }
+                }
+            }
+        }
+        Action::Mark
     }
 
     /// `S` — save the focused pad's trimmed clip as a NEW WAV in the library.
@@ -1224,6 +1256,8 @@ fn draw_timeline(f: &mut Frame, area: Rect, app: &App) {
 fn return_help(f: &mut Frame, app: &App) {
     if app.confirm_quit {
         draw_quit_modal(f, f.area());
+    } else if let Some(b) = app.bpm_prompt {
+        draw_confirm_modal(f, f.area(), &format!("Sync all tracks to {b:.0} BPM?"));
     } else if let Some(path) = &app.confirm_delete {
         let name = path.file_name().and_then(|n| n.to_str()).unwrap_or("track");
         draw_confirm_modal(f, f.area(), &format!("Delete {name}?"));
@@ -2150,6 +2184,39 @@ mod tests {
         app.on_key(KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE));
         assert_eq!(app.on_key(key('y')), Action::Quit);
         assert!(app.should_quit);
+    }
+
+    #[test]
+    fn first_tempo_track_prompts_then_syncs_all() {
+        use termkrush_core::audio::DecodedAudio;
+        let mut app = App::new();
+        app.mixer.assign_pad(1, vec![0.5; 64]); // another loaded pad to sync
+        app.place_decoded(Decoded {
+            target: LoadTarget::Pad(0),
+            track: DecodedAudio {
+                samples: vec![0.5; 64],
+                sample_rate: 44_100,
+                channels: 2,
+                source_sample_rate: 44_100,
+                source_channels: 2,
+                duration_secs: 0.0,
+                title: None,
+                artist: None,
+            },
+            path: "/m/x.mp3".into(),
+            bpm: Some(126.0),
+        });
+        assert_eq!(app.bpm_prompt, Some(126.0), "first tempo track prompts");
+        assert!(app.mixer.master_bpm().is_none());
+        assert_eq!(app.on_key(key('y')), Action::Mark);
+        assert_eq!(app.mixer.master_bpm(), Some(126.0), "yes sets master");
+        assert_eq!(app.mixer.pad_kind(0), PadKind::Loop);
+        assert_eq!(
+            app.mixer.pad_kind(1),
+            PadKind::Loop,
+            "all loaded pads synced"
+        );
+        assert!(app.bpm_prompt.is_none());
     }
 
     #[test]

@@ -111,6 +111,8 @@ pub struct App {
     move_mark: Option<PathBuf>,
     /// The scratch pad currently recording a phrase (taps append to it).
     phrase_rec: Option<usize>,
+    /// Source file each pad was loaded from (for save-over).
+    pad_source: [Option<PathBuf>; PADS],
     /// The arrangement grid, and whether its editor is showing.
     timeline: Timeline,
     tl_visible: bool,
@@ -153,6 +155,7 @@ impl App {
             rename: None,
             move_mark: None,
             phrase_rec: None,
+            pad_source: std::array::from_fn(|_| None),
             timeline: Timeline::default(),
             tl_visible: false,
             tl_lane: 0,
@@ -820,6 +823,8 @@ impl App {
             KeyCode::Char('f') => self.toggle_active(),
             KeyCode::Char('P') => self.toggle_phrase_rec(),
             KeyCode::Char('C') => self.clear_phrase(),
+            KeyCode::Char('S') => self.save_pad_new(),
+            KeyCode::Char('O') => self.save_pad_over(),
             KeyCode::Char('-') => self.pad_volume(false),
             KeyCode::Char('=') => self.pad_volume(true),
             KeyCode::Enter if self.focus == Focus::Crate && self.selected_is_dir() => {
@@ -874,11 +879,58 @@ impl App {
         self.mixer.assign_pad(i, d.track.samples);
         if let Some(b) = d.bpm {
             self.mixer.set_pad_bpm(i, Some(b));
-            self.bpm_cache.insert(d.path, b);
+            self.bpm_cache.insert(d.path.clone(), b);
         }
         if i < PADS {
             self.loading[i] = false;
+            self.pad_source[i] = Some(d.path);
         }
+    }
+
+    /// `S` — save the focused pad's trimmed clip as a NEW WAV in the library.
+    fn save_pad_new(&mut self) -> Action {
+        let Focus::Pad(i) = self.focus else {
+            return Action::None;
+        };
+        let region = self.mixer.pad_clip_region(i);
+        if region.is_empty() {
+            return Action::None;
+        }
+        let stem = self.pad_source[i]
+            .as_ref()
+            .and_then(|p| p.file_stem())
+            .and_then(|s| s.to_str())
+            .unwrap_or("pad")
+            .to_string();
+        let dir = self.crate_lib.cwd().to_path_buf();
+        let mut n = 1;
+        let path = loop {
+            let p = dir.join(format!("{stem}-edit{n}.wav"));
+            if !p.exists() {
+                break p;
+            }
+            n += 1;
+        };
+        let _ = termkrush_core::audio::write_wav(&path, &region, self.mixer.sample_rate(), 2);
+        self.crate_lib.refresh();
+        Action::Record
+    }
+
+    /// `O` — overwrite the focused pad's source file with its trimmed clip.
+    fn save_pad_over(&mut self) -> Action {
+        let Focus::Pad(i) = self.focus else {
+            return Action::None;
+        };
+        let Some(src) = self.pad_source[i].clone() else {
+            return Action::None;
+        };
+        let region = self.mixer.pad_clip_region(i);
+        if region.is_empty() {
+            return Action::None;
+        }
+        let _ = termkrush_core::audio::write_wav(&src, &region, self.mixer.sample_rate(), 2);
+        self.crate_lib.refresh();
+        Action::Record
     }
 }
 
@@ -1198,7 +1250,7 @@ fn draw_help(f: &mut Frame, area: Rect) {
   focus   tab / arrows   (library · pads · DJ)
   library / filter   ↑↓ browse   enter open/load→pad   z hide
   files   x delete   R rename   m mark / p move-here
-  pad     j play/wiki   k whip   P rec-phrase   C clear   f on/off   l load   ; kind
+  pad     j play/wiki   k whip   f on/off   l load   ; kind   S save   O over
   trim    a/d in   w/s out   (shift = fine)
   tempo   , / .  pad bpm
   mix     1-7 trigger   r record   - / = pad vol   [ ] master   { } tempo
@@ -1594,6 +1646,31 @@ mod tests {
         assert_eq!(app.mixer.pad_kind(0), PadKind::OneShot);
         assert_eq!(app.on_key(key(';')), Action::Mark);
         assert_eq!(app.mixer.pad_kind(0), PadKind::Loop);
+    }
+
+    #[test]
+    fn save_pad_writes_trimmed_clip_new_and_over() {
+        use std::fs;
+        let tmp = std::env::temp_dir().join(format!("tk-saveback-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&tmp);
+        fs::create_dir_all(&tmp).unwrap();
+        let src = tmp.join("loop.wav");
+        termkrush_core::audio::write_wav(&src, &vec![0.5f32; 2000], 44_100, 2).unwrap();
+        let mut app = App::new();
+        app.set_crate(Crate::scan(&tmp));
+        app.set_focus(Focus::Pad(0));
+        app.mixer.assign_pad(0, vec![0.5; 2000]); // 1000 frames
+        app.pad_source[0] = Some(src.clone());
+        app.mixer.nudge_pad_out(0, -10_000); // trim it down
+                                             // Save as new → a -edit file appears.
+        assert_eq!(app.on_key(key('S')), Action::Record);
+        assert!(tmp.join("loop-edit1.wav").exists());
+        // Overwrite the source with the (smaller) trimmed clip.
+        let before = fs::metadata(&src).unwrap().len();
+        assert_eq!(app.on_key(key('O')), Action::Record);
+        let after = fs::metadata(&src).unwrap().len();
+        assert!(after < before, "source overwritten with the shorter trim");
+        let _ = fs::remove_dir_all(&tmp);
     }
 
     #[test]

@@ -2,11 +2,12 @@
 title: Reload a track onto a pad edit and save back
 type: feature
 created: "2026-06-07T11:10:22Z"
-modified: "2026-06-07T11:12:12Z"
+modified: "2026-06-07T12:46:51Z"
 author: Matt Reider
-status: unstarted
+status: started
 estimate: "3"
 project: termkrush
+started: "2026-06-07T12:46:51Z"
 ---
 
 ## Problem

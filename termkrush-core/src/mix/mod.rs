@@ -232,6 +232,20 @@ impl Mixer {
         self.pad_trim.get(i).copied().unwrap_or((0, 0))
     }
 
+    /// Pad `i`'s **trimmed** clip region (interleaved stereo), for saving an
+    /// edit back to disk. Empty if the pad has no clip.
+    pub fn pad_clip_region(&self, i: usize) -> Vec<f32> {
+        let (inp, out) = self.pad_trim(i);
+        match self.pads.get(i).and_then(|p| p.as_ref()) {
+            Some(clip) => {
+                let total = clip.len() / 2;
+                let (a, b) = ((inp.min(total)) * 2, (out.min(total)) * 2);
+                clip.get(a..b).map(|s| s.to_vec()).unwrap_or_default()
+            }
+            None => Vec::new(),
+        }
+    }
+
     /// Clip length (frames) on pad `i`, 0 if empty.
     pub fn pad_clip_frames(&self, i: usize) -> usize {
         self.pads

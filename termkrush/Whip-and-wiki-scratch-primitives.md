@@ -2,11 +2,12 @@
 title: Whip and wiki scratch primitives
 type: feature
 created: "2026-06-07T11:10:20Z"
-modified: "2026-06-07T11:12:11Z"
+modified: "2026-06-07T12:22:53Z"
 author: Matt Reider
-status: unstarted
+status: started
 estimate: "5"
 project: termkrush
+started: "2026-06-07T12:22:53Z"
 ---
 
 ## Problem

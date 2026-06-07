@@ -38,18 +38,7 @@ struct SampleVoice {
 impl SampleVoice {
     /// Linearly-interpolated stereo frame at fractional region offset `p`.
     fn frame_at(&self, p: f64) -> (f32, f32) {
-        let total = self.clip.len() / 2;
-        if total == 0 {
-            return (0.0, 0.0);
-        }
-        let base = (self.in_f as f64 + p).max(0.0);
-        let i0 = (base.floor() as usize).min(total - 1);
-        let i1 = (i0 + 1).min(total - 1);
-        let frac = (base - base.floor()) as f32;
-        (
-            self.clip[i0 * 2] * (1.0 - frac) + self.clip[i1 * 2] * frac,
-            self.clip[i0 * 2 + 1] * (1.0 - frac) + self.clip[i1 * 2 + 1] * frac,
-        )
+        interp_frame(&self.clip, self.in_f as f64 + p.max(0.0))
     }
 
     /// The next output frame, or `None` once finished. A looping voice wraps
@@ -72,6 +61,55 @@ impl SampleVoice {
 
     fn done(&self) -> bool {
         !self.looping && self.pos >= self.len_f as f64
+    }
+}
+
+/// Linearly-interpolated stereo frame at absolute fractional frame `f`.
+fn interp_frame(clip: &[f32], f: f64) -> (f32, f32) {
+    let total = clip.len() / 2;
+    if total == 0 {
+        return (0.0, 0.0);
+    }
+    let f = f.clamp(0.0, (total - 1) as f64);
+    let i0 = f.floor() as usize;
+    let i1 = (i0 + 1).min(total - 1);
+    let frac = (f - i0 as f64) as f32;
+    (
+        clip[i0 * 2] * (1.0 - frac) + clip[i1 * 2] * frac,
+        clip[i0 * 2 + 1] * (1.0 - frac) + clip[i1 * 2 + 1] * frac,
+    )
+}
+
+/// A scratch voice: walks a list of [`Stroke`]s (whip/wiki phrase), reading
+/// the clip along each stroke and gating by its gain (the crossfader).
+#[derive(Debug)]
+struct ScratchVoice {
+    clip: Arc<Vec<f32>>,
+    pad: usize,
+    strokes: Vec<crate::scratch::Stroke>,
+    seg: usize,
+    t: f64, // output frames into the current stroke
+}
+
+impl ScratchVoice {
+    fn next_frame(&mut self) -> Option<(f32, f32)> {
+        loop {
+            let st = *self.strokes.get(self.seg)?;
+            if self.t >= st.dur {
+                self.seg += 1;
+                self.t = 0.0;
+                continue;
+            }
+            let frac = if st.dur > 0.0 { self.t / st.dur } else { 1.0 };
+            let pos = st.from + (st.to - st.from) * frac;
+            self.t += 1.0;
+            let (l, r) = interp_frame(&self.clip, pos);
+            return Some((l * st.gain, r * st.gain));
+        }
+    }
+
+    fn done(&self) -> bool {
+        self.seg >= self.strokes.len()
     }
 }
 
@@ -120,6 +158,8 @@ pub struct Mixer {
     global_speed: f32,
     /// Currently-sounding one-shot voices, summed onto the master bus.
     voices: Vec<SampleVoice>,
+    /// Currently-sounding scratch voices (whip/wiki phrases).
+    scratch_voices: Vec<ScratchVoice>,
     /// When armed, `fill_mix` appends each block of master output here so the
     /// live mix (active pads) can be resampled into a clip.
     recording: bool,
@@ -151,6 +191,7 @@ impl Mixer {
             master_bpm: None,
             global_speed: 1.0,
             voices: Vec::new(),
+            scratch_voices: Vec::new(),
             recording: false,
             record_buf: Vec::new(),
         }
@@ -391,9 +432,36 @@ impl Mixer {
         self.master_bpm = bpm.filter(|&b| b > 0.0);
     }
 
-    /// Number of sampler voices currently sounding.
+    /// Number of voices currently sounding (sample + scratch).
     pub fn active_voices(&self) -> usize {
-        self.voices.len()
+        self.voices.len() + self.scratch_voices.len()
+    }
+
+    /// Play a **whip** scratch on pad `i` (around its pivot).
+    pub fn scratch_whip(&mut self, i: usize) {
+        self.push_scratch(i, crate::scratch::whip);
+    }
+
+    /// Play a **wiki** scratch on pad `i`.
+    pub fn scratch_wiki(&mut self, i: usize) {
+        self.push_scratch(i, crate::scratch::wiki);
+    }
+
+    fn push_scratch(&mut self, i: usize, build: fn(usize, usize) -> Vec<crate::scratch::Stroke>) {
+        let slice = ((self.sample_rate as f64 * 0.08) as usize).max(1); // ~80 ms rub
+        let pivot = self.pad_pivot(i);
+        if let Some(Some(clip)) = self.pads.get(i) {
+            let strokes = build(pivot, slice);
+            self.scratch_voices.push(ScratchVoice {
+                clip: Arc::clone(clip),
+                pad: i,
+                strokes,
+                seg: 0,
+                t: 0.0,
+            });
+            self.pad_env[i] = 1.0;
+            self.pad_env_target[i] = 1.0;
+        }
     }
 
     /// Set the output sample rate (frames per second) for future tempo features.
@@ -438,6 +506,24 @@ impl Mixer {
         self.voices.retain_mut(|v| {
             let env = envs.get(v.pad).copied().unwrap_or(1.0);
             // Drop voices on a pad that has fully faded off.
+            if env <= 0.0 && targets.get(v.pad).copied().unwrap_or(1.0) <= 0.0 {
+                return false;
+            }
+            let g = gains.get(v.pad).copied().unwrap_or(1.0) * env;
+            for i in 0..frames {
+                match v.next_frame() {
+                    Some((l, r)) => {
+                        out[i * 2] += l * g;
+                        out[i * 2 + 1] += r * g;
+                    }
+                    None => break,
+                }
+            }
+            !v.done()
+        });
+        // Scratch voices sum on top, gated by the same pad gain/envelope.
+        self.scratch_voices.retain_mut(|v| {
+            let env = envs.get(v.pad).copied().unwrap_or(1.0);
             if env <= 0.0 && targets.get(v.pad).copied().unwrap_or(1.0) <= 0.0 {
                 return false;
             }
@@ -631,6 +717,42 @@ mod tests {
         assert_eq!(m.pad_trim(0).0, 99);
         m.nudge_pad_out(0, 1000); // can't pass the clip end
         assert_eq!(m.pad_trim(0).1, 100);
+    }
+
+    #[test]
+    fn scratch_whip_mutes_forward_sounds_backward() {
+        let mut m = Mixer::new();
+        m.set_sample_rate(1000); // ~80-frame rub slice
+        m.assign_pad(0, vec![0.5; 800]); // 400 frames, flat 0.5
+        m.scratch_whip(0);
+        assert_eq!(m.active_voices(), 1);
+        let mut buf = vec![0.0f32; 320]; // 160 frames = two 80-frame strokes
+        m.fill_mix(&mut buf);
+        assert!(buf[..160].iter().all(|&s| s.abs() < 1e-6), "forward muted");
+        assert!(
+            buf[160..].iter().any(|&s| (s - 0.5).abs() < 1e-4),
+            "back sounds"
+        );
+        m.fill_mix(&mut [0.0f32; 8]);
+        assert_eq!(m.active_voices(), 0, "scratch ends after its strokes");
+    }
+
+    #[test]
+    fn scratch_wiki_sounds_throughout() {
+        let mut m = Mixer::new();
+        m.set_sample_rate(1000);
+        m.assign_pad(0, vec![0.5; 800]);
+        m.scratch_wiki(0);
+        let mut buf = vec![0.0f32; 320];
+        m.fill_mix(&mut buf);
+        assert!(
+            buf[..160].iter().any(|&s| (s - 0.5).abs() < 1e-4),
+            "forward sounds"
+        );
+        assert!(
+            buf[160..].iter().any(|&s| (s - 0.5).abs() < 1e-4),
+            "back sounds"
+        );
     }
 
     #[test]

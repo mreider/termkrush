@@ -43,9 +43,80 @@ pub fn detect_pivot(samples: &[f32], channels: u16) -> usize {
     best_w * win
 }
 
+/// One linear move of the read head across the record, gated by `gain`
+/// (the crossfader): `0.0` = muted (silent), `1.0` = audible.
+#[derive(Debug, Clone, Copy)]
+pub struct Stroke {
+    /// Start read frame (absolute).
+    pub from: f64,
+    /// End read frame (absolute).
+    pub to: f64,
+    /// Output gain over the stroke (0 muted, 1 audible).
+    pub gain: f32,
+    /// How many output frames the stroke spans.
+    pub dur: f64,
+}
+
+/// A **whip**: push the record forward with the fader closed (muted), then
+/// pull it back audible — the classic backward "whip" swoosh.
+pub fn whip(pivot: usize, slice: usize) -> Vec<Stroke> {
+    let (p, s) = (pivot as f64, slice as f64);
+    vec![
+        Stroke {
+            from: p,
+            to: p + s,
+            gain: 0.0,
+            dur: s,
+        }, // forward, muted
+        Stroke {
+            from: p + s,
+            to: p,
+            gain: 1.0,
+            dur: s,
+        }, // back, audible
+    ]
+}
+
+/// A **wiki**: forward audible then back audible — both motions sound (the
+/// "wik-i"). Combined with whips this builds wiki-whip / whip-wiki phrases.
+pub fn wiki(pivot: usize, slice: usize) -> Vec<Stroke> {
+    let (p, s) = (pivot as f64, slice as f64);
+    vec![
+        Stroke {
+            from: p,
+            to: p + s,
+            gain: 1.0,
+            dur: s,
+        }, // forward, audible
+        Stroke {
+            from: p + s,
+            to: p,
+            gain: 1.0,
+            dur: s,
+        }, // back, audible
+    ]
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn whip_mutes_forward_sounds_backward() {
+        let w = whip(100, 50);
+        assert_eq!(w.len(), 2);
+        assert_eq!(w[0].gain, 0.0, "forward muted");
+        assert_eq!(w[1].gain, 1.0, "backward audible");
+        assert!(
+            w[0].to > w[0].from && w[1].to < w[1].from,
+            "forward then back"
+        );
+    }
+
+    #[test]
+    fn wiki_sounds_both_ways() {
+        assert!(wiki(100, 50).iter().all(|s| s.gain == 1.0));
+    }
 
     #[test]
     fn pivot_lands_on_the_onset() {

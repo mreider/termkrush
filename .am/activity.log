@@ -421,3 +421,4 @@
 2026-06-07T12:22:48Z	Matt Reider	finished	termkrush/Detect-the-scratch-pivot-onset-in-a-short-clip.md	
 2026-06-07T12:22:48Z	Matt Reider	delivered	termkrush/Detect-the-scratch-pivot-onset-in-a-short-clip.md	
 2026-06-07T12:22:49Z	Matt Reider	accepted	termkrush/Detect-the-scratch-pivot-onset-in-a-short-clip.md	Scratch pivot detection. New termkrush-core::scratch::detect_pivot finds the onset (frame of the largest window-energy rise across ~64 windows). assign_pad runs it and stores pad_pivot[i]; pad_pivot() exposes it; the scratch pad cell shows 'piv N'. Tests: burst at frame 500 → pivot within 25; empty/tiny clips → 0. The whip/wiki rendering builds on this next. fmt + clippy --workspace + 8 suites green.
+2026-06-07T12:22:53Z	Matt Reider	started	termkrush/Whip-and-wiki-scratch-primitives.md	

@@ -308,9 +308,25 @@ impl App {
 
     // ---- pad actions -------------------------------------------------------
 
+    /// Fire pad `pad`: a wiki scratch on a scratch pad, else a normal trigger.
     fn trigger(&mut self, pad: usize) -> Action {
-        self.mixer.trigger_pad(pad);
+        if self.mixer.pad_kind(pad) == PadKind::Scratch {
+            self.mixer.scratch_wiki(pad);
+        } else {
+            self.mixer.trigger_pad(pad);
+        }
         Action::TriggerPad
+    }
+
+    /// `k` — whip on a scratch pad, else assign the latest recording.
+    fn secondary(&mut self) -> Action {
+        if let Focus::Pad(i) = self.focus {
+            if self.mixer.pad_kind(i) == PadKind::Scratch {
+                self.mixer.scratch_whip(i);
+                return Action::TriggerPad;
+            }
+        }
+        self.assign_recording()
     }
 
     /// `;` — cycle the focused pad's kind (one-shot / loop / scratch).
@@ -563,7 +579,7 @@ impl App {
             // Pad action cluster (on the focused pad).
             KeyCode::Char('j') => self.trigger(self.active_pad()),
             KeyCode::Char('l') => self.load_selected_onto(self.active_pad()),
-            KeyCode::Char('k') => self.assign_recording(),
+            KeyCode::Char('k') => self.secondary(),
             KeyCode::Char('a') => self.trim_in(false, shift),
             KeyCode::Char('d') => self.trim_in(true, shift),
             KeyCode::Char('w') => self.trim_out(true, shift),
@@ -856,7 +872,7 @@ fn draw_help(f: &mut Frame, area: Rect) {
   focus   tab / arrows   (library · pads · DJ)
   library / filter   ↑↓ browse   enter open/load→pad   z hide
   files   x delete   R rename   m mark / p move-here
-  pad     j play   f on/off   l load   k assign-rec   ; kind
+  pad     j play/wiki   k whip/assign-rec   f on/off   l load   ; kind
   trim    a/d in   w/s out   (shift = fine)
   tempo   , / .  pad bpm
   mix     1-7 trigger   r record   - / = pad vol   [ ] master   { } tempo
@@ -1248,6 +1264,20 @@ mod tests {
         assert_eq!(app.mixer.pad_kind(0), PadKind::OneShot);
         assert_eq!(app.on_key(key(';')), Action::Mark);
         assert_eq!(app.mixer.pad_kind(0), PadKind::Loop);
+    }
+
+    #[test]
+    fn scratch_pad_j_and_k_play_wiki_and_whip() {
+        let mut app = App::new();
+        app.mixer.assign_pad(0, vec![0.5; 4000]);
+        app.set_focus(Focus::Pad(0));
+        app.mixer.cycle_pad_kind(0); // OneShot → Loop
+        app.mixer.cycle_pad_kind(0); // → Scratch
+        assert_eq!(app.mixer.pad_kind(0), PadKind::Scratch);
+        assert_eq!(app.on_key(key('j')), Action::TriggerPad); // wiki
+        assert_eq!(app.mixer.active_voices(), 1);
+        assert_eq!(app.on_key(key('k')), Action::TriggerPad); // whip
+        assert_eq!(app.mixer.active_voices(), 2);
     }
 
     #[test]

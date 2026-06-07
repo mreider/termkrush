@@ -11,10 +11,13 @@ Run `cargo run --release` with a few tracks in `crate_root` and walk this:
       cell shows it after a brief `loading…`.
 - [ ] `x` delete (confirm), `R` rename, `m`/`p` move — all reflect on disk.
 
-## Pads
-- [ ] `1`–`7` / `j` trigger and you **hear** the clip.
+## Pads (8, no DJ tile)
+- [ ] `1`–`8` / `j` trigger and you **hear** the clip; there are eight pads and
+      no DJ cat.
+- [ ] Focus moves with `tab` / `shift-tab` and `←`/`→`; **`↑`/`↓` = volume** of
+      the focused pad (audible). On the library, `↑`/`↓` browse the list.
 - [ ] `;` cycles kind (1shot / loop / scratch); `f` activates/deactivates with
-      an audible fade; `-`/`=` change that pad's volume audibly.
+      an audible fade.
 - [ ] `u` unloads the focused pad (goes silent + empty).
 
 ## Tempo / sync

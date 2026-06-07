@@ -4,7 +4,6 @@ Stack-rank order. Top is the highest priority. Edit by hand or via `am rank` / `
 
 - [Cruft pass: remove dead code left by the looper refactors](Cruft-pass-remove-dead-code-left-by-the-looper-refactors.md)
 - [Bug: scratch whip/wiki is not discoverable - no cue to set a pad to scratch](Bug-scratch-whip-wiki-is-not-discoverable-no-cue-to-set-a-pad-to-scratch.md)
-- [Bug: volume should be up/down arrows for the master track and pads](Bug-volume-should-be-up-down-arrows-for-the-master-track-and-pads.md)
 - [Retire the step-grid cell-toggle and tracker-only tests](Retire-the-step-grid-cell-toggle-and-tracker-only-tests.md)
 - [Bug: escape should leave the timeline modal then open quit on a second press](Bug-escape-should-leave-the-timeline-modal-then-open-quit-on-a-second-press.md)
 - [Bug: clip-edit needs audition preview and two-sided snip](Bug-clip-edit-needs-audition-preview-and-two-sided-snip.md)

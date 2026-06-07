@@ -77,7 +77,6 @@ pub enum Action {
 pub enum Focus {
     Crate,
     Pad(usize),
-    Dj,
 }
 
 /// State of the keyboard-first pads UI.
@@ -455,12 +454,11 @@ impl App {
         }
     }
 
-    // ---- focus order: Crate, Pad0..PADS-1, Dj ------------------------------
+    // ---- focus order: Crate, Pad0..PADS-1 ----------------------------------
 
     fn focus_order() -> Vec<Focus> {
         let mut v = vec![Focus::Crate];
         v.extend((0..PADS).map(Focus::Pad));
-        v.push(Focus::Dj);
         v
     }
 
@@ -719,6 +717,22 @@ impl App {
         }
     }
 
+    /// Up/Down volume: a focused pad → its volume; anything else (the master
+    /// timeline) → master volume.
+    fn volume(&mut self, up: bool) -> Action {
+        match self.focus {
+            Focus::Pad(i) => {
+                self.mixer.nudge_pad_gain(i, if up { 0.05 } else { -0.05 });
+                Action::Mark
+            }
+            _ => {
+                self.mixer
+                    .nudge_master(if up { GAIN_NUDGE } else { -GAIN_NUDGE });
+                Action::MasterGain
+            }
+        }
+    }
+
     fn trim_in(&mut self, forward: bool, fine: bool) -> Action {
         if let Focus::Pad(i) = self.focus {
             let step = if fine { TRIM_FINE } else { TRIM_COARSE };
@@ -912,14 +926,15 @@ impl App {
                 self.show_help = !self.show_help;
                 Action::ToggleHelp
             }
-            KeyCode::Tab => self.step_focus(1),
-            KeyCode::BackTab => self.step_focus(-1),
+            // Focus moves with Tab / Shift-Tab and Left / Right.
+            KeyCode::Tab | KeyCode::Right => self.step_focus(1),
+            KeyCode::BackTab | KeyCode::Left => self.step_focus(-1),
 
-            // Arrows: on the crate, browse the list; elsewhere move focus.
+            // Up/Down = volume — except on the library, where they browse.
             KeyCode::Up if self.focus == Focus::Crate => self.crate_nav(-1),
             KeyCode::Down if self.focus == Focus::Crate => self.crate_nav(1),
-            KeyCode::Up | KeyCode::Left => self.step_focus(-1),
-            KeyCode::Down | KeyCode::Right => self.step_focus(1),
+            KeyCode::Up => self.volume(true),
+            KeyCode::Down => self.volume(false),
 
             // Crate.
             KeyCode::Char('/') => {
@@ -990,7 +1005,7 @@ impl App {
                 self.mixer.nudge_master(GAIN_NUDGE);
                 Action::MasterGain
             }
-            KeyCode::Char(c @ '1'..='7') => {
+            KeyCode::Char(c @ '1'..='8') => {
                 let pad = c.to_digit(10).unwrap() as usize - 1;
                 self.trigger(pad)
             }
@@ -1319,7 +1334,7 @@ fn draw_crate(f: &mut Frame, area: Rect, app: &App) {
 }
 
 fn draw_pads(f: &mut Frame, area: Rect, app: &App) {
-    // Four rows of two cells: pads 1..7 then the DJ tile.
+    // Four rows of two cells: pads 1..8.
     let rows = Layout::vertical([Constraint::Ratio(1, 4); 4]).split(area);
     for (row, chunk) in rows.iter().enumerate() {
         let cols = Layout::horizontal([Constraint::Ratio(1, 2); 2]).split(*chunk);
@@ -1327,8 +1342,6 @@ fn draw_pads(f: &mut Frame, area: Rect, app: &App) {
             let idx = row * 2 + col;
             if idx < PADS {
                 draw_pad_cell(f, *cell, app, idx);
-            } else {
-                draw_cell(f, *cell, "DJ", dj_lines(app), app.focus_cell() == Focus::Dj);
             }
         }
     }
@@ -1427,16 +1440,6 @@ fn draw_pad_cell(f: &mut Frame, area: Rect, app: &App, pad: usize) {
 }
 
 /// The DJ tile's two-line 8-bit cat — bobs while voices play, else rests.
-fn dj_lines(app: &App) -> Vec<Line<'static>> {
-    let bobbing = app.mixer.active_voices() > 0 && (app.tick / 8) % 2 == 1;
-    let (face, body) = if bobbing {
-        ("  =^o^=", "  ♫ DJ ♫")
-    } else {
-        ("  =^.^=", "  ♫ dj ♫")
-    };
-    vec![Line::from(face), Line::from(body)]
-}
-
 /// A small centered "Quit?" confirmation modal. `y` quits, anything else cancels.
 fn draw_quit_modal(f: &mut Frame, area: Rect) {
     draw_confirm_modal(f, area, "Quit TermKrush?");
@@ -1463,7 +1466,7 @@ fn draw_help(f: &mut Frame, area: Rect) {
     let popup = centered(56, 17, area);
     f.render_widget(Clear, popup);
     let text = "\
-  focus   tab / arrows   (library · pads · DJ)
+  focus   tab · ←/→   (library · pads)   vol ↑/↓
   library / filter   ↑↓ browse   enter open/load→pad   z hide
   files   x delete   R rename   m mark / p move-here
   pad     j play/wiki   k whip   f on/off   l load   u unload   e edit   ; kind   S save   O over   E mp3
@@ -1786,7 +1789,7 @@ mod tests {
     }
 
     #[test]
-    fn tab_cycles_focus_through_crate_pads_and_dj() {
+    fn tab_cycles_focus_through_crate_and_pads() {
         let mut app = App::new();
         app.set_focus(Focus::Crate);
         assert_eq!(app.focus_cell(), Focus::Crate);
@@ -1795,11 +1798,11 @@ mod tests {
             Action::Focus
         );
         assert_eq!(app.focus_cell(), Focus::Pad(0));
-        // Step to the end (Dj) and wrap back to Crate.
-        for _ in 0..PADS {
+        // Step to the last pad and wrap back to Crate.
+        for _ in 0..PADS - 1 {
             app.on_key(KeyEvent::new(KeyCode::Tab, KeyModifiers::NONE));
         }
-        assert_eq!(app.focus_cell(), Focus::Dj);
+        assert_eq!(app.focus_cell(), Focus::Pad(PADS - 1));
         app.on_key(KeyEvent::new(KeyCode::Tab, KeyModifiers::NONE));
         assert_eq!(app.focus_cell(), Focus::Crate);
     }
@@ -1914,6 +1917,26 @@ mod tests {
         assert_eq!(app.on_key(key('-')), Action::Mark);
         assert!(app.mixer.pad_gain(0) < 1.0);
         assert_eq!(app.on_key(key('=')), Action::Mark);
+    }
+
+    #[test]
+    fn arrows_volume_and_left_right_move_focus() {
+        let down = || KeyEvent::new(KeyCode::Down, KeyModifiers::NONE);
+        let up = || KeyEvent::new(KeyCode::Up, KeyModifiers::NONE);
+        let right = || KeyEvent::new(KeyCode::Right, KeyModifiers::NONE);
+        let mut app = App::new();
+        app.set_focus(Focus::Pad(0));
+        // Up/Down change the focused pad's volume.
+        assert_eq!(app.on_key(down()), Action::Mark);
+        assert!(app.mixer.pad_gain(0) < 1.0, "down lowers pad volume");
+        app.on_key(up());
+        // Left/Right move focus (not volume).
+        let before = app.focus_cell();
+        app.on_key(right());
+        assert_ne!(app.focus_cell(), before, "right moves focus");
+        // On the library, Up/Down browse instead of changing volume.
+        app.set_focus(Focus::Crate);
+        assert_eq!(app.on_key(down()), Action::CrateNav);
     }
 
     #[test]
@@ -2314,11 +2337,12 @@ mod tests {
     }
 
     #[test]
-    fn renders_wordmark_pads_and_dj() {
+    fn renders_wordmark_and_eight_pads() {
         let app = App::new();
         let text = buffer_text(&render(&app, 96, 32));
         assert!(text.contains("TermKrush"));
         assert!(text.contains("Pad 1"));
-        assert!(text.contains("=^.^="), "DJ cat renders");
+        assert!(text.contains("Pad 8"), "eighth pad renders");
+        assert!(!text.contains("=^.^="), "no DJ cat");
     }
 }

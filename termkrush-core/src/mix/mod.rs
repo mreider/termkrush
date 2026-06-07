@@ -8,7 +8,7 @@
 use std::sync::Arc;
 
 /// Number of sampler pads (clip triggers).
-pub const PADS: usize = 7;
+pub const PADS: usize = 8;
 
 /// What kind of pad this is — determines its controls and playback.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]

@@ -311,3 +311,61 @@
 2026-06-06T20:13:31Z	Matt Reider	accepted	termkrush/Polish-README-for-first-release.md	
 2026-06-06T20:13:31Z	Matt Reider	accepted	termkrush/Polish-README-for-first-release.md	
 2026-06-06T20:13:31Z	Matt Reider	accepted	termkrush/Polish-README-for-first-release.md	README polished to match the shipped app: rewrote the tagline (was 'four decks + FX + master-to-wav' — now two decks, auto-fade/beat-sync, 7-pad clip sampler, Xbox, DJ cat); added a 'What it does' feature list; replaced the placeholder screenshot with a real 96-col grid render (decks/mixer/pads/DJ + populated crate); refreshed the status note; fixed Install (cargo run launches the TUI, ALSA+udev note, dev-run.sh); aligned the Layout table (added src/clip, corrected deck/mix/audio rows); de-staled the cheatsheet intro. Cheatsheet table was already current. clippy/-Dwarnings + 9 suites green.
+2026-06-07T11:09:28Z	Matt Reider	created	termkrush/Split-a-headless-core-from-the-TUI-shell-and-remove-decks.md	target=priority position=bottom
+2026-06-07T11:10:18Z	Matt Reider	estimate	termkrush/Split-a-headless-core-from-the-TUI-shell-and-remove-decks.md	5
+2026-06-07T11:10:18Z	Matt Reider	created	termkrush/Drop-the-crossfader-deck-blend-sync-cue-and-old-patterns.md	target=priority position=bottom
+2026-06-07T11:10:18Z	Matt Reider	estimate	termkrush/Drop-the-crossfader-deck-blend-sync-cue-and-old-patterns.md	3
+2026-06-07T11:10:18Z	Matt Reider	created	termkrush/Multipass-cruft-sweep-for-a-clean-pad-based-codebase.md	target=priority position=bottom
+2026-06-07T11:10:18Z	Matt Reider	set-type	termkrush/Multipass-cruft-sweep-for-a-clean-pad-based-codebase.md	chore
+2026-06-07T11:10:18Z	Matt Reider	created	termkrush/Track-list-with-folders.md	target=priority position=bottom
+2026-06-07T11:10:18Z	Matt Reider	estimate	termkrush/Track-list-with-folders.md	3
+2026-06-07T11:10:18Z	Matt Reider	created	termkrush/Rename-delete-and-move-tracks-in-the-UI.md	target=priority position=bottom
+2026-06-07T11:10:19Z	Matt Reider	estimate	termkrush/Rename-delete-and-move-tracks-in-the-UI.md	3
+2026-06-07T11:10:19Z	Matt Reider	created	termkrush/Pad-type-model-loop-scratch-or-one-shot.md	target=priority position=bottom
+2026-06-07T11:10:19Z	Matt Reider	estimate	termkrush/Pad-type-model-loop-scratch-or-one-shot.md	3
+2026-06-07T11:10:19Z	Matt Reider	created	termkrush/Per-pad-volume.md	target=priority position=bottom
+2026-06-07T11:10:19Z	Matt Reider	estimate	termkrush/Per-pad-volume.md	2
+2026-06-07T11:10:19Z	Matt Reider	created	termkrush/Activate-and-deactivate-pads-with-hard-or-soft-fade.md	target=priority position=bottom
+2026-06-07T11:10:19Z	Matt Reider	estimate	termkrush/Activate-and-deactivate-pads-with-hard-or-soft-fade.md	3
+2026-06-07T11:10:19Z	Matt Reider	created	termkrush/Loop-pad-playback-with-precise-timeline-trim.md	target=priority position=bottom
+2026-06-07T11:10:19Z	Matt Reider	estimate	termkrush/Loop-pad-playback-with-precise-timeline-trim.md	3
+2026-06-07T11:10:19Z	Matt Reider	created	termkrush/Master-tempo-from-the-first-loop.md	target=priority position=bottom
+2026-06-07T11:10:19Z	Matt Reider	estimate	termkrush/Master-tempo-from-the-first-loop.md	2
+2026-06-07T11:10:20Z	Matt Reider	created	termkrush/Sync-loop-pads-to-the-master-tempo-via-varispeed.md	target=priority position=bottom
+2026-06-07T11:10:20Z	Matt Reider	estimate	termkrush/Sync-loop-pads-to-the-master-tempo-via-varispeed.md	5
+2026-06-07T11:10:20Z	Matt Reider	created	termkrush/Global-speed-control-all-loops-follow.md	target=priority position=bottom
+2026-06-07T11:10:20Z	Matt Reider	estimate	termkrush/Global-speed-control-all-loops-follow.md	3
+2026-06-07T11:10:20Z	Matt Reider	created	termkrush/Detect-the-scratch-pivot-onset-in-a-short-clip.md	target=priority position=bottom
+2026-06-07T11:10:20Z	Matt Reider	estimate	termkrush/Detect-the-scratch-pivot-onset-in-a-short-clip.md	3
+2026-06-07T11:10:20Z	Matt Reider	created	termkrush/Whip-and-wiki-scratch-primitives.md	target=priority position=bottom
+2026-06-07T11:10:21Z	Matt Reider	estimate	termkrush/Whip-and-wiki-scratch-primitives.md	5
+2026-06-07T11:10:21Z	Matt Reider	created	termkrush/Build-a-scratch-phrase-by-tapping-whips-and-wikis.md	target=priority position=bottom
+2026-06-07T11:10:21Z	Matt Reider	estimate	termkrush/Build-a-scratch-phrase-by-tapping-whips-and-wikis.md	5
+2026-06-07T11:10:21Z	Matt Reider	created	termkrush/Scratch-pad-controls-and-display.md	target=priority position=bottom
+2026-06-07T11:10:21Z	Matt Reider	estimate	termkrush/Scratch-pad-controls-and-display.md	3
+2026-06-07T11:10:21Z	Matt Reider	created	termkrush/Step-grid-timeline-data-model.md	target=priority position=bottom
+2026-06-07T11:10:21Z	Matt Reider	estimate	termkrush/Step-grid-timeline-data-model.md	3
+2026-06-07T11:10:21Z	Matt Reider	created	termkrush/Step-grid-editor-with-cursor-and-step-toggle.md	target=priority position=bottom
+2026-06-07T11:10:21Z	Matt Reider	estimate	termkrush/Step-grid-editor-with-cursor-and-step-toggle.md	5
+2026-06-07T11:10:21Z	Matt Reider	created	termkrush/Loop-regions-on-the-grid-repeat-to-fill.md	target=priority position=bottom
+2026-06-07T11:10:21Z	Matt Reider	estimate	termkrush/Loop-regions-on-the-grid-repeat-to-fill.md	3
+2026-06-07T11:10:22Z	Matt Reider	created	termkrush/Play-the-arrangement-through-the-mixer.md	target=priority position=bottom
+2026-06-07T11:10:22Z	Matt Reider	estimate	termkrush/Play-the-arrangement-through-the-mixer.md	5
+2026-06-07T11:10:22Z	Matt Reider	created	termkrush/Render-the-arrangement-to-a-WAV-in-the-track-list.md	target=priority position=bottom
+2026-06-07T11:10:22Z	Matt Reider	estimate	termkrush/Render-the-arrangement-to-a-WAV-in-the-track-list.md	5
+2026-06-07T11:10:22Z	Matt Reider	created	termkrush/Reload-a-track-onto-a-pad-edit-and-save-back.md	target=priority position=bottom
+2026-06-07T11:10:22Z	Matt Reider	estimate	termkrush/Reload-a-track-onto-a-pad-edit-and-save-back.md	3
+2026-06-07T11:10:22Z	Matt Reider	created	termkrush/Export-a-track-to-MP3.md	target=priority position=bottom
+2026-06-07T11:10:22Z	Matt Reider	estimate	termkrush/Export-a-track-to-MP3.md	3
+2026-06-07T11:10:23Z	Matt Reider	created	termkrush/Import-MP3-files-into-the-track-list.md	target=priority position=bottom
+2026-06-07T11:10:23Z	Matt Reider	estimate	termkrush/Import-MP3-files-into-the-track-list.md	2
+2026-06-07T11:10:23Z	Matt Reider	created	termkrush/Refresh-GitHub-Pages-for-the-pad-based-model.md	target=priority position=bottom
+2026-06-07T11:10:23Z	Matt Reider	estimate	termkrush/Refresh-GitHub-Pages-for-the-pad-based-model.md	2
+2026-06-07T11:10:23Z	Matt Reider	created	termkrush/Wire-Buy-Me-A-Coffee-into-README-and-site.md	target=priority position=bottom
+2026-06-07T11:10:23Z	Matt Reider	set-type	termkrush/Wire-Buy-Me-A-Coffee-into-README-and-site.md	chore
+2026-06-07T11:10:23Z	Matt Reider	created	termkrush/First-release-dry-run-with-rc-tag.md	target=priority position=bottom
+2026-06-07T11:10:23Z	Matt Reider	set-type	termkrush/First-release-dry-run-with-rc-tag.md	chore
+2026-06-07T11:10:23Z	Matt Reider	created	termkrush/V010-krush.md	target=priority position=bottom
+2026-06-07T11:10:34Z	Matt Reider	set-type	termkrush/V010-krush.md	release
+2026-06-07T11:13:51Z	Matt Reider	created	termkrush/Import-a-YouTube-song-as-WAV-to-the-track-list.md	target=priority position=bottom
+2026-06-07T11:13:51Z	Matt Reider	estimate	termkrush/Import-a-YouTube-song-as-WAV-to-the-track-list.md	5

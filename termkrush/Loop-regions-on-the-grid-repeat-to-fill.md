@@ -2,12 +2,14 @@
 title: Loop regions on the grid repeat to fill
 type: feature
 created: "2026-06-07T11:10:21Z"
-modified: "2026-06-07T12:37:51Z"
+modified: "2026-06-07T12:40:40Z"
 author: Matt Reider
-status: started
+status: accepted
 estimate: "3"
 project: termkrush
 started: "2026-06-07T12:37:51Z"
+delivered: "2026-06-07T12:40:40Z"
+accepted: "2026-06-07T12:40:40Z"
 ---
 
 ## Problem

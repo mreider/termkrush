@@ -39,6 +39,7 @@
 |  | [Bug: escape should leave the timeline modal then open quit on a second press](termkrush/Bug-escape-should-leave-the-timeline-modal-then-open-quit-on-a-second-press.md) |  |  |
 |  | [Auto-BPM: first track sets master and every pad locks, no prompt](termkrush/Auto-BPM-first-track-sets-master-and-every-pad-locks-no-prompt.md) | 3 |  |
 |  | [Master timeline as a permanent top strip](termkrush/Master-timeline-as-a-permanent-top-strip.md) | 8 |  |
+|  | [Bug: help modal is cut off and the header keymap is stale and misleading](termkrush/Bug-help-modal-is-cut-off-and-the-header-keymap-is-stale-and-misleading.md) |  |  |
 
 ### Accepted
 | User | Title | Points | Tags |

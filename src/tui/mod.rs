@@ -32,7 +32,7 @@ use termkrush_core::audio::{AudioOutput, DecodedAudio};
 use termkrush_core::clip::Clip;
 use termkrush_core::config::Config;
 use termkrush_core::library::Crate;
-use termkrush_core::mix::{Mixer, Pattern, PADS};
+use termkrush_core::mix::{Mixer, PADS};
 
 /// Per-keypress master-gain nudge (linear).
 const GAIN_NUDGE: f32 = 0.05;
@@ -231,15 +231,6 @@ impl App {
         Action::TriggerPad
     }
 
-    fn cycle_pattern(&mut self) -> Action {
-        if let Focus::Pad(i) = self.focus {
-            self.mixer.cycle_pad_pattern(i);
-            Action::Mark
-        } else {
-            Action::None
-        }
-    }
-
     fn trim_in(&mut self, forward: bool, fine: bool) -> Action {
         if let Focus::Pad(i) = self.focus {
             let step = if fine { TRIM_FINE } else { TRIM_COARSE };
@@ -401,7 +392,6 @@ impl App {
             KeyCode::Char('j') => self.trigger(self.active_pad()),
             KeyCode::Char('l') => self.load_selected_onto(self.active_pad()),
             KeyCode::Char('k') => self.assign_recording(),
-            KeyCode::Char(';') => self.cycle_pattern(),
             KeyCode::Char('a') => self.trim_in(false, shift),
             KeyCode::Char('d') => self.trim_in(true, shift),
             KeyCode::Char('w') => self.trim_out(true, shift),
@@ -492,7 +482,7 @@ fn draw_header(f: &mut Frame, area: Rect) {
         ))
         .centered(),
         Line::from(Span::styled(
-            "tab focus  j play  l load  ; pattern  a/d/w/s trim  r record  ? help",
+            "tab focus  j play  l load  a/d/w/s trim  r record  ? help",
             Style::default().fg(GREEN),
         ))
         .centered(),
@@ -564,18 +554,6 @@ fn draw_cell(f: &mut Frame, area: Rect, title: &str, lines: Vec<Line<'static>>, 
     f.render_widget(Paragraph::new(lines).block(block), area);
 }
 
-fn pattern_label(p: Pattern) -> &'static str {
-    match p {
-        Pattern::Straight => "play",
-        Pattern::Cut => "cut",
-        Pattern::BabyScratch => "scratch",
-        Pattern::Transformer => "xform",
-        Pattern::Stutter => "stutter",
-        Pattern::Warble => "warble",
-        Pattern::Reverse => "reverse",
-    }
-}
-
 /// A `[░░████░░]` bar showing the trimmed region `[in, out)` over the clip.
 fn trim_bar(inp: usize, out: usize, len: usize, width: usize) -> String {
     if len == 0 || width == 0 {
@@ -598,8 +576,6 @@ fn draw_pad_cell(f: &mut Frame, area: Rect, app: &App, pad: usize) {
     let glyph = if loaded { '●' } else { '·' };
     let line1 = if app.is_loading(pad) {
         "  ⏳ loading…".to_string()
-    } else if loaded {
-        format!("  {glyph} {}", pattern_label(app.mixer.pad_pattern(pad)))
     } else {
         format!("  {glyph}")
     };
@@ -659,7 +635,7 @@ fn draw_help(f: &mut Frame, area: Rect) {
     let text = "\
   focus   tab / arrows   (crate · pads · DJ)
   crate   / filter   ↑↓ browse   enter load→pad   z hide
-  pad     j play   l load   k assign-rec   ; pattern
+  pad     j play   l load   k assign-rec
   trim    a/d in   w/s out   (shift = fine)
   tempo   , / .  pad bpm
   mix     1-7 trigger   r record mix   [ ] master
@@ -981,16 +957,6 @@ mod tests {
         assert_eq!(app.on_key(key('s')), Action::Mark); // out-point in
         assert!(app.mixer.pad_trim(0).1 < 10_000);
         assert_eq!(app.mixer.pad_clip_frames(0), 10_000, "source untouched");
-    }
-
-    #[test]
-    fn semicolon_cycles_the_pad_pattern() {
-        let mut app = App::new();
-        app.mixer.assign_pad(0, vec![0.5; 64]);
-        app.set_focus(Focus::Pad(0));
-        assert_eq!(app.mixer.pad_pattern(0), Pattern::Straight);
-        assert_eq!(app.on_key(key(';')), Action::Mark);
-        assert_eq!(app.mixer.pad_pattern(0), Pattern::Cut);
     }
 
     #[test]

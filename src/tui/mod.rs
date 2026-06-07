@@ -573,6 +573,17 @@ impl App {
         Action::None
     }
 
+    /// `u` — unload the focused pad (clear its clip + state).
+    fn unload(&mut self) -> Action {
+        if let Focus::Pad(i) = self.focus {
+            self.mixer.unload_pad(i);
+            self.pad_source[i] = None;
+            Action::Mark
+        } else {
+            Action::None
+        }
+    }
+
     /// `;` — cycle the focused pad's kind (one-shot / loop / scratch).
     fn cycle_kind(&mut self) -> Action {
         if let Focus::Pad(i) = self.focus {
@@ -820,6 +831,7 @@ impl App {
             KeyCode::Char('m') => self.mark_move(),
             KeyCode::Char('p') => self.paste_move(),
             KeyCode::Char(';') => self.cycle_kind(),
+            KeyCode::Char('u') => self.unload(),
             KeyCode::Char('f') => self.toggle_active(),
             KeyCode::Char('P') => self.toggle_phrase_rec(),
             KeyCode::Char('C') => self.clear_phrase(),
@@ -1280,7 +1292,7 @@ fn draw_help(f: &mut Frame, area: Rect) {
   focus   tab / arrows   (library · pads · DJ)
   library / filter   ↑↓ browse   enter open/load→pad   z hide
   files   x delete   R rename   m mark / p move-here
-  pad     j play/wiki   k whip   f on/off   l load   ; kind   S save   O over   E mp3
+  pad     j play/wiki   k whip   f on/off   l load   u unload   ; kind   S save   O over   E mp3
   trim    a/d in   w/s out   (shift = fine)
   tempo   , / .  pad bpm
   mix     1-7 trigger   r record   - / = pad vol   [ ] master   { } tempo
@@ -1657,6 +1669,19 @@ mod tests {
         assert!(app.mixer.pad_active(0));
         assert_eq!(app.on_key(key('f')), Action::Mark);
         assert!(!app.mixer.pad_active(0));
+    }
+
+    #[test]
+    fn u_unloads_the_focused_pad() {
+        let mut app = App::new();
+        app.mixer.assign_pad(0, vec![0.5; 64]);
+        app.mixer.cycle_pad_kind(0); // → Loop
+        app.set_focus(Focus::Pad(0));
+        assert!(app.mixer.pad_loaded(0));
+        assert_eq!(app.on_key(key('u')), Action::Mark);
+        assert!(!app.mixer.pad_loaded(0), "pad cleared");
+        assert_eq!(app.mixer.pad_kind(0), PadKind::OneShot, "kind reset");
+        assert!(app.pad_source[0].is_none());
     }
 
     #[test]

@@ -303,6 +303,25 @@ impl Mixer {
         i < PADS && self.pads[i].is_some()
     }
 
+    /// Clear pad `i` back to empty: drop its clip, reset trim/kind/bpm/pivot/
+    /// phrase/gain/envelope, and stop its voices.
+    pub fn unload_pad(&mut self, i: usize) {
+        if i >= PADS {
+            return;
+        }
+        self.pads[i] = None;
+        self.pad_trim[i] = (0, 0);
+        self.pad_kind[i] = PadKind::OneShot;
+        self.pad_bpm[i] = None;
+        self.pad_pivot[i] = 0;
+        self.pad_phrase[i].clear();
+        self.pad_gain[i] = 1.0;
+        self.pad_env[i] = 1.0;
+        self.pad_env_target[i] = 1.0;
+        self.voices.retain(|v| v.pad != i);
+        self.scratch_voices.retain(|v| v.pad != i);
+    }
+
     /// Pad `i`'s kind (one-shot / loop / scratch).
     pub fn pad_kind(&self, i: usize) -> PadKind {
         self.pad_kind.get(i).copied().unwrap_or_default()

@@ -116,6 +116,8 @@ pub struct App {
     tl_visible: bool,
     tl_lane: usize,
     tl_step: usize,
+    /// First endpoint of a loop region being drawn (`v` marks, `v` fills).
+    tl_region_start: Option<usize>,
 }
 
 impl Default for App {
@@ -150,6 +152,7 @@ impl App {
             tl_visible: false,
             tl_lane: 0,
             tl_step: 0,
+            tl_region_start: None,
         }
     }
 
@@ -179,6 +182,17 @@ impl App {
             }
             KeyCode::Char(' ') | KeyCode::Enter => {
                 self.timeline.toggle(self.tl_lane, self.tl_step);
+                Some(Action::Timeline)
+            }
+            KeyCode::Char('v') => {
+                // First `v` marks the region start; second fills to the cursor.
+                match self.tl_region_start {
+                    None => self.tl_region_start = Some(self.tl_step),
+                    Some(s) => {
+                        self.timeline.fill_region(self.tl_lane, s, self.tl_step);
+                        self.tl_region_start = None;
+                    }
+                }
                 Some(Action::Timeline)
             }
             KeyCode::Char('?') => {
@@ -779,8 +793,13 @@ pub fn draw(f: &mut Frame, app: &App) {
 fn draw_timeline(f: &mut Frame, area: Rect, app: &App) {
     let tl = &app.timeline;
     let spb = tl.steps_per_bar();
+    let region = if app.tl_region_start.is_some() {
+        "  [v: set region end]"
+    } else {
+        ""
+    };
     let title = format!(
-        "Timeline  {} bars × {}   (arrows move · space toggles · t close)",
+        "Timeline  {} bars × {}   (move · space hit · v region · t close){region}",
         tl.bars(),
         spb
     );
@@ -1430,6 +1449,23 @@ mod tests {
         assert_eq!(app.mixer.pad_kind(0), PadKind::OneShot);
         assert_eq!(app.on_key(key(';')), Action::Mark);
         assert_eq!(app.mixer.pad_kind(0), PadKind::Loop);
+    }
+
+    #[test]
+    fn v_draws_a_loop_region_across_steps() {
+        let mut app = App::new();
+        app.on_key(key('t')); // open editor (lane 0, step 0)
+        assert_eq!(app.on_key(key('v')), Action::Timeline); // mark start at 0
+        assert!(app.tl_region_start.is_some());
+        for _ in 0..4 {
+            app.on_key(KeyEvent::new(KeyCode::Right, KeyModifiers::NONE));
+        }
+        app.on_key(key('v')); // fill 0..=4 on lane 0
+        assert!(app.tl_region_start.is_none());
+        for s in 0..=4 {
+            assert!(app.timeline.step(0, s), "region filled at {s}");
+        }
+        assert_eq!(app.timeline.run_at(0, 2), Some((0, 5)));
     }
 
     #[test]

@@ -441,3 +441,4 @@
 2026-06-07T12:37:45Z	Matt Reider	finished	termkrush/Step-grid-editor-with-cursor-and-step-toggle.md	
 2026-06-07T12:37:45Z	Matt Reider	delivered	termkrush/Step-grid-editor-with-cursor-and-step-toggle.md	
 2026-06-07T12:37:45Z	Matt Reider	accepted	termkrush/Step-grid-editor-with-cursor-and-step-toggle.md	Tracker step-grid editor. App owns a Timeline + cursor (lane,step) + tl_visible; t opens the editor (takes over the body), arrows move the cursor, space/enter toggles the hit at the cursor, t/esc closes; q and ? still work. draw_timeline renders PADS lanes × steps with a boxed cursor (▣/▢), filled hits (█), and | bar boundaries. Input maps to core Timeline commands. Test: t opens → down/right + space places step (1,1) → pads_at(1)==[1], renders 'Timeline', t closes. fmt + clippy --workspace + 8 suites green.
+2026-06-07T12:37:51Z	Matt Reider	started	termkrush/Loop-regions-on-the-grid-repeat-to-fill.md	

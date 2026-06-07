@@ -67,6 +67,33 @@ impl Timeline {
         now
     }
 
+    /// Fill steps `a..=b` on `lane` — a loop region (the loop pad repeats to
+    /// fill the span). Order-independent.
+    pub fn fill_region(&mut self, lane: usize, a: usize, b: usize) {
+        let (lo, hi) = (a.min(b), a.max(b));
+        for s in lo..=hi {
+            self.set_step(lane, s, true);
+        }
+    }
+
+    /// The contiguous run of hits on `lane` containing `step`, as `(start,
+    /// len)`, or `None` if `step` isn't set. Used to play a loop region once
+    /// per run rather than re-firing every step.
+    pub fn run_at(&self, lane: usize, step: usize) -> Option<(usize, usize)> {
+        if !self.step(lane, step) {
+            return None;
+        }
+        let mut start = step;
+        while start > 0 && self.step(lane, start - 1) {
+            start -= 1;
+        }
+        let mut end = step;
+        while self.step(lane, end + 1) {
+            end += 1;
+        }
+        Some((start, end - start + 1))
+    }
+
     /// Which pads fire on `step`, in lane order.
     pub fn pads_at(&self, step: usize) -> Vec<usize> {
         (0..PADS).filter(|&l| self.step(l, step)).collect()
@@ -104,6 +131,18 @@ mod tests {
         assert_eq!(t.pads_at(4), vec![3]);
         t.clear();
         assert!(t.pads_at(4).is_empty());
+    }
+
+    #[test]
+    fn fill_region_and_run_detection() {
+        let mut t = Timeline::new(2, 16);
+        t.fill_region(0, 8, 4); // order-independent → steps 4..=8
+        for s in 4..=8 {
+            assert!(t.step(0, s));
+        }
+        assert!(!t.step(0, 3) && !t.step(0, 9));
+        assert_eq!(t.run_at(0, 6), Some((4, 5)), "run start 4, length 5");
+        assert_eq!(t.run_at(0, 0), None, "no hit, no run");
     }
 
     #[test]

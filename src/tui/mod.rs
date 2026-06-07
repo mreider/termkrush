@@ -190,6 +190,14 @@ impl App {
         Action::Timeline
     }
 
+    /// `space` — master play/pause: freeze + silence the whole mix (live pads
+    /// and the arrangement), or resume.
+    fn toggle_global_pause(&mut self) -> Action {
+        let p = self.mixer.is_paused();
+        self.mixer.set_paused(!p);
+        Action::Mark
+    }
+
     /// Stop and rewind the transport to the top (Backspace).
     fn stop_transport(&mut self) -> Action {
         self.playing = false;
@@ -222,7 +230,7 @@ impl App {
     /// Advance the transport by `frames`, firing pads as their steps arrive.
     /// Driven by the audio pump so playback stays in tempo.
     pub fn advance_playback(&mut self, frames: usize) {
-        if !self.playing {
+        if !self.playing || self.mixer.is_paused() {
             return;
         }
         let fps = self.frames_per_step();
@@ -348,7 +356,8 @@ impl App {
                 self.timeline.toggle(self.tl_lane, self.tl_step);
                 Some(Action::Timeline)
             }
-            KeyCode::Char(' ') => Some(self.toggle_transport()),
+            KeyCode::Char(' ') => Some(self.toggle_global_pause()),
+            KeyCode::Char('p') => Some(self.toggle_transport()),
             KeyCode::Backspace => Some(self.stop_transport()),
             KeyCode::Char('x') => {
                 self.timeline.cut_at(self.tl_step);
@@ -930,8 +939,7 @@ impl App {
                 self.tl_visible = true;
                 Action::Timeline
             }
-            KeyCode::Char(' ') => self.toggle_transport(),
-            KeyCode::Backspace => self.stop_transport(),
+            KeyCode::Char(' ') => self.toggle_global_pause(),
             // Library file ops (on the highlighted track).
             KeyCode::Char('x') => self.arm_delete(),
             KeyCode::Char('R') => self.start_rename(),
@@ -1481,8 +1489,8 @@ fn draw_help(f: &mut Frame, area: Rect) {
   pad     j play/wiki   k whip   f on/off   l load   u unload   e edit-clip   ; kind   S save   O over   E mp3
   trim    a/d in   w/s out   (shift = fine)
   tempo   , / .  pad bpm
-  mix     1-7 trigger   r record   - / = pad vol   [ ] master   { } tempo
-  arrange t timeline (enter hit, v region, x cut, space play/pause, backspace stop, w render)\n  quit    esc (y/n)   C-c force   ? help";
+  mix     1-7 trigger   space pause   r record   - / = vol   [ ] master   { } tempo
+  arrange t timeline (enter hit · v region · x cut · p play · backspace stop · w render)\n  quit    esc (y/n)   C-c force   ? help";
     let block = Block::default()
         .borders(Borders::ALL)
         .border_style(Style::default().fg(AMBER))
@@ -1994,29 +2002,34 @@ mod tests {
     }
 
     #[test]
-    fn space_pauses_and_resumes_from_position() {
+    fn space_toggles_global_pause() {
+        let mut app = App::new();
+        assert!(!app.mixer.is_paused());
+        assert_eq!(app.on_key(key(' ')), Action::Mark);
+        assert!(app.mixer.is_paused(), "space pauses the whole mix");
+        app.on_key(key(' '));
+        assert!(!app.mixer.is_paused(), "space resumes");
+    }
+
+    #[test]
+    fn arrangement_transport_pauses_and_resumes_from_position() {
         let mut app = App::new();
         app.mixer.set_sample_rate(1000);
         app.mixer.set_master_bpm(Some(120.0)); // 125 frames/step
         app.timeline.set_step(0, 0, true);
         app.mixer.assign_pad(0, vec![0.5; 64]);
-        app.on_key(key(' ')); // play
+        app.toggle_transport(); // p — play
         assert!(app.playing);
-        app.advance_playback(400); // a few steps in
+        app.advance_playback(400);
         let pos = app.play_step;
         assert!(pos > 0, "advanced");
-        app.on_key(key(' ')); // pause
+        app.toggle_transport(); // pause
         assert!(!app.playing);
-        app.advance_playback(2000); // paused → no advance
+        app.advance_playback(2000);
         assert_eq!(app.play_step, pos, "paused holds position");
-        app.on_key(key(' ')); // resume
-        assert!(app.playing);
-        assert_eq!(
-            app.play_step, pos,
-            "resumes from where it paused, not the top"
-        );
-        // Backspace stops + rewinds.
-        app.on_key(KeyEvent::new(KeyCode::Backspace, KeyModifiers::NONE));
+        app.toggle_transport(); // resume
+        assert_eq!(app.play_step, pos, "resumes from where it paused");
+        app.stop_transport();
         assert!(!app.playing && app.play_step == 0, "stop rewinds to top");
     }
 
@@ -2027,12 +2040,11 @@ mod tests {
         app.mixer.set_master_bpm(Some(120.0)); // beat 500f, 16ths → 125f/step
         app.mixer.assign_pad(0, vec![0.5; 64]);
         app.timeline.set_step(0, 0, true);
-        assert_eq!(app.on_key(key(' ')), Action::Timeline); // play (fires step 0)
+        app.toggle_transport(); // play (fires step 0)
         assert!(app.playing);
         app.advance_playback(1); // step 0 is due immediately on start
         assert_eq!(app.mixer.active_voices(), 1, "pad fired on its step");
-        // Stop.
-        app.on_key(key(' '));
+        app.toggle_transport();
         assert!(!app.playing);
     }
 
@@ -2218,12 +2230,12 @@ mod tests {
         app.on_key(key('e')); // close
         assert!(app.clip_edit.is_none());
 
-        // Arrange: place a hit, play, pause, render the mix.
+        // Arrange: place a hit, play (p), pause (p), render the mix.
         app.on_key(key('t'));
         app.on_key(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE)); // lane 0, step 0
-        app.on_key(key(' ')); // play
+        app.on_key(key('p')); // play the arrangement
         app.advance_playback(600);
-        app.on_key(key(' ')); // pause
+        app.on_key(key('p')); // pause
         let mix = app.render_arrangement();
         assert!(
             mix.iter().any(|&s| s.abs() > 0.01),

@@ -158,6 +158,9 @@ pub struct Mixer {
     master_bpm: Option<f32>,
     /// Global speed multiplier — scales every loop together (1.0 = nominal).
     global_speed: f32,
+    /// Master pause: when set, `fill_mix` outputs silence and freezes every
+    /// voice (positions held) so the whole mix can be paused and resumed.
+    paused: bool,
     /// Currently-sounding one-shot voices, summed onto the master bus.
     voices: Vec<SampleVoice>,
     /// Currently-sounding scratch voices (whip/wiki phrases).
@@ -193,6 +196,7 @@ impl Mixer {
             pad_fade: [1.0; PADS],
             master_bpm: None,
             global_speed: 1.0,
+            paused: false,
             voices: Vec::new(),
             scratch_voices: Vec::new(),
             recording: false,
@@ -484,6 +488,16 @@ impl Mixer {
         self.global_speed
     }
 
+    /// Master pause: freeze + silence the whole mix (voices hold position).
+    pub fn set_paused(&mut self, paused: bool) {
+        self.paused = paused;
+    }
+
+    /// Whether the mix is paused.
+    pub fn is_paused(&self) -> bool {
+        self.paused
+    }
+
     /// Set the global speed (clamped 0.25–4.0); every playing loop re-syncs.
     pub fn set_global_speed(&mut self, s: f32) {
         self.global_speed = s.clamp(0.25, 4.0);
@@ -622,6 +636,10 @@ impl Mixer {
     pub fn fill_mix(&mut self, out: &mut [f32]) {
         for s in out.iter_mut() {
             *s = 0.0;
+        }
+        // Master pause: silence + freeze (don't advance voices or record).
+        if self.paused {
+            return;
         }
         // Step each pad's activation envelope toward its target (per block).
         for i in 0..PADS {
@@ -1021,6 +1039,27 @@ mod tests {
         m.set_pad_active(0, false, false);
         m.fill_mix(&mut [0.0f32; 8]);
         assert_eq!(m.active_voices(), 0, "loop stops when the pad is off");
+    }
+
+    #[test]
+    fn master_pause_freezes_and_silences_then_resumes() {
+        let mut m = Mixer::new();
+        m.assign_pad(0, vec![0.5; 40_000]);
+        m.trigger_pad(0);
+        let mut buf = vec![0.0f32; 8];
+        m.fill_mix(&mut buf);
+        assert!(buf.iter().all(|&s| (s - 0.5).abs() < 1e-4), "playing");
+        // Pause → silence, and the voice is frozen (still present, not advanced).
+        m.set_paused(true);
+        let mut buf = vec![0.5f32; 8];
+        m.fill_mix(&mut buf);
+        assert!(buf.iter().all(|&s| s == 0.0), "paused is silent");
+        assert_eq!(m.active_voices(), 1, "voice frozen, not dropped");
+        // Resume → sound returns from where it was.
+        m.set_paused(false);
+        let mut buf = vec![0.0f32; 8];
+        m.fill_mix(&mut buf);
+        assert!(buf.iter().all(|&s| (s - 0.5).abs() < 1e-4), "resumed");
     }
 
     #[test]

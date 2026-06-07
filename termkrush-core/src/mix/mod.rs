@@ -10,6 +10,18 @@ use std::sync::Arc;
 /// Number of sampler pads (clip triggers).
 pub const PADS: usize = 7;
 
+/// What kind of pad this is — determines its controls and playback.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum PadKind {
+    /// Plays its clip once on trigger.
+    #[default]
+    OneShot,
+    /// Repeats, auto-synced to the master tempo.
+    Loop,
+    /// A short clip scratched with whip/wiki phrases.
+    Scratch,
+}
+
 /// One playing sampler voice — plays its trimmed clip region forward once.
 /// (Loop and scratch behaviours arrive with their own pad-type stories.)
 #[derive(Debug)]
@@ -60,6 +72,8 @@ pub struct Mixer {
     /// Non-destructive trim bounds per pad, in frames `(in, out)`. The clip
     /// samples are never modified; triggering plays only `[in, out)`.
     pad_trim: [(usize, usize); PADS],
+    /// Per-pad kind (one-shot / loop / scratch).
+    pad_kind: [PadKind; PADS],
     /// Currently-sounding one-shot voices, summed onto the master bus.
     voices: Vec<SampleVoice>,
     /// When armed, `fill_mix` appends each block of master output here so the
@@ -84,6 +98,7 @@ impl Mixer {
             pads: Default::default(),
             pad_bpm: Default::default(),
             pad_trim: Default::default(),
+            pad_kind: Default::default(),
             voices: Vec::new(),
             recording: false,
             record_buf: Vec::new(),
@@ -176,6 +191,22 @@ impl Mixer {
     /// `true` if pad `i` has a clip assigned.
     pub fn pad_loaded(&self, i: usize) -> bool {
         i < PADS && self.pads[i].is_some()
+    }
+
+    /// Pad `i`'s kind (one-shot / loop / scratch).
+    pub fn pad_kind(&self, i: usize) -> PadKind {
+        self.pad_kind.get(i).copied().unwrap_or_default()
+    }
+
+    /// Cycle pad `i`'s kind: OneShot → Loop → Scratch → …
+    pub fn cycle_pad_kind(&mut self, i: usize) {
+        if i < PADS {
+            self.pad_kind[i] = match self.pad_kind[i] {
+                PadKind::OneShot => PadKind::Loop,
+                PadKind::Loop => PadKind::Scratch,
+                PadKind::Scratch => PadKind::OneShot,
+            };
+        }
     }
 
     /// Trigger pad `i`: start a new one-shot voice over its trimmed clip,
@@ -418,6 +449,18 @@ mod tests {
         assert_eq!(m.pad_trim(0).0, 99);
         m.nudge_pad_out(0, 1000); // can't pass the clip end
         assert_eq!(m.pad_trim(0).1, 100);
+    }
+
+    #[test]
+    fn cycle_pad_kind_rotates() {
+        let mut m = Mixer::new();
+        assert_eq!(m.pad_kind(0), PadKind::OneShot);
+        m.cycle_pad_kind(0);
+        assert_eq!(m.pad_kind(0), PadKind::Loop);
+        m.cycle_pad_kind(0);
+        assert_eq!(m.pad_kind(0), PadKind::Scratch);
+        m.cycle_pad_kind(0);
+        assert_eq!(m.pad_kind(0), PadKind::OneShot, "wraps");
     }
 
     #[test]

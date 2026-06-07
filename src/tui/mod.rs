@@ -32,7 +32,7 @@ use termkrush_core::audio::{AudioOutput, DecodedAudio};
 use termkrush_core::clip::Clip;
 use termkrush_core::config::Config;
 use termkrush_core::library::Crate;
-use termkrush_core::mix::{Mixer, PADS};
+use termkrush_core::mix::{Mixer, PadKind, PADS};
 
 /// Per-keypress master-gain nudge (linear).
 const GAIN_NUDGE: f32 = 0.05;
@@ -313,6 +313,16 @@ impl App {
         Action::TriggerPad
     }
 
+    /// `;` — cycle the focused pad's kind (one-shot / loop / scratch).
+    fn cycle_kind(&mut self) -> Action {
+        if let Focus::Pad(i) = self.focus {
+            self.mixer.cycle_pad_kind(i);
+            Action::Mark
+        } else {
+            Action::None
+        }
+    }
+
     fn trim_in(&mut self, forward: bool, fine: bool) -> Action {
         if let Focus::Pad(i) = self.focus {
             let step = if fine { TRIM_FINE } else { TRIM_COARSE };
@@ -516,6 +526,7 @@ impl App {
             KeyCode::Char('R') => self.start_rename(),
             KeyCode::Char('m') => self.mark_move(),
             KeyCode::Char('p') => self.paste_move(),
+            KeyCode::Char(';') => self.cycle_kind(),
             KeyCode::Enter if self.focus == Focus::Crate && self.selected_is_dir() => {
                 self.enter_selected()
             }
@@ -727,10 +738,15 @@ fn draw_pad_cell(f: &mut Frame, area: Rect, app: &App, pad: usize) {
     let focused = app.focus_cell() == Focus::Pad(pad);
     let loaded = app.mixer.pad_loaded(pad);
     let glyph = if loaded { '●' } else { '·' };
+    let kind = match app.mixer.pad_kind(pad) {
+        PadKind::OneShot => "1shot",
+        PadKind::Loop => "loop",
+        PadKind::Scratch => "scratch",
+    };
     let line1 = if app.is_loading(pad) {
         "  ⏳ loading…".to_string()
     } else {
-        format!("  {glyph}")
+        format!("  {glyph} {kind}")
     };
     let line2 = if focused && loaded {
         let (inp, out) = app.mixer.pad_trim(pad);
@@ -794,7 +810,7 @@ fn draw_help(f: &mut Frame, area: Rect) {
   focus   tab / arrows   (library · pads · DJ)
   library / filter   ↑↓ browse   enter open/load→pad   z hide
   files   x delete   R rename   m mark / p move-here
-  pad     j play   l load   k assign-rec
+  pad     j play   l load   k assign-rec   ; kind
   trim    a/d in   w/s out   (shift = fine)
   tempo   , / .  pad bpm
   mix     1-7 trigger   r record mix   [ ] master
@@ -1146,6 +1162,15 @@ mod tests {
         app.on_key(key('/'));
         app.on_key(key('b')); // matches "Beta"
         assert_eq!(app.selected_path(), Some("/m/b.mp3".into()));
+    }
+
+    #[test]
+    fn semicolon_cycles_the_focused_pad_kind() {
+        let mut app = App::new();
+        app.set_focus(Focus::Pad(0));
+        assert_eq!(app.mixer.pad_kind(0), PadKind::OneShot);
+        assert_eq!(app.on_key(key(';')), Action::Mark);
+        assert_eq!(app.mixer.pad_kind(0), PadKind::Loop);
     }
 
     #[test]

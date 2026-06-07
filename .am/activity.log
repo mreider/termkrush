@@ -389,3 +389,4 @@
 2026-06-07T12:00:37Z	Matt Reider	finished	termkrush/Rename-delete-and-move-tracks-in-the-UI.md	
 2026-06-07T12:00:37Z	Matt Reider	delivered	termkrush/Rename-delete-and-move-tracks-in-the-UI.md	
 2026-06-07T12:00:38Z	Matt Reider	accepted	termkrush/Rename-delete-and-move-tracks-in-the-UI.md	Filesystem track ops in the UI. Library: rename/delete/move_into (each refreshes the listing). TUI on the highlighted track: x deletes (yes/no confirm modal), R renames (in-title text entry), m marks for move + p pastes it into the current folder (cut/paste). Confirm modal generalized (quit + delete). Tests: library ops on real tmp dirs (rename→exists, move→in subfolder, delete→relisted); tui x+y deletes a real file, mark+navigate+paste moves a real file into a subfolder. Help updated. fmt + clippy --workspace + suites green.
+2026-06-07T12:01:02Z	Matt Reider	started	termkrush/Pad-type-model-loop-scratch-or-one-shot.md	

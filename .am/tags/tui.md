@@ -2,18 +2,6 @@
 
 [home](../../index.md) • [tag list](../tags.md) • [velocity](../velocity.md) • [timeline](../timeline.md) • [users](../users.md)
 
-## Unstarted
-| User | Project | Title | Points | Tags |
-|---|---|---|:---:|---|
-|  | [termkrush](../../termkrush.md) | [Custom color themes](../../termkrush/Custom-color-themes.md) |  | [tui](tui.md) [icebox](icebox.md) |
-|  | [termkrush](../../termkrush.md) | [Spectrum analyzer](../../termkrush/Spectrum-analyzer.md) |  | [tui](tui.md) [icebox](icebox.md) [viz](viz.md) |
-|  | [termkrush](../../termkrush.md) | [ASCII waveform per deck](../../termkrush/ASCII-waveform-per-deck.md) |  | [tui](tui.md) [icebox](icebox.md) [viz](viz.md) |
-|  | [termkrush](../../termkrush.md) | [Four-deck TUI layout](../../termkrush/Four-deck-TUI-layout.md) | 3 | [tui](tui.md) [multi-deck](multi-deck.md) |
-|  | [termkrush](../../termkrush.md) | [Record TUI panel and indicator](../../termkrush/Record-TUI-panel-and-indicator.md) | 2 | [record](record.md) [tui](tui.md) |
-|  | [termkrush](../../termkrush.md) | [Visual beat-grid editing](../../termkrush/Visual-beat-grid-editing.md) |  | [tempo](tempo.md) [icebox](icebox.md) [tui](tui.md) |
-|  | [termkrush](../../termkrush.md) | [Download TUI panel](../../termkrush/Download-TUI-panel.md) | 3 | [download](download.md) [tui](tui.md) |
-| Total Points | | | 8 | |
-
 ## Accepted
 | User | Project | Title | Points | Tags |
 |---|---|---|:---:|---|

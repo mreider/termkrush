@@ -2,15 +2,6 @@
 
 [home](../../index.md) • [tag list](../tags.md) • [velocity](../velocity.md) • [timeline](../timeline.md) • [users](../users.md)
 
-## Unstarted
-| User | Project | Title | Points | Tags |
-|---|---|---|:---:|---|
-|  | [termkrush](../../termkrush.md) | [Crossfader assignment per deck](../../termkrush/Crossfader-assignment-per-deck.md) | 3 | [mix](mix.md) [multi-deck](multi-deck.md) |
-|  | [termkrush](../../termkrush.md) | [Crossfader curve options](../../termkrush/Crossfader-curve-options.md) |  | [mix](mix.md) [icebox](icebox.md) |
-|  | [termkrush](../../termkrush.md) | [Refactor mixer for N decks](../../termkrush/Refactor-mixer-for-N-decks.md) | 5 | [architecture](architecture.md) [mix](mix.md) [multi-deck](multi-deck.md) |
-|  | [termkrush](../../termkrush.md) | [Crossfader cut and momentary kill](../../termkrush/Crossfader-cut-and-momentary-kill.md) | 2 | [mix](mix.md) [scratch](scratch.md) |
-| Total Points | | | 10 | |
-
 ## Accepted
 | User | Project | Title | Points | Tags |
 |---|---|---|:---:|---|

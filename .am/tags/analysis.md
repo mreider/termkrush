@@ -2,12 +2,6 @@
 
 [home](../../index.md) • [tag list](../tags.md) • [velocity](../velocity.md) • [timeline](../timeline.md) • [users](../users.md)
 
-## Unstarted
-| User | Project | Title | Points | Tags |
-|---|---|---|:---:|---|
-|  | [termkrush](../../termkrush.md) | [Multi-detector BPM consensus](../../termkrush/Multi-detector-BPM-consensus.md) |  | [tempo](tempo.md) [analysis](analysis.md) [icebox](icebox.md) |
-| Total Points | | | 0 | |
-
 ## Accepted
 | User | Project | Title | Points | Tags |
 |---|---|---|:---:|---|

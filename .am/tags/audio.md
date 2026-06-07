@@ -2,13 +2,6 @@
 
 [home](../../index.md) • [tag list](../tags.md) • [velocity](../velocity.md) • [timeline](../timeline.md) • [users](../users.md)
 
-## Unstarted
-| User | Project | Title | Points | Tags |
-|---|---|---|:---:|---|
-|  | [termkrush](../../termkrush.md) | [Pre-fade cue listen on second output](../../termkrush/Pre-fade-cue-listen-on-second-output.md) |  | [audio](audio.md) [icebox](icebox.md) [hardware](hardware.md) |
-|  | [termkrush](../../termkrush.md) | [Replay gain and loudness normalization](../../termkrush/Replay-gain-and-loudness-normalization.md) |  | [audio](audio.md) [icebox](icebox.md) |
-| Total Points | | | 0 | |
-
 ## Accepted
 | User | Project | Title | Points | Tags |
 |---|---|---|:---:|---|

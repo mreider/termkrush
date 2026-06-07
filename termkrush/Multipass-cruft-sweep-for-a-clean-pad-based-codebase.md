@@ -5,6 +5,7 @@ created: "2026-06-07T11:10:18Z"
 modified: "2026-06-07T11:11:37Z"
 author: Matt Reider
 status: unstarted
+project: termkrush
 ---
 
 ## Problem

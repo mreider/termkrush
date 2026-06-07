@@ -2,13 +2,6 @@
 
 [home](../../index.md) • [tag list](../tags.md) • [velocity](../velocity.md) • [timeline](../timeline.md) • [users](../users.md)
 
-## Unstarted
-| User | Project | Title | Points | Tags |
-|---|---|---|:---:|---|
-|  | [termkrush](../../termkrush.md) | [Multiple hot cues per deck](../../termkrush/Multiple-hot-cues-per-deck.md) |  | [deck](deck.md) [cue](cue.md) [icebox](icebox.md) |
-|  | [termkrush](../../termkrush.md) | [Mark scratch zone on a deck](../../termkrush/Mark-scratch-zone-on-a-deck.md) | 2 | [scratch](scratch.md) [deck](deck.md) |
-| Total Points | | | 2 | |
-
 ## Accepted
 | User | Project | Title | Points | Tags |
 |---|---|---|:---:|---|

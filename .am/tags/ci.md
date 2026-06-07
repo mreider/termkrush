@@ -2,12 +2,6 @@
 
 [home](../../index.md) • [tag list](../tags.md) • [velocity](../velocity.md) • [timeline](../timeline.md) • [users](../users.md)
 
-## Unstarted
-| User | Project | Title | Points | Tags |
-|---|---|---|:---:|---|
-|  | [termkrush](../../termkrush.md) | [First release dry-run with rc tag](../../termkrush/First-release-dry-run-with-rc-tag.md) |  | [release](release.md) [ci](ci.md) |
-| Total Points | | | 0 | |
-
 ## Accepted
 | User | Project | Title | Points | Tags |
 |---|---|---|:---:|---|

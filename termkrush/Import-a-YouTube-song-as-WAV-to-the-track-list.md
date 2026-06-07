@@ -6,6 +6,7 @@ modified: "2026-06-07T11:13:51Z"
 author: Matt Reider
 status: unstarted
 estimate: "5"
+project: termkrush
 ---
 
 ## Problem

@@ -2,17 +2,6 @@
 
 [home](../../index.md) • [tag list](../tags.md) • [velocity](../velocity.md) • [timeline](../timeline.md) • [users](../users.md)
 
-## Unstarted
-| User | Project | Title | Points | Tags |
-|---|---|---|:---:|---|
-|  | [termkrush](../../termkrush.md) | [Pitch shift independent of tempo](../../termkrush/Pitch-shift-independent-of-tempo.md) |  | [dsp](dsp.md) [icebox](icebox.md) |
-|  | [termkrush](../../termkrush.md) | [Reverb effect](../../termkrush/Reverb-effect.md) | 3 | [fx](fx.md) [dsp](dsp.md) |
-|  | [termkrush](../../termkrush.md) | [Echo delay effect](../../termkrush/Echo-delay-effect.md) | 3 | [fx](fx.md) [dsp](dsp.md) |
-|  | [termkrush](../../termkrush.md) | [Filter sweep effect](../../termkrush/Filter-sweep-effect.md) | 3 | [fx](fx.md) [dsp](dsp.md) |
-|  | [termkrush](../../termkrush.md) | [Keyboard jog scratch](../../termkrush/Keyboard-jog-scratch.md) | 5 | [scratch](scratch.md) [dsp](dsp.md) |
-|  | [termkrush](../../termkrush.md) | [Reverse playback during scratch](../../termkrush/Reverse-playback-during-scratch.md) | 3 | [scratch](scratch.md) [dsp](dsp.md) |
-| Total Points | | | 17 | |
-
 ## Accepted
 | User | Project | Title | Points | Tags |
 |---|---|---|:---:|---|

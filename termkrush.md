@@ -5,60 +5,35 @@
 ### Unstarted
 | User | Title | Points | Tags |
 |---|---|:---:|---|
-|  | [ASCII waveform per deck](termkrush/ASCII-waveform-per-deck.md) |  | [tui](.am/tags/tui.md) [icebox](.am/tags/icebox.md) [viz](.am/tags/viz.md) |
-|  | [Auto-analyze on download finish](termkrush/Auto-analyze-on-download-finish.md) | 2 | [download](.am/tags/download.md) [tempo](.am/tags/tempo.md) |
-|  | [Auto-mix playlist queue](termkrush/Auto-mix-playlist-queue.md) |  | [automix](.am/tags/automix.md) [icebox](.am/tags/icebox.md) |
-|  | [Bitcrush FX](termkrush/Bitcrush-FX.md) |  | [fx](.am/tags/fx.md) [icebox](.am/tags/icebox.md) |
-|  | [Crossfader assignment per deck](termkrush/Crossfader-assignment-per-deck.md) | 3 | [mix](.am/tags/mix.md) [multi-deck](.am/tags/multi-deck.md) |
-|  | [Crossfader curve options](termkrush/Crossfader-curve-options.md) |  | [mix](.am/tags/mix.md) [icebox](.am/tags/icebox.md) |
-|  | [Crossfader cut and momentary kill](termkrush/Crossfader-cut-and-momentary-kill.md) | 2 | [mix](.am/tags/mix.md) [scratch](.am/tags/scratch.md) |
-|  | [Custom color themes](termkrush/Custom-color-themes.md) |  | [tui](.am/tags/tui.md) [icebox](.am/tags/icebox.md) |
-|  | [DJ stabs sampler bank](termkrush/DJ-stabs-sampler-bank.md) |  | [sampler](.am/tags/sampler.md) [fx](.am/tags/fx.md) [icebox](.am/tags/icebox.md) |
-|  | [Direct URL mp3 download](termkrush/Direct-URL-mp3-download.md) | 3 | [download](.am/tags/download.md) [net](.am/tags/net.md) |
-|  | [Download TUI panel](termkrush/Download-TUI-panel.md) | 3 | [download](.am/tags/download.md) [tui](.am/tags/tui.md) |
-|  | [Echo delay effect](termkrush/Echo-delay-effect.md) | 3 | [fx](.am/tags/fx.md) [dsp](.am/tags/dsp.md) |
-|  | [Filter sweep effect](termkrush/Filter-sweep-effect.md) | 3 | [fx](.am/tags/fx.md) [dsp](.am/tags/dsp.md) |
-|  | [First release dry-run with rc tag](termkrush/First-release-dry-run-with-rc-tag.md) |  | [release](.am/tags/release.md) [ci](.am/tags/ci.md) |
-|  | [Flanger FX](termkrush/Flanger-FX.md) |  | [fx](.am/tags/fx.md) [icebox](.am/tags/icebox.md) |
-|  | [Four-deck TUI layout](termkrush/Four-deck-TUI-layout.md) | 3 | [tui](.am/tags/tui.md) [multi-deck](.am/tags/multi-deck.md) |
-|  | [GitHub Pages from /docs](termkrush/GitHub-Pages-from-docs.md) | 2 | [site](.am/tags/site.md) [release](.am/tags/release.md) [docs](.am/tags/docs.md) |
-|  | [Harmonic key detection Camelot](termkrush/Harmonic-key-detection-Camelot.md) |  | [tempo](.am/tags/tempo.md) [key](.am/tags/key.md) [icebox](.am/tags/icebox.md) |
-|  | [Keyboard jog scratch](termkrush/Keyboard-jog-scratch.md) | 5 | [scratch](.am/tags/scratch.md) [dsp](.am/tags/dsp.md) |
-|  | [Loop roll quarter and eighth beat loops](termkrush/Loop-roll-quarter-and-eighth-beat-loops.md) |  | [loop](.am/tags/loop.md) [icebox](.am/tags/icebox.md) |
-|  | [MIDI controller support](termkrush/MIDI-controller-support.md) |  | [midi](.am/tags/midi.md) [icebox](.am/tags/icebox.md) [hardware](.am/tags/hardware.md) |
-|  | [MP3 encoder](termkrush/MP3-encoder.md) | 5 | [record](.am/tags/record.md) [io](.am/tags/io.md) [encode](.am/tags/encode.md) |
-|  | [Mark scratch zone on a deck](termkrush/Mark-scratch-zone-on-a-deck.md) | 2 | [scratch](.am/tags/scratch.md) [deck](.am/tags/deck.md) |
-|  | [Master tap into ring buffer](termkrush/Master-tap-into-ring-buffer.md) | 3 | [record](.am/tags/record.md) [architecture](.am/tags/architecture.md) |
-|  | [Multi-detector BPM consensus](termkrush/Multi-detector-BPM-consensus.md) |  | [tempo](.am/tags/tempo.md) [analysis](.am/tags/analysis.md) [icebox](.am/tags/icebox.md) |
-|  | [Multiple hot cues per deck](termkrush/Multiple-hot-cues-per-deck.md) |  | [deck](.am/tags/deck.md) [cue](.am/tags/cue.md) [icebox](.am/tags/icebox.md) |
-|  | [Per-deck FX bus](termkrush/Per-deck-FX-bus.md) | 3 | [fx](.am/tags/fx.md) [architecture](.am/tags/architecture.md) |
-|  | [Phaser FX](termkrush/Phaser-FX.md) |  | [fx](.am/tags/fx.md) [icebox](.am/tags/icebox.md) |
-|  | [Pitch shift independent of tempo](termkrush/Pitch-shift-independent-of-tempo.md) |  | [dsp](.am/tags/dsp.md) [icebox](.am/tags/icebox.md) |
-|  | [Plugin or scripting interface](termkrush/Plugin-or-scripting-interface.md) |  | [extensibility](.am/tags/extensibility.md) [icebox](.am/tags/icebox.md) |
-|  | [Pre-fade cue listen on second output](termkrush/Pre-fade-cue-listen-on-second-output.md) |  | [audio](.am/tags/audio.md) [icebox](.am/tags/icebox.md) [hardware](.am/tags/hardware.md) |
-|  | [Record TUI panel and indicator](termkrush/Record-TUI-panel-and-indicator.md) | 2 | [record](.am/tags/record.md) [tui](.am/tags/tui.md) |
-|  | [Refactor mixer for N decks](termkrush/Refactor-mixer-for-N-decks.md) | 5 | [architecture](.am/tags/architecture.md) [mix](.am/tags/mix.md) [multi-deck](.am/tags/multi-deck.md) |
-|  | [Replay gain and loudness normalization](termkrush/Replay-gain-and-loudness-normalization.md) |  | [audio](.am/tags/audio.md) [icebox](.am/tags/icebox.md) |
-|  | [Reverb effect](termkrush/Reverb-effect.md) | 3 | [fx](.am/tags/fx.md) [dsp](.am/tags/dsp.md) |
-|  | [Reverse playback during scratch](termkrush/Reverse-playback-during-scratch.md) | 3 | [scratch](.am/tags/scratch.md) [dsp](.am/tags/dsp.md) |
-|  | [Sampler pads](termkrush/Sampler-pads.md) |  | [sampler](.am/tags/sampler.md) [icebox](.am/tags/icebox.md) [fx](.am/tags/fx.md) |
-|  | [Smart crates](termkrush/Smart-crates.md) |  | [library](.am/tags/library.md) [icebox](.am/tags/icebox.md) |
-|  | [Spectrum analyzer](termkrush/Spectrum-analyzer.md) |  | [tui](.am/tags/tui.md) [icebox](.am/tags/icebox.md) [viz](.am/tags/viz.md) |
-|  | [Tap tempo](termkrush/Tap-tempo.md) |  | [tempo](.am/tags/tempo.md) [icebox](.am/tags/icebox.md) |
-|  | [Tempo ramping curves](termkrush/Tempo-ramping-curves.md) |  | [tempo](.am/tags/tempo.md) [icebox](.am/tags/icebox.md) |
-|  | [Track metadata ID3 editor](termkrush/Track-metadata-ID3-editor.md) |  | [metadata](.am/tags/metadata.md) [icebox](.am/tags/icebox.md) |
-|  | [Vinyl noise FX](termkrush/Vinyl-noise-FX.md) |  | [fx](.am/tags/fx.md) [icebox](.am/tags/icebox.md) [texture](.am/tags/texture.md) |
-|  | [Visual beat-grid editing](termkrush/Visual-beat-grid-editing.md) |  | [tempo](.am/tags/tempo.md) [icebox](.am/tags/icebox.md) [tui](.am/tags/tui.md) |
-|  | [WAV writer](termkrush/WAV-writer.md) | 2 | [record](.am/tags/record.md) [io](.am/tags/io.md) |
-|  | [Wire Buy Me A Coffee into README and site](termkrush/Wire-Buy-Me-A-Coffee-into-README-and-site.md) |  | [site](.am/tags/site.md) [docs](.am/tags/docs.md) [bmac](.am/tags/bmac.md) |
-|  | [V0.1.0 spins](termkrush/v010-spins.md) |  |  |
-|  | [V0.2.0 grab](termkrush/v020-grab.md) |  |  |
-|  | [V0.3.0 scratch](termkrush/v030-scratch.md) |  |  |
-|  | [V0.4.0 fx](termkrush/v040-fx.md) |  |  |
-|  | [V0.5.0 more decks](termkrush/v050-more-decks.md) |  |  |
-|  | [V0.6.0 record](termkrush/v060-record.md) |  |  |
-|  | [Yt-dlp shell-out for media URLs](termkrush/yt-dlp-shell-out-for-media-URLs.md) | 3 | [download](.am/tags/download.md) [yt-dlp](.am/tags/yt-dlp.md) |
-| Total Points | | 60 | |
+|  | [First release dry run with rc tag](termkrush/First-release-dry-run-with-rc-tag.md) |  |  |
+|  | [Wire Buy Me A Coffee into README and site](termkrush/Wire-Buy-Me-A-Coffee-into-README-and-site.md) |  |  |
+|  | [Activate and deactivate pads with hard or soft fade](termkrush/Activate-and-deactivate-pads-with-hard-or-soft-fade.md) | 3 |  |
+|  | [Build a scratch phrase by tapping whips and wikis](termkrush/Build-a-scratch-phrase-by-tapping-whips-and-wikis.md) | 5 |  |
+|  | [Detect the scratch pivot onset in a short clip](termkrush/Detect-the-scratch-pivot-onset-in-a-short-clip.md) | 3 |  |
+|  | [Drop the crossfader deck blend sync cue and old patterns](termkrush/Drop-the-crossfader-deck-blend-sync-cue-and-old-patterns.md) | 3 |  |
+|  | [Export a track to MP3](termkrush/Export-a-track-to-MP3.md) | 3 |  |
+|  | [Global speed control all loops follow](termkrush/Global-speed-control-all-loops-follow.md) | 3 |  |
+|  | [Import MP3 files into the track list](termkrush/Import-MP3-files-into-the-track-list.md) | 2 |  |
+|  | [Import a YouTube song as WAV to the track list](termkrush/Import-a-YouTube-song-as-WAV-to-the-track-list.md) | 5 |  |
+|  | [Loop pad playback with precise timeline trim](termkrush/Loop-pad-playback-with-precise-timeline-trim.md) | 3 |  |
+|  | [Loop regions on the grid repeat to fill](termkrush/Loop-regions-on-the-grid-repeat-to-fill.md) | 3 |  |
+|  | [Master tempo from the first loop](termkrush/Master-tempo-from-the-first-loop.md) | 2 |  |
+|  | [Multipass cruft sweep for a clean pad based codebase](termkrush/Multipass-cruft-sweep-for-a-clean-pad-based-codebase.md) |  |  |
+|  | [Pad type model loop scratch or one-shot](termkrush/Pad-type-model-loop-scratch-or-one-shot.md) | 3 |  |
+|  | [Per-pad volume](termkrush/Per-pad-volume.md) | 2 |  |
+|  | [Play the arrangement through the mixer](termkrush/Play-the-arrangement-through-the-mixer.md) | 5 |  |
+|  | [Refresh GitHub Pages for the pad based model](termkrush/Refresh-GitHub-Pages-for-the-pad-based-model.md) | 2 |  |
+|  | [Reload a track onto a pad edit and save back](termkrush/Reload-a-track-onto-a-pad-edit-and-save-back.md) | 3 |  |
+|  | [Rename delete and move tracks in the UI](termkrush/Rename-delete-and-move-tracks-in-the-UI.md) | 3 |  |
+|  | [Render the arrangement to a WAV in the track list](termkrush/Render-the-arrangement-to-a-WAV-in-the-track-list.md) | 5 |  |
+|  | [Scratch pad controls and display](termkrush/Scratch-pad-controls-and-display.md) | 3 |  |
+|  | [Step grid editor with cursor and step toggle](termkrush/Step-grid-editor-with-cursor-and-step-toggle.md) | 5 |  |
+|  | [Step grid timeline data model](termkrush/Step-grid-timeline-data-model.md) | 3 |  |
+|  | [Sync loop pads to the master tempo via varispeed](termkrush/Sync-loop-pads-to-the-master-tempo-via-varispeed.md) | 5 |  |
+|  | [Track list with folders](termkrush/Track-list-with-folders.md) | 3 |  |
+|  | [V0.1.0 krush](termkrush/V010-krush.md) |  |  |
+|  | [Whip and wiki scratch primitives](termkrush/Whip-and-wiki-scratch-primitives.md) | 5 |  |
+| Total Points | | 82 | |
 
 ### Started
 | User | Title | Points | Tags |
@@ -137,6 +112,7 @@
 |  | [Manual cue points per deck](termkrush/Manual-cue-points-per-deck.md) | 3 | [deck](.am/tags/deck.md) [cue](.am/tags/cue.md) |
 |  | [Auto-fade transition over N bars](termkrush/Auto-fade-transition-over-N-bars.md) | 3 | [mix](.am/tags/mix.md) [sync](.am/tags/sync.md) |
 |  | [Polish README for first release](termkrush/Polish-README-for-first-release.md) |  | [docs](.am/tags/docs.md) [release](.am/tags/release.md) |
+|  | [Split a headless core from the TUI shell and remove decks](termkrush/Split-a-headless-core-from-the-TUI-shell-and-remove-decks.md) | 5 |  |
 
 ### Rejected
 | User | Title | Points | Tags |

@@ -6,6 +6,15 @@
 > job is to keep everything in tempo automatically so anyone can make a good
 > old-school-scratch mix. The deck-era stories below the current accepted work
 > are obsolete and being retired.
+>
+> **Looper model (2026-06-07).** The arrangement is no longer a tracker step
+> grid you toggle by hand. The **master timeline is a permanent full-width strip
+> at the top**; pads + library sit below it. You build a mix by **performing**:
+> arm record, trigger pads, and each lands on the tape **starting on the next bar
+> line** — launch-quantized so a sound can never begin mid-bar. The **first
+> dropped track sets the master tempo and every pad locks to it silently (no
+> prompt)**. Then you edit the captured blocks (move/cut/snip) and render. This
+> retires the step-grid cell-toggle as the way you arrange.
 
 ## The user
 
@@ -27,17 +36,20 @@ When we ship, this user can:
    - **Scratch** — a very short clip; the software finds the scratch point
      (onset) and you build **whip/wiki** phrases over it.
    - **One-shot** — plays its clip once, normally.
-3. Rely on **automatic BPM sync**: the first loop sets the master tempo; every
-   other loop **varispeeds** to it (pitch rides, like a real platter). Speed the
-   whole mix up or down together; beats stay locked across all loops.
+3. Rely on **automatic BPM sync**: the **first track you drop** sets the master
+   tempo and every loop **varispeeds** to it silently (pitch rides, like a real
+   platter) — no prompt. Speed the whole mix up or down together; beats stay
+   locked across all loops.
 4. **Scratch** the old-school way: *whip* = backward rub with the forward motion
    muted ("whip whip whip"); *wiki* = forward rub that sounds; combine into
    "wiki-whip / whip-wiki" and longer phrases. You tap a rhythm of whips/wikis
    and it's recorded as the pad's scratch phrase, quantized to tempo.
 5. Control **per-pad volume**, and **activate/deactivate** pads with a hard cut
    or a soft fade. Pads stack freely — no crossfader needed.
-6. **Arrange** pads on a tempo-locked **step-grid timeline** (tracker-style,
-   lanes per pad, always quantized). Loops repeat to fill the span you draw.
+6. **Arrange** by performing into a **master timeline** (a permanent top strip,
+   lanes per pad). Arm record and trigger pads; each is captured onto the tape
+   **starting on the next bar line** — launch-quantized so nothing ever begins
+   mid-bar. Edit the captured blocks (move/cut/snip), then play back.
 7. **Render** the arrangement to a track (WAV; export MP3), saved into the list
    — over an existing track or as a new one. Reload any saved track onto a pad
    to trim it down, re-tempo, adjust volume, and save back.

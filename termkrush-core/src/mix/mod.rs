@@ -161,6 +161,12 @@ pub struct Mixer {
     /// Master pause: when set, `fill_mix` outputs silence and freezes every
     /// voice (positions held) so the whole mix can be paused and resumed.
     paused: bool,
+    /// Master musical clock — frames elapsed, advanced each `fill_mix`.
+    transport_frames: u64,
+    /// Launch-quantize grid in beats (4.0 = one 4/4 bar — the default).
+    quantize_beats: f32,
+    /// Triggers held for their quantize boundary: `(pad, fire-at-frame)`.
+    pending: Vec<(usize, u64)>,
     /// Currently-sounding one-shot voices, summed onto the master bus.
     voices: Vec<SampleVoice>,
     /// Currently-sounding scratch voices (whip/wiki phrases).
@@ -197,6 +203,9 @@ impl Mixer {
             master_bpm: None,
             global_speed: 1.0,
             paused: false,
+            transport_frames: 0,
+            quantize_beats: 4.0, // one bar
+            pending: Vec::new(),
             voices: Vec::new(),
             scratch_voices: Vec::new(),
             recording: false,
@@ -541,6 +550,71 @@ impl Mixer {
         self.paused
     }
 
+    /// Frames elapsed on the master clock.
+    pub fn transport_frames(&self) -> u64 {
+        self.transport_frames
+    }
+
+    /// The launch-quantize grid, in beats.
+    pub fn quantize_beats(&self) -> f32 {
+        self.quantize_beats
+    }
+
+    /// Set the launch-quantize grid in beats (e.g. 4 = bar, 1 = beat).
+    pub fn set_quantize_beats(&mut self, beats: f32) {
+        self.quantize_beats = beats.max(0.0);
+    }
+
+    /// Frames per beat at the master tempo, or 0 if no tempo is set yet.
+    fn frames_per_beat(&self) -> f64 {
+        match self.master_bpm {
+            Some(b) if b > 0.0 => self.sample_rate as f64 * 60.0 / b as f64,
+            _ => 0.0,
+        }
+    }
+
+    /// Frames from now until the next bar line (0 if no tempo).
+    pub fn frames_to_next_bar(&self) -> u64 {
+        let bar = self.frames_per_beat() * 4.0;
+        if bar <= 0.0 {
+            return 0;
+        }
+        let pos = self.transport_frames as f64;
+        ((pos / bar).ceil() * bar - pos).max(0.0).round() as u64
+    }
+
+    /// The next quantize-grid boundary at or after the current position.
+    fn next_quant_boundary(&self) -> u64 {
+        let q = self.frames_per_beat() * self.quantize_beats as f64;
+        if q <= 0.0 {
+            return self.transport_frames;
+        }
+        let pos = self.transport_frames as f64;
+        ((pos / q).ceil() * q).round() as u64
+    }
+
+    /// Trigger pad `i` **launch-quantized** — start it on the next grid
+    /// boundary so it never begins mid-bar. Fires immediately if no tempo is
+    /// set or the position is already on a boundary. Pending until the
+    /// boundary passes in `fill_mix`.
+    pub fn trigger_quantized(&mut self, i: usize) {
+        if self.frames_per_beat() <= 0.0 || self.quantize_beats <= 0.0 {
+            self.trigger_pad(i);
+            return;
+        }
+        let at = self.next_quant_boundary();
+        if at <= self.transport_frames {
+            self.trigger_pad(i);
+        } else {
+            self.pending.push((i, at));
+        }
+    }
+
+    /// Number of triggers currently held for their quantize boundary.
+    pub fn pending_count(&self) -> usize {
+        self.pending.len()
+    }
+
     /// Set the global speed (clamped 0.25–4.0); every playing loop re-syncs.
     pub fn set_global_speed(&mut self, s: f32) {
         self.global_speed = s.clamp(0.25, 4.0);
@@ -684,6 +758,25 @@ impl Mixer {
         if self.paused {
             return;
         }
+        // Release any launch-quantized triggers whose boundary lands in (or
+        // before) this buffer, then advance the master clock past it.
+        let frames = (out.len() / 2) as u64;
+        if self.frames_per_beat() > 0.0 && !self.pending.is_empty() {
+            let horizon = self.transport_frames + frames;
+            let mut due: Vec<usize> = Vec::new();
+            self.pending.retain(|&(pad, at)| {
+                if at < horizon {
+                    due.push(pad);
+                    false
+                } else {
+                    true
+                }
+            });
+            for pad in due {
+                self.trigger_pad(pad);
+            }
+        }
+        self.transport_frames += frames;
         // Step each pad's activation envelope toward its target (per block).
         for i in 0..PADS {
             let t = self.pad_env_target[i];
@@ -1082,6 +1175,47 @@ mod tests {
         m.set_pad_active(0, false, false);
         m.fill_mix(&mut [0.0f32; 8]);
         assert_eq!(m.active_voices(), 0, "loop stops when the pad is off");
+    }
+
+    #[test]
+    fn quantized_trigger_starts_on_the_next_bar() {
+        let mut m = Mixer::new();
+        m.set_sample_rate(1000);
+        m.set_master_bpm(Some(120.0)); // beat = 500f, bar = 2000f
+        m.assign_pad(0, vec![0.5; 40_000]);
+        // Advance the clock to mid-bar (600 frames).
+        m.fill_mix(&mut vec![0.0; 1200]);
+        assert_eq!(m.transport_frames(), 600);
+        // Trigger mid-bar → held, silent.
+        m.trigger_quantized(0);
+        assert_eq!(m.pending_count(), 1, "held for the bar line");
+        assert_eq!(m.active_voices(), 0, "silent until the boundary");
+        // Up to just before the bar (→ 1800): still held.
+        m.fill_mix(&mut vec![0.0; 2400]);
+        assert_eq!(m.pending_count(), 1);
+        assert_eq!(m.active_voices(), 0);
+        // Cross the bar (→ 2200): it starts.
+        m.fill_mix(&mut vec![0.0; 800]);
+        assert_eq!(m.pending_count(), 0, "released at the bar");
+        assert_eq!(m.active_voices(), 1, "started on the bar line");
+    }
+
+    #[test]
+    fn on_grid_trigger_and_no_tempo_fire_immediately() {
+        let mut m = Mixer::new();
+        m.set_sample_rate(1000);
+        m.assign_pad(0, vec![0.5; 4000]);
+        // No tempo → immediate.
+        m.trigger_quantized(0);
+        assert_eq!(m.active_voices(), 1, "no tempo fires now");
+        assert_eq!(m.pending_count(), 0);
+        // With tempo, exactly on a bar line (frame 0) → immediate.
+        let mut m = Mixer::new();
+        m.set_sample_rate(1000);
+        m.set_master_bpm(Some(120.0));
+        m.assign_pad(0, vec![0.5; 4000]);
+        m.trigger_quantized(0); // transport at 0 = a boundary
+        assert_eq!(m.active_voices(), 1, "on-grid fires now");
     }
 
     #[test]

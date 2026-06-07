@@ -499,3 +499,16 @@
 2026-06-07T17:33:37Z	Matt Reider	bug	termkrush/Bug-escape-should-leave-the-timeline-modal-then-open-quit-on-a-second-press.md	target=priority position=top
 2026-06-07T17:33:37Z	Matt Reider	started	termkrush/Bug-escape-should-leave-the-timeline-modal-then-open-quit-on-a-second-press.md	
 2026-06-07T17:35:44Z	Matt Reider	delivered	termkrush/Bug-escape-should-leave-the-timeline-modal-then-open-quit-on-a-second-press.md	VERIFIED: the code already does exactly this. on_timeline_key handles 't' | Esc -> close (returns before the main match), and on_clip_key handles 'e' | Esc -> close; once a modal is closed, the next Esc hits the main handler -> confirm_quit. Added two regression tests (esc_leaves_the_timeline_then_opens_quit, esc_leaves_the_clip_editor_then_opens_quit) — both pass: 1st Esc closes the modal + does NOT open quit, 2nd Esc opens quit. So no logic change was needed. If you saw Esc go straight to quit (or not close), the most likely cause is a STALE binary (rapid iteration) — rebuild with a clean cargo run --release. If it still misbehaves it's terminal-level Esc handling, which I can't reproduce headlessly; tell me exactly what Esc does and I'll target it. Delivered for your hands-on check. fmt+clippy+tests exit 0.
+2026-06-07T17:52:35Z	Matt Reider	created	termkrush/Live-looper-record-to-a-master-timeline-with-launch-quantization.md	target=icebox position=bottom
+2026-06-07T17:52:35Z	Matt Reider	created	termkrush/Launch-quantization-engine-master-bar-clock-and-next-bar-triggers.md	target=icebox position=bottom
+2026-06-07T17:52:35Z	Matt Reider	created	termkrush/Auto-BPM-first-track-sets-master-and-every-pad-locks-no-prompt.md	target=icebox position=bottom
+2026-06-07T17:52:35Z	Matt Reider	created	termkrush/Master-timeline-as-a-permanent-top-strip.md	target=icebox position=bottom
+2026-06-07T17:52:36Z	Matt Reider	created	termkrush/Record-pad-performance-into-the-timeline-launch-quantized-capture.md	target=icebox position=bottom
+2026-06-07T17:52:36Z	Matt Reider	created	termkrush/Edit-captured-blocks-on-the-timeline-move-and-trim.md	target=icebox position=bottom
+2026-06-07T17:52:36Z	Matt Reider	chore	termkrush/Retire-the-step-grid-cell-toggle-and-tracker-only-tests.md	target=priority position=top
+2026-06-07T17:53:22Z	Matt Reider	estimate	termkrush/Launch-quantization-engine-master-bar-clock-and-next-bar-triggers.md	5
+2026-06-07T17:53:22Z	Matt Reider	estimate	termkrush/Auto-BPM-first-track-sets-master-and-every-pad-locks-no-prompt.md	3
+2026-06-07T17:53:22Z	Matt Reider	estimate	termkrush/Master-timeline-as-a-permanent-top-strip.md	5
+2026-06-07T17:53:23Z	Matt Reider	estimate	termkrush/Record-pad-performance-into-the-timeline-launch-quantized-capture.md	8
+2026-06-07T17:53:23Z	Matt Reider	estimate	termkrush/Edit-captured-blocks-on-the-timeline-move-and-trim.md	5
+2026-06-07T17:54:45Z	Matt Reider	started	termkrush/Launch-quantization-engine-master-bar-clock-and-next-bar-triggers.md	

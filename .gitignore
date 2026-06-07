@@ -15,3 +15,7 @@ agilemarkdown_bash_autocomplete
 *.mp3
 # ...except the CC0 synthesized test fixtures, which are intentionally tracked.
 !/tests/fixtures/*.mp3
+
+# Local dev song library: keep the folder, ignore its audio contents
+/songs/*
+!/songs/.gitkeep

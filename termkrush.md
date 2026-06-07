@@ -10,7 +10,6 @@
 |  | [Import a YouTube song as WAV to the track list](termkrush/Import-a-YouTube-song-as-WAV-to-the-track-list.md) | 5 |  |
 |  | [Refresh GitHub Pages for the pad based model](termkrush/Refresh-GitHub-Pages-for-the-pad-based-model.md) | 2 |  |
 |  | [V0.1.0 krush](termkrush/V010-krush.md) |  |  |
-|  | [Bug: first track sets master BPM and prompts to sync all](termkrush/Bug-first-track-sets-master-BPM-and-prompts-to-sync-all.md) |  |  |
 |  | [Usability + integration test pass for the TUI flows](termkrush/Usability-integration-test-pass-for-the-TUI-flows.md) |  |  |
 | Total Points | | 7 | |
 
@@ -25,6 +24,7 @@
 |  | [Bug: mp3 export segfaults in libmp3lame](termkrush/Bug-mp3-export-segfaults-in-libmp3lame.md) |  |  |
 |  | [Bug: no play/pause - space should pause and resume](termkrush/Bug-no-play-pause-space-should-pause-and-resume.md) |  |  |
 |  | [Bug: trim and timeline editing are not usable](termkrush/Bug-trim-and-timeline-editing-are-not-usable.md) |  |  |
+|  | [Bug: first track sets master BPM and prompts to sync all](termkrush/Bug-first-track-sets-master-BPM-and-prompts-to-sync-all.md) |  |  |
 
 ### Delivered
 | User | Title | Points | Tags |

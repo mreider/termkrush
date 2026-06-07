@@ -2,11 +2,12 @@
 title: 'Bug: first track sets master BPM and prompts to sync all'
 type: bug
 created: "2026-06-07T15:42:33Z"
-modified: "2026-06-07T16:07:04Z"
+modified: "2026-06-07T16:09:22Z"
 author: Matt Reider
-status: started
+status: finished
 project: termkrush
 started: "2026-06-07T16:07:04Z"
+finished: "2026-06-07T16:09:22Z"
 ---
 
 ## Symptom

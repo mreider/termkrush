@@ -18,8 +18,8 @@ Run `cargo run --release` with a few tracks in `crate_root` and walk this:
 - [ ] `u` unloads the focused pad (goes silent + empty).
 
 ## Tempo / sync
-- [ ] Loading the first track with a BPM pops "Sync all tracks to N BPM?";
-      `y` makes loops play **in time** together; `{`/`}` speed the whole mix
+- [ ] Loading the first track silently sets the master tempo (no prompt); later
+      loops play **in time** with it automatically; `{`/`}` speed the whole mix
       up/down and everything stays locked.
 
 ## Scratch

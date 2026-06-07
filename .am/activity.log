@@ -515,3 +515,9 @@
 2026-06-07T17:57:29Z	Matt Reider	finished	termkrush/Launch-quantization-engine-master-bar-clock-and-next-bar-triggers.md	
 2026-06-07T17:57:29Z	Matt Reider	delivered	termkrush/Launch-quantization-engine-master-bar-clock-and-next-bar-triggers.md	
 2026-06-07T17:57:29Z	Matt Reider	accepted	termkrush/Launch-quantization-engine-master-bar-clock-and-next-bar-triggers.md	Headless engine keystone (self-accepted per the agreement: pure logic, fully test-proven, no tty/audio path yet — the audible result gets SMOKE'd under the record-to-timeline story that wires it). Mixer: transport_frames master clock advanced every fill_mix; quantize_beats grid (default 4 = one 4/4 bar); trigger_quantized(pad) computes the next boundary and holds the trigger in  until fill_mix crosses it, then starts the voice — so a launch can never begin mid-bar; fires immediately when no tempo is set or already on a boundary; frames_to_next_bar exposed. Tests (exit 0): mid-bar trigger stays silent through to the bar line then starts exactly on it; on-grid + no-tempo fire now. fmt + clippy --workspace + 8 suites all exit 0.
+2026-06-07T18:03:21Z	Matt Reider	bug	termkrush/Bug-volume-should-be-up-down-arrows-for-the-master-track-and-pads.md	target=priority position=top
+2026-06-07T18:03:21Z	Matt Reider	bug	termkrush/Bug-scratch-whip-wiki-is-not-discoverable-no-cue-to-set-a-pad-to-scratch.md	target=priority position=top
+2026-06-07T18:03:21Z	Matt Reider	created	termkrush/Fade-in-and-fade-out-on-timeline-blocks.md	target=icebox position=bottom
+2026-06-07T18:03:21Z	Matt Reider	set-type	termkrush/Fade-in-and-fade-out-on-timeline-blocks.md	feature
+2026-06-07T18:03:21Z	Matt Reider	estimate	termkrush/Fade-in-and-fade-out-on-timeline-blocks.md	5
+2026-06-07T18:03:30Z	Matt Reider	started	termkrush/Auto-BPM-first-track-sets-master-and-every-pad-locks-no-prompt.md	

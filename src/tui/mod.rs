@@ -124,8 +124,6 @@ pub struct App {
     /// (`false` = in/left, `true` = out/right).
     clip_edit: Option<usize>,
     ce_out: bool,
-    /// Pending "sync all tracks to this BPM?" prompt (the candidate tempo).
-    bpm_prompt: Option<f32>,
     /// Arrangement transport.
     playing: bool,
     play_acc: f64,          // frames accumulated toward the next step
@@ -169,7 +167,6 @@ impl App {
             tl_region_start: None,
             clip_edit: None,
             ce_out: false,
-            bpm_prompt: None,
             playing: false,
             play_acc: 0.0,
             play_step: 0,
@@ -891,14 +888,6 @@ impl App {
             };
         }
 
-        // "Sync all tracks?" prompt swallows input until answered.
-        if self.bpm_prompt.is_some() {
-            return match key.code {
-                KeyCode::Char('y') | KeyCode::Char('Y') => self.answer_bpm_prompt(true),
-                _ => self.answer_bpm_prompt(false),
-            };
-        }
-
         // Clip-edit modal captures keys while open.
         if self.clip_edit.is_some() {
             if let Some(a) = self.on_clip_key(key) {
@@ -1016,32 +1005,17 @@ impl App {
         if let Some(b) = d.bpm {
             self.mixer.set_pad_bpm(i, Some(b));
             self.bpm_cache.insert(d.path.clone(), b);
-            match self.mixer.master_bpm() {
-                // The first track silently defines the project tempo.
-                None => self.mixer.set_master_bpm(Some(b)),
-                // A later track at a different tempo: now there's a real
-                // decision — offer to sync everything to the master.
-                Some(m) if (b - m).abs() > 0.5 => self.bpm_prompt = Some(m),
-                _ => {}
+            // Auto-BPM: the first track with a tempo silently sets the master;
+            // every loop varispeeds to it. Later tracks just adopt it — no
+            // prompt, ever.
+            if self.mixer.master_bpm().is_none() {
+                self.mixer.set_master_bpm(Some(b));
             }
         }
         if i < PADS {
             self.loading[i] = false;
             self.pad_source[i] = Some(d.path);
         }
-    }
-
-    /// Answer the "sync all tracks?" prompt. `yes` makes every loaded pad a
-    /// loop synced to the (already-set) master tempo.
-    fn answer_bpm_prompt(&mut self, yes: bool) -> Action {
-        if self.bpm_prompt.take().is_some() && yes {
-            for i in 0..PADS {
-                if self.mixer.pad_loaded(i) {
-                    self.mixer.set_pad_kind(i, PadKind::Loop);
-                }
-            }
-        }
-        Action::Mark
     }
 
     /// `S` — save the focused pad's trimmed clip as a NEW WAV in the library.
@@ -1272,8 +1246,6 @@ fn draw_timeline(f: &mut Frame, area: Rect, app: &App) {
 fn return_help(f: &mut Frame, app: &App) {
     if app.confirm_quit {
         draw_quit_modal(f, f.area());
-    } else if let Some(b) = app.bpm_prompt {
-        draw_confirm_modal(f, f.area(), &format!("Sync all tracks to {b:.0} BPM?"));
     } else if let Some(path) = &app.confirm_delete {
         let name = path.file_name().and_then(|n| n.to_str()).unwrap_or("track");
         draw_confirm_modal(f, f.area(), &format!("Delete {name}?"));
@@ -2309,7 +2281,7 @@ mod tests {
     }
 
     #[test]
-    fn second_mismatching_track_prompts_to_sync() {
+    fn first_track_sets_master_later_tracks_adopt_silently() {
         use termkrush_core::audio::DecodedAudio;
         fn load(app: &mut App, pad: usize, bpm: f32) {
             app.place_decoded(Decoded {
@@ -2329,21 +2301,16 @@ mod tests {
             });
         }
         let mut app = App::new();
-        // First track silently sets the master tempo — no prompt.
+        // First track silently sets the master tempo.
         load(&mut app, 0, 120.0);
         assert_eq!(app.mixer.master_bpm(), Some(120.0));
-        assert!(app.bpm_prompt.is_none(), "pad 1 does not prompt");
-        // A second track at a different tempo prompts (to the master).
+        // A later off-tempo track adopts the master — no prompt, master unchanged.
         load(&mut app, 1, 140.0);
         assert_eq!(
-            app.bpm_prompt,
+            app.mixer.master_bpm(),
             Some(120.0),
-            "prompt targets the master tempo"
+            "later tracks adopt, no prompt"
         );
-        assert_eq!(app.on_key(key('y')), Action::Mark);
-        assert_eq!(app.mixer.pad_kind(0), PadKind::Loop);
-        assert_eq!(app.mixer.pad_kind(1), PadKind::Loop, "all synced as loops");
-        assert!(app.bpm_prompt.is_none());
     }
 
     #[test]

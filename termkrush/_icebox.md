@@ -6,3 +6,4 @@ Stack-rank order. Top is the highest priority. Edit by hand or via `am rank` / `
 - [Master timeline as a permanent top strip](Master-timeline-as-a-permanent-top-strip.md)
 - [Record pad performance into the timeline (launch-quantized capture)](Record-pad-performance-into-the-timeline-launch-quantized-capture.md)
 - [Edit captured blocks on the timeline (move and trim)](Edit-captured-blocks-on-the-timeline-move-and-trim.md)
+- [Fade in and fade out on timeline blocks](Fade-in-and-fade-out-on-timeline-blocks.md)

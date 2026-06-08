@@ -562,3 +562,10 @@
 2026-06-08T06:58:40Z	Matt Reider	started	termkrush/Bug-clip-editor-cannot-trim-precisely-shift-fine-is-too-coarse-and-undiscoverable.md	
 2026-06-08T07:00:56Z	Matt Reider	finished	termkrush/Bug-clip-editor-cannot-trim-precisely-shift-fine-is-too-coarse-and-undiscoverable.md	
 2026-06-08T07:00:57Z	Matt Reider	delivered	termkrush/Bug-clip-editor-cannot-trim-precisely-shift-fine-is-too-coarse-and-undiscoverable.md	Your snip-to-zoom model is right and works (snip shortens the clip; same-width bar => finer steps). The missing piece was precision without snipping the song away: Shift+←/→ now steps ~1ms (sample-close) and the clip-editor hint shows 'shift = fine' so it's discoverable. Plain ←/→ stays coarse (≈1 bar-column) for fast traversal of a long song. Test: 60s clip — plain Right jumps >10k frames, Shift+Right moves 48 frames (~1ms). clippy + 8 suites exit 0. DELIVERED — to dial in a start: coarse ←/→ to the area, then Shift+←/→ to nail it; snip to zoom for even finer.
+2026-06-08T07:04:43Z	Matt Reider	created	termkrush/-opens-a-tutorial-guided-walkthrough-of-the-controls-and-flow.md	target=icebox position=bottom
+2026-06-08T07:04:43Z	Matt Reider	created	termkrush/Make-the-tutorial-interactive-do-this-steps-the-app-verifies.md	target=icebox position=bottom
+2026-06-08T07:04:43Z	Matt Reider	set-type	termkrush/Make-the-tutorial-interactive-do-this-steps-the-app-verifies.md	feature
+2026-06-08T07:04:43Z	Matt Reider	estimate	termkrush/Make-the-tutorial-interactive-do-this-steps-the-app-verifies.md	8
+2026-06-08T07:04:55Z	Matt Reider	created	termkrush/Tutorial-question-mark-opens-a-guided-walkthrough-of-the-controls-and-flow.md	target=icebox position=bottom
+2026-06-08T07:04:55Z	Matt Reider	set-type	termkrush/Tutorial-question-mark-opens-a-guided-walkthrough-of-the-controls-and-flow.md	feature
+2026-06-08T07:04:55Z	Matt Reider	estimate	termkrush/Tutorial-question-mark-opens-a-guided-walkthrough-of-the-controls-and-flow.md	5

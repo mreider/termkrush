@@ -15,7 +15,9 @@
 |  | [Retire the step-grid cell-toggle and tracker-only tests](termkrush/Retire-the-step-grid-cell-toggle-and-tracker-only-tests.md) |  |  |
 |  | [Bug: scratch whip/wiki is not discoverable - no cue to set a pad to scratch](termkrush/Bug-scratch-whip-wiki-is-not-discoverable-no-cue-to-set-a-pad-to-scratch.md) |  |  |
 |  | [Fade in and fade out on timeline blocks](termkrush/Fade-in-and-fade-out-on-timeline-blocks.md) | 5 |  |
-| Total Points | | 25 | |
+|  | [Make the tutorial interactive: do-this steps the app verifies](termkrush/Make-the-tutorial-interactive-do-this-steps-the-app-verifies.md) | 8 |  |
+|  | [Tutorial: question-mark opens a guided walkthrough of the controls and flow](termkrush/Tutorial-question-mark-opens-a-guided-walkthrough-of-the-controls-and-flow.md) | 5 |  |
+| Total Points | | 38 | |
 
 ### Started
 | User | Title | Points | Tags |

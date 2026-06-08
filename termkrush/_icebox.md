@@ -5,3 +5,5 @@ Stack-rank order. Top is the highest priority. Edit by hand or via `am rank` / `
 - [Record pad performance into the timeline (launch-quantized capture)](Record-pad-performance-into-the-timeline-launch-quantized-capture.md)
 - [Edit captured blocks on the timeline (move and trim)](Edit-captured-blocks-on-the-timeline-move-and-trim.md)
 - [Fade in and fade out on timeline blocks](Fade-in-and-fade-out-on-timeline-blocks.md)
+- [Make the tutorial interactive: do-this steps the app verifies](Make-the-tutorial-interactive-do-this-steps-the-app-verifies.md)
+- [Tutorial: question-mark opens a guided walkthrough of the controls and flow](Tutorial-question-mark-opens-a-guided-walkthrough-of-the-controls-and-flow.md)

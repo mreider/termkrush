@@ -17,12 +17,13 @@ they do *right now*.
 - **Esc** — back / cancel (closes the menu or editor; again = quit).
 
 ## Walkthrough
-- [ ] The **library is home** on launch. `1`–`8` jump to a pad, `0` to the
-      timeline; `Esc` goes back up to the library (and from the library, quits).
-- [ ] Library: `↑`/`↓` browse; `Enter` on a song opens its actions —
-      **`1`–`8` load it onto that pad**, `r` rename, `Backspace` delete, `→`
-      move. After loading, jump to the pad (`3`) and `Space` to **hear** it.
-- [ ] Move (`Enter` → `→`): a folder modal — `↑`/`↓` pick `(root)` or a folder,
+- [ ] The **library is home** on launch, nothing highlighted. With nothing
+      highlighted, `1`–`8` **jump** to a pad, `0` to the timeline.
+- [ ] `↑`/`↓` **highlight** a song. While a song is highlighted: `1`–`8`
+      **load** it onto that pad (if that pad's full, it asks to overwrite),
+      `r` rename, `Backspace` delete, `←`/`→` move. `Esc` **stops highlighting**
+      (then `1`–`8` jump again); a 2nd `Esc` goes up a folder / quits.
+- [ ] Move: a folder modal — `↑`/`↓` pick `(root)` or a folder,
       `n` new folder (type a name, `Enter`), `r` rename, `Backspace` delete
       (confirm), `Enter` moves the file there. One level of folders only.
 - [ ] Pad: `Space` plays; `↑`/`↓` volume; `Enter` opens its menu (edit clip /

@@ -173,6 +173,11 @@ pub struct App {
     menu: Option<MenuState>,
     /// A library song is selected for action (load/rename/delete/move).
     song_action: bool,
+    /// Whether a library file is actively highlighted (arrows highlight, esc
+    /// clears). When highlighted, 1-8 loads; otherwise 1-8 jumps to a pad.
+    crate_active: bool,
+    /// Pending overwrite confirm: load `file` onto already-loaded pad `i`.
+    confirm_override: Option<(usize, PathBuf)>,
     /// The move-a-file modal, if open.
     move_picker: Option<MovePicker>,
     /// Clip-edit modal: the pad being edited + which mark is active
@@ -220,6 +225,8 @@ impl App {
             tl_region_start: None,
             menu: None,
             song_action: false,
+            crate_active: false,
+            confirm_override: None,
             move_picker: None,
             clip_edit: None,
             ce_out: false,
@@ -373,6 +380,15 @@ impl App {
     fn nav(&mut self, dir: KeyCode) -> Action {
         match self.focus {
             Focus::Crate => match dir {
+                // First arrow highlights the current row; further arrows move.
+                KeyCode::Up if !self.crate_active => {
+                    self.crate_active = true;
+                    Action::CrateNav
+                }
+                KeyCode::Down if !self.crate_active => {
+                    self.crate_active = true;
+                    Action::CrateNav
+                }
                 KeyCode::Up => self.crate_nav(-1),
                 KeyCode::Down => self.crate_nav(1),
                 _ => Action::None,
@@ -406,7 +422,10 @@ impl App {
             return "←→ move · +/- zoom · tab in/out (follows) · space play · enter snip · esc done";
         }
         match self.focus {
-            Focus::Crate => "↑↓ browse · enter song · 1-8 pad · 0 timeline · esc quit",
+            Focus::Crate if self.crate_active => {
+                "1-8 load · r rename · ⌫ del · move · esc unselect"
+            }
+            Focus::Crate => "↑↓ highlight a song · 1-8 jump to pad · 0 timeline · esc quit",
             Focus::Pad(_) => "↑↓ vol · space play · enter menu · 1-8/0 switch · esc library",
             Focus::Timeline => "←→ beat · ↑↓ lane · space play · enter menu · esc library",
         }
@@ -438,6 +457,7 @@ impl App {
         match self.focus {
             // Library: open a folder, or offer actions on a song.
             Focus::Crate => {
+                self.crate_active = true; // Enter highlights too
                 if self.selected_is_dir() {
                     self.enter_selected()
                 } else if self.selected_path().is_some() {
@@ -459,7 +479,18 @@ impl App {
         // folder); inside a folder → `←` (out toward root).
         let in_folder = self.in_subfolder();
         match key.code {
-            KeyCode::Char(c @ '1'..='8') => self.load_selected_onto(c as usize - '1' as usize),
+            KeyCode::Char(c @ '1'..='8') => {
+                let pad = c as usize - '1' as usize;
+                // Loading onto an already-loaded pad asks to confirm first.
+                if self.mixer.pad_loaded(pad) {
+                    if let Some(file) = self.selected_path() {
+                        self.confirm_override = Some((pad, file));
+                    }
+                    Action::Mark
+                } else {
+                    self.load_selected_onto(pad)
+                }
+            }
             KeyCode::Char('r') | KeyCode::Char('R') | KeyCode::Insert => self.start_rename(),
             KeyCode::Backspace | KeyCode::Delete => self.arm_delete(),
             KeyCode::Right if !in_folder => self.open_move_picker(),
@@ -735,6 +766,11 @@ impl App {
     fn set_focus(&mut self, f: Focus) {
         if let Focus::Pad(i) = f {
             self.last_pad = i;
+        }
+        // Returning to the library starts with nothing highlighted (arrows
+        // begin a highlight again).
+        if f == Focus::Crate {
+            self.crate_active = false;
         }
         self.focus = f;
     }
@@ -1160,6 +1196,17 @@ impl App {
             };
         }
 
+        // Overwrite-confirm: y loads over the existing pad, anything else cancels.
+        if let Some((pad, file)) = self.confirm_override.clone() {
+            self.confirm_override = None;
+            return match key.code {
+                KeyCode::Char('y') | KeyCode::Char('Y') => {
+                    self.pending_pad_load = Some((pad, file));
+                    Action::AssignPad
+                }
+                _ => Action::Mark,
+            };
+        }
         // Move-a-file modal captures keys while open.
         if self.move_picker.is_some() {
             return self.on_move_key(key);
@@ -1179,6 +1226,7 @@ impl App {
         // In the library on a song, the action keys work directly — no need to
         // press Enter first (Enter just shows the prompt as a reminder).
         if self.focus == Focus::Crate
+            && self.crate_active
             && self.selected_path().is_some()
             && !self.selected_is_dir()
             && matches!(
@@ -1199,12 +1247,15 @@ impl App {
 
         // Control surface: numbers select · arrows within · Space · Enter · Esc.
         match key.code {
-            // Esc goes up a level: pad/timeline → library; a subfolder → its
-            // parent; the library root → quit.
+            // Esc peels back one layer: pad/timeline → library; a highlighted
+            // song → stop highlighting; a subfolder → its parent; root → quit.
             KeyCode::Esc => {
                 if self.focus != Focus::Crate {
                     self.set_focus(Focus::Crate);
                     Action::Focus
+                } else if self.crate_active {
+                    self.crate_active = false; // stop highlighting
+                    Action::Mark
                 } else if self.crate_lib.cwd() != self.crate_lib.root() {
                     if let Some(parent) = self.crate_lib.cwd().parent().map(|p| p.to_path_buf()) {
                         self.crate_lib.enter(&parent);
@@ -1517,6 +1568,12 @@ fn draw_timeline_strip(f: &mut Frame, area: Rect, app: &App) {
 fn return_help(f: &mut Frame, app: &App) {
     if app.confirm_quit {
         draw_quit_modal(f, f.area());
+    } else if let Some((pad, _)) = &app.confirm_override {
+        draw_confirm_modal(
+            f,
+            f.area(),
+            &format!("Pad {} is loaded — overwrite?", pad + 1),
+        );
     } else if let Some(path) = &app.confirm_delete {
         let name = path.file_name().and_then(|n| n.to_str()).unwrap_or("track");
         draw_confirm_modal(f, f.area(), &format!("Delete {name}?"));
@@ -1734,7 +1791,8 @@ fn draw_crate(f: &mut Frame, area: Rect, app: &App) {
         })
         .collect();
     let mut state = ListState::default();
-    if !entries.is_empty() {
+    // Highlight a row only while a song is actively highlighted (arrows on).
+    if app.crate_active && !entries.is_empty() {
         state.select(Some(app.crate_sel.min(entries.len() - 1)));
     }
     let list = List::new(items)
@@ -2159,7 +2217,8 @@ mod tests {
         let mut app = App::new();
         app.set_crate(Crate::scan(&tmp));
         app.set_focus(Focus::Crate);
-        // Entries: ["box", "t.wav"] — go to the track.
+        // Entries: ["box", "t.wav"] — Down highlights box, Down moves to t.wav.
+        app.on_key(KeyEvent::new(KeyCode::Down, KeyModifiers::NONE));
         app.on_key(KeyEvent::new(KeyCode::Down, KeyModifiers::NONE));
         assert_eq!(app.selected_path(), Some(tmp.join("t.wav")));
         // Enter → Right opens the move modal; Down to "box"; Enter moves it.
@@ -2229,9 +2288,11 @@ mod tests {
         fs::write(tmp.join("box/inside.wav"), b"x").unwrap();
         let mut app = App::new();
         app.set_crate(Crate::scan(&tmp));
-        // Inside box/: entries are ["..", "inside.wav"] — select the file.
+        // Inside box/: entries are ["..", "inside.wav"]. Down highlights "..",
+        // Down moves to the file.
         app.crate_lib.enter(&tmp.join("box"));
-        app.on_key(KeyEvent::new(KeyCode::Down, KeyModifiers::NONE)); // skip ".."
+        app.on_key(KeyEvent::new(KeyCode::Down, KeyModifiers::NONE));
+        app.on_key(KeyEvent::new(KeyCode::Down, KeyModifiers::NONE));
         assert_eq!(app.selected_path(), Some(tmp.join("box/inside.wav")));
         app.on_key(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE)); // song prompt
         app.on_key(KeyEvent::new(KeyCode::Right, KeyModifiers::NONE));
@@ -2250,13 +2311,28 @@ mod tests {
         let mut app = App::new();
         app.set_crate(demo_crate());
         app.set_focus(Focus::Crate);
-        assert!(!app.song_action, "no prompt needed");
-        // Pressing a number loads directly — no Enter first.
+        // Down highlights the current song (no Enter needed).
+        app.on_key(KeyEvent::new(KeyCode::Down, KeyModifiers::NONE));
+        assert!(
+            app.crate_active && !app.song_action,
+            "highlighting, no prompt"
+        );
+        // Now a number loads directly.
         assert_eq!(app.on_key(key('2')), Action::AssignPad);
         assert_eq!(app.take_pending_pad_load(), Some((1, "/m/a.mp3".into())));
         // r starts a rename directly.
         app.on_key(key('r'));
         assert!(app.rename.is_some(), "r renames directly");
+    }
+
+    #[test]
+    fn library_numbers_jump_when_nothing_highlighted() {
+        let mut app = App::new(); // launches in the library, not highlighting
+        app.set_crate(demo_crate());
+        assert!(!app.crate_active);
+        // With nothing highlighted, a number jumps to that pad.
+        assert_eq!(app.on_key(key('3')), Action::Focus);
+        assert_eq!(app.focus_cell(), Focus::Pad(2));
     }
 
     #[test]
@@ -2329,7 +2405,8 @@ mod tests {
         app.set_crate(demo_crate());
         app.set_focus(Focus::Crate);
         assert_eq!(app.selected_path(), Some("/m/a.mp3".into()));
-        app.on_key(KeyEvent::new(KeyCode::Down, KeyModifiers::NONE));
+        app.on_key(KeyEvent::new(KeyCode::Down, KeyModifiers::NONE)); // highlight current (a)
+        app.on_key(KeyEvent::new(KeyCode::Down, KeyModifiers::NONE)); // move to b
         assert_eq!(app.selected_path(), Some("/m/b.mp3".into()));
     }
 

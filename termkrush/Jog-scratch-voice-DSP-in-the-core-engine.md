@@ -2,12 +2,14 @@
 title: Jog scratch voice DSP in the core engine
 type: feature
 created: "2026-06-08T12:17:12Z"
-modified: "2026-06-08T12:49:50Z"
+modified: "2026-06-08T12:53:30Z"
 author: Matt Reider
-status: started
+status: delivered
 estimate: "5"
 epic: gui
 started: "2026-06-08T12:49:50Z"
+finished: "2026-06-08T12:53:30Z"
+delivered: "2026-06-08T12:53:30Z"
 ---
 
 ## Goal

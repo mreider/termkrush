@@ -50,6 +50,8 @@ struct DragTrack(PathBuf);
 enum Target {
     Pad(usize),
     Preview,
+    /// Arm the scratch platter.
+    Jog,
 }
 
 /// A finished background decode on its way to the audio engine.
@@ -97,6 +99,8 @@ pub struct TermKrushApp {
     renaming: Option<(PathBuf, String)>,
     /// Inline new-folder name being typed.
     new_folder: Option<String>,
+    /// Source loaded on the scratch platter (for its label).
+    jog_source: Option<PathBuf>,
 
     producer: Option<rtrb::Producer<f32>>,
     _audio: Option<AudioOutput>,
@@ -145,6 +149,7 @@ impl TermKrushApp {
             lib_sel: None,
             renaming: None,
             new_folder: None,
+            jog_source: None,
             producer,
             _audio: audio,
             out_channels: channels.max(1),
@@ -242,6 +247,7 @@ impl TermKrushApp {
                     self.loading[i] = false;
                 }
                 Target::Preview => self.mixer.preview(done.audio.samples),
+                Target::Jog => self.mixer.set_jog_source(done.audio.samples),
             }
         }
     }
@@ -318,6 +324,84 @@ impl TermKrushApp {
         }
     }
 
+    /// The scratch platter (bottom panel): drop a sound, then drag it (or use
+    /// ←/→) to whip/wiki. Drives the engine's jog voice directly.
+    fn draw_scratch_panel(&mut self, ctx: &egui::Context) {
+        // Arrow-key jog: winit reports real key-up, so a held arrow sustains
+        // and release stops — no terminal key-up hack needed.
+        let dt = ctx.input(|i| i.stable_dt).max(1e-3) as f64;
+        let key_vel: f32 = ctx.input(|i| {
+            if i.key_down(egui::Key::ArrowRight) {
+                1.5 // wiki (forward)
+            } else if i.key_down(egui::Key::ArrowLeft) {
+                -1.5 // whip (backward)
+            } else {
+                0.0
+            }
+        });
+
+        egui::TopBottomPanel::bottom("scratch")
+            .exact_height(140.0)
+            .show(ctx, |ui| {
+                ui.add_space(6.0);
+                ui.horizontal(|ui| {
+                    ui.label(egui::RichText::new("SCRATCH").color(AMBER).strong());
+                    let name = self
+                        .jog_source
+                        .as_ref()
+                        .and_then(|p| p.file_stem())
+                        .and_then(|s| s.to_str())
+                        .unwrap_or("drag a sound here");
+                    ui.label(egui::RichText::new(name).color(GREEN));
+                    if self.mixer.has_jog() && ui.small_button("clear").clicked() {
+                        self.mixer.clear_jog();
+                        self.jog_source = None;
+                    }
+                });
+                ui.label(
+                    egui::RichText::new("drag the platter ↔ to scratch · or hold ← whip / → wiki")
+                        .weak(),
+                );
+                ui.add_space(4.0);
+
+                // The platter strip: a drop target for the sound + a drag
+                // surface that jogs it. A playhead line shows the position.
+                let width = ui.available_width();
+                let (rect, resp) =
+                    ui.allocate_exact_size(egui::vec2(width, 48.0), egui::Sense::click_and_drag());
+                let painter = ui.painter_at(rect);
+                painter.rect_filled(rect, 4.0, GROUND);
+                painter.rect_stroke(rect, 4.0, egui::Stroke::new(1.0, GREEN.gamma_multiply(0.5)));
+                let len = self.mixer.jog_len();
+                if len > 0 {
+                    if let Some(pos) = self.mixer.jog_position() {
+                        let frac = (pos / len as f64) as f32;
+                        let x = rect.left() + frac * rect.width();
+                        painter.line_segment(
+                            [egui::pos2(x, rect.top()), egui::pos2(x, rect.bottom())],
+                            egui::Stroke::new(2.0, AMBER),
+                        );
+                    }
+                }
+
+                // Mouse drag → velocity (frames the drag covers, per output
+                // frame). Dragging right spins forward, left backward.
+                let vel = if resp.dragged() && len > 0 {
+                    let dx = resp.drag_delta().x as f64;
+                    (dx * len as f64 / (rect.width() as f64 * self.target_rate as f64 * dt)) as f32
+                } else {
+                    key_vel
+                };
+                self.mixer.set_jog_velocity(vel);
+
+                // Drop a track onto the platter to arm it.
+                if let Some(p) = resp.dnd_release_payload::<DragTrack>() {
+                    self.jog_source = Some(p.0.clone());
+                    self.spawn_load(Target::Jog, p.0.clone());
+                }
+            });
+    }
+
     /// Write pad `i`'s trimmed clip to the current library folder as a WAV.
     fn export_pad(&mut self, i: usize) {
         let region = self.mixer.pad_clip_region(i);
@@ -361,6 +445,10 @@ impl eframe::App for TermKrushApp {
         if self.probed_dir.as_deref() != Some(self.crate_lib.cwd()) {
             self.spawn_probe();
         }
+
+        // The scratch platter (bottom) draws before the central pad grid so the
+        // grid fills the space above it. It borrows &mut self directly.
+        self.draw_scratch_panel(ctx);
 
         let mut acts: Vec<Act> = Vec::new();
         {

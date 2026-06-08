@@ -409,7 +409,7 @@ impl App {
             return "←→ move · +/- zoom · tab in/out (follows) · space play · enter snip · esc done";
         }
         match self.focus {
-            Focus::Crate => "↑↓ browse · enter menu · 1-8 pad · 0 timeline",
+            Focus::Crate => "↑↓ browse · enter song · 1-8 pad · 0 timeline · esc quit",
             Focus::Pad(_) => "↑↓ vol · space play · enter menu · 1-8/0 switch · esc library",
             Focus::Timeline => "←→ beat · ↑↓ lane · space play · enter menu · esc library",
         }
@@ -1499,20 +1499,30 @@ fn return_help(f: &mut Frame, app: &App) {
     }
 }
 
-/// The song-action prompt: what you can do with the highlighted library song.
+/// The song-action prompt: one command per line, key then what it does.
 fn draw_song_action(f: &mut Frame, area: Rect, name: &str) {
-    let popup = centered(54.max(name.len() as u16 + 6).min(72), 7, area);
+    let rows = [
+        ("1-8", "load onto that pad"),
+        ("r", "rename"),
+        ("⌫", "delete"),
+        ("→", "move"),
+        ("esc", "cancel"),
+    ];
+    let w = (name.len() as u16 + 6).clamp(34, 72);
+    let popup = centered(w, rows.len() as u16 + 5, area);
     f.render_widget(Clear, popup);
     let block = Block::default()
         .borders(Borders::ALL)
         .border_style(Style::default().fg(AMBER))
         .title(" Song ");
-    let lines = vec![
+    let mut lines = vec![
         Line::from(""),
         Line::from(format!("  {name}")),
         Line::from(""),
-        Line::from("  load to a pad: 1-8 · r rename · ⌫ delete · → move · esc"),
     ];
+    for (k, what) in rows {
+        lines.push(Line::from(format!("  {k:<5}{what}")));
+    }
     f.render_widget(
         Paragraph::new(lines)
             .block(block)
@@ -1531,22 +1541,44 @@ fn draw_move_picker(f: &mut Frame, area: Rect, mp: &MovePicker) {
         .unwrap_or("file");
     let mut rows: Vec<String> = vec!["(root)".into()];
     rows.extend(mp.folders.iter().map(|(n, _)| format!("📁 {n}")));
-    let footer = if mp.naming.is_some() {
-        "type a name · enter save · esc cancel"
+    // Commands as key → explanation, one per line, per sub-mode.
+    let cmds: &[(&str, &str)] = if mp.naming.is_some() {
+        &[
+            ("type", "a folder name"),
+            ("enter", "save"),
+            ("esc", "cancel"),
+        ]
     } else if mp.confirm_del.is_some() {
-        "delete this folder and everything inside? y / n"
+        &[("y", "delete it + all inside"), ("n", "keep")]
     } else {
-        "↑↓ pick · enter move here · n new · r rename · ⌫ delete · esc cancel"
+        &[
+            ("↑↓", "pick a destination"),
+            ("enter", "move here"),
+            ("n", "new folder"),
+            ("r", "rename folder"),
+            ("⌫", "delete folder"),
+            ("esc", "cancel"),
+        ]
     };
-    let w = rows
+    let widest = rows
         .iter()
         .map(|r| r.chars().count())
-        .chain([footer.chars().count(), file.chars().count() + 8])
+        .chain(
+            cmds.iter()
+                .map(|(k, w)| k.chars().count() + w.chars().count() + 3),
+        )
         .max()
-        .unwrap_or(30) as u16
-        + 6;
-    let h = rows.len() as u16 + 6;
-    let popup = centered(w.clamp(28, 70), h.clamp(7, 24), area);
+        .unwrap_or(30) as u16;
+    let body_h = if mp.naming.is_some() {
+        1
+    } else {
+        rows.len() as u16
+    };
+    let popup = centered(
+        (widest + 6).clamp(28, 70),
+        (body_h + cmds.len() as u16 + 4).min(24),
+        area,
+    );
     f.render_widget(Clear, popup);
     let block = Block::default()
         .borders(Borders::ALL)
@@ -1567,7 +1599,9 @@ fn draw_move_picker(f: &mut Frame, area: Rect, mp: &MovePicker) {
         }
     }
     lines.push(Line::from(""));
-    lines.push(Line::from(format!("  {footer}")));
+    for (k, what) in cmds {
+        lines.push(Line::from(format!("  {k:<6}{what}")));
+    }
     f.render_widget(
         Paragraph::new(lines)
             .block(block)

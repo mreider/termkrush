@@ -2,13 +2,15 @@
 title: 'Library home: Enter on a song offers load rename delete move'
 type: feature
 created: "2026-06-08T08:21:28Z"
-modified: "2026-06-08T08:48:28Z"
+modified: "2026-06-08T08:58:18Z"
 author: Matt Reider
-status: started
+status: delivered
 estimate: "5"
 epic: nav2
 project: termkrush
 started: "2026-06-08T08:48:28Z"
+finished: "2026-06-08T08:58:18Z"
+delivered: "2026-06-08T08:58:18Z"
 ---
 
 ## Goal

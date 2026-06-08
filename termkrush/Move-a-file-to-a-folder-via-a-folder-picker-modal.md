@@ -2,12 +2,15 @@
 title: Move a file to a folder via a folder-picker modal
 type: feature
 created: "2026-06-08T08:21:28Z"
-modified: "2026-06-08T08:22:01Z"
+modified: "2026-06-08T08:58:18Z"
 author: Matt Reider
-status: unstarted
+status: delivered
 estimate: "8"
 epic: nav2
 project: termkrush
+started: "2026-06-08T08:58:18Z"
+finished: "2026-06-08T08:58:18Z"
+delivered: "2026-06-08T08:58:18Z"
 ---
 
 ## Goal

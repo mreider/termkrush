@@ -17,7 +17,15 @@
 |  | [Fade in and fade out on timeline blocks](termkrush/Fade-in-and-fade-out-on-timeline-blocks.md) | 5 |  |
 |  | [Make the tutorial interactive: do-this steps the app verifies](termkrush/Make-the-tutorial-interactive-do-this-steps-the-app-verifies.md) | 8 |  |
 |  | [Tutorial: question-mark opens a guided walkthrough of the controls and flow](termkrush/Tutorial-question-mark-opens-a-guided-walkthrough-of-the-controls-and-flow.md) | 5 |  |
-| Total Points | | 38 | |
+|  | [Borders show numbers and question-mark help replaces inline hints](termkrush/Borders-show-numbers-and-question-mark-help-replaces-inline-hints.md) | 3 |  |
+|  | [Browse one level of subfolders in the library](termkrush/Browse-one-level-of-subfolders-in-the-library.md) | 5 |  |
+|  | [Flag unplayable files in red on open](termkrush/Flag-unplayable-files-in-red-on-open.md) | 3 |  |
+|  | [Library home: Enter on a song offers load rename delete move](termkrush/Library-home-Enter-on-a-song-offers-load-rename-delete-move.md) | 5 |  |
+|  | [Move a file to a folder via a folder-picker modal](termkrush/Move-a-file-to-a-folder-via-a-folder-picker-modal.md) | 8 |  |
+|  | [Number keys select pads 1-8 and 0 selects the timeline](termkrush/Number-keys-select-pads-1-8-and-0-selects-the-timeline.md) | 5 |  |
+|  | [Save a pad or timeline to the library with ctrl-S](termkrush/Save-a-pad-or-timeline-to-the-library-with-ctrl-S.md) | 5 |  |
+|  | [Splash screen on launch with logo copyright and license](termkrush/Splash-screen-on-launch-with-logo-copyright-and-license.md) | 3 |  |
+| Total Points | | 75 | |
 
 ### Started
 | User | Title | Points | Tags |

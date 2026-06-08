@@ -579,3 +579,27 @@
 2026-06-08T08:04:27Z	Matt Reider	started	termkrush/Bug-clip-editor-audition-plays-the-whole-selection-not-the-active-handle.md	
 2026-06-08T08:06:40Z	Matt Reider	finished	termkrush/Bug-clip-editor-audition-plays-the-whole-selection-not-the-active-handle.md	
 2026-06-08T08:06:40Z	Matt Reider	delivered	termkrush/Bug-clip-editor-audition-plays-the-whole-selection-not-the-active-handle.md	Root cause confirmed by you: it 'worked' before zoom because coarse handle moves are audible when playing from the start; zoomed in, nudging the OUT handle a few ms while Space plays from the START makes the end-change inaudible. Fix: Space now auditions ~1.5s AT the active handle — in-handle plays forward from in, out-handle plays the run-up TO out (mix.audition_region). So zoom to the end, nudge out, Space, and you hear exactly where the cut lands. Test (exit 0): out-handle audition is a short one-shot that ends, not the whole clip. clippy + 8 suites exit 0. DELIVERED — zoom in on the out handle, move it, Space should now play right at the cut.
+2026-06-08T08:21:27Z	Matt Reider	created	termkrush/Number-keys-select-pads-1-8-and-0-selects-the-timeline.md	target=icebox position=bottom
+2026-06-08T08:21:28Z	Matt Reider	created	termkrush/Library-home-Enter-on-a-song-offers-load-rename-delete-move.md	target=icebox position=bottom
+2026-06-08T08:21:28Z	Matt Reider	created	termkrush/Move-a-file-to-a-folder-via-a-folder-picker-modal.md	target=icebox position=bottom
+2026-06-08T08:21:28Z	Matt Reider	created	termkrush/Browse-one-level-of-subfolders-in-the-library.md	target=icebox position=bottom
+2026-06-08T08:21:28Z	Matt Reider	created	termkrush/Save-a-pad-or-timeline-to-the-library-with-ctrl-S.md	target=icebox position=bottom
+2026-06-08T08:21:28Z	Matt Reider	created	termkrush/Flag-unplayable-files-in-red-on-open.md	target=icebox position=bottom
+2026-06-08T08:21:28Z	Matt Reider	created	termkrush/Splash-screen-on-launch-with-logo-copyright-and-license.md	target=icebox position=bottom
+2026-06-08T08:21:28Z	Matt Reider	created	termkrush/Borders-show-numbers-and-question-mark-help-replaces-inline-hints.md	target=icebox position=bottom
+2026-06-08T08:21:36Z	Matt Reider	set-type	termkrush/Number-keys-select-pads-1-8-and-0-selects-the-timeline.md	feature
+2026-06-08T08:21:36Z	Matt Reider	estimate	termkrush/Number-keys-select-pads-1-8-and-0-selects-the-timeline.md	5
+2026-06-08T08:21:37Z	Matt Reider	set-type	termkrush/Library-home-Enter-on-a-song-offers-load-rename-delete-move.md	feature
+2026-06-08T08:21:37Z	Matt Reider	estimate	termkrush/Library-home-Enter-on-a-song-offers-load-rename-delete-move.md	5
+2026-06-08T08:21:37Z	Matt Reider	set-type	termkrush/Move-a-file-to-a-folder-via-a-folder-picker-modal.md	feature
+2026-06-08T08:21:37Z	Matt Reider	estimate	termkrush/Move-a-file-to-a-folder-via-a-folder-picker-modal.md	8
+2026-06-08T08:21:37Z	Matt Reider	set-type	termkrush/Browse-one-level-of-subfolders-in-the-library.md	feature
+2026-06-08T08:21:37Z	Matt Reider	estimate	termkrush/Browse-one-level-of-subfolders-in-the-library.md	5
+2026-06-08T08:21:37Z	Matt Reider	set-type	termkrush/Save-a-pad-or-timeline-to-the-library-with-ctrl-S.md	feature
+2026-06-08T08:21:37Z	Matt Reider	estimate	termkrush/Save-a-pad-or-timeline-to-the-library-with-ctrl-S.md	5
+2026-06-08T08:21:37Z	Matt Reider	set-type	termkrush/Flag-unplayable-files-in-red-on-open.md	feature
+2026-06-08T08:21:38Z	Matt Reider	estimate	termkrush/Flag-unplayable-files-in-red-on-open.md	3
+2026-06-08T08:21:38Z	Matt Reider	set-type	termkrush/Splash-screen-on-launch-with-logo-copyright-and-license.md	feature
+2026-06-08T08:21:38Z	Matt Reider	estimate	termkrush/Splash-screen-on-launch-with-logo-copyright-and-license.md	3
+2026-06-08T08:21:38Z	Matt Reider	set-type	termkrush/Borders-show-numbers-and-question-mark-help-replaces-inline-hints.md	feature
+2026-06-08T08:21:38Z	Matt Reider	estimate	termkrush/Borders-show-numbers-and-question-mark-help-replaces-inline-hints.md	3

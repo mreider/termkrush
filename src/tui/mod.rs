@@ -159,8 +159,6 @@ pub struct App {
     confirm_delete: Option<PathBuf>,
     /// Active rename: `(target path, new-name buffer)`.
     rename: Option<(PathBuf, String)>,
-    /// A track marked for move (cut); `p` pastes it into the current folder.
-    move_mark: Option<PathBuf>,
     /// The scratch pad currently recording a phrase (taps append to it).
     phrase_rec: Option<usize>,
     /// Source file each pad was loaded from (for save-over).
@@ -214,7 +212,6 @@ impl App {
             tick: 0,
             confirm_delete: None,
             rename: None,
-            move_mark: None,
             phrase_rec: None,
             pad_source: std::array::from_fn(|_| None),
             timeline: Timeline::default(),
@@ -1179,6 +1176,27 @@ impl App {
             }
         }
 
+        // In the library on a song, the action keys work directly — no need to
+        // press Enter first (Enter just shows the prompt as a reminder).
+        if self.focus == Focus::Crate
+            && self.selected_path().is_some()
+            && !self.selected_is_dir()
+            && matches!(
+                key.code,
+                KeyCode::Char('1'..='8')
+                    | KeyCode::Char('r')
+                    | KeyCode::Char('R')
+                    | KeyCode::Insert
+                    | KeyCode::Backspace
+                    | KeyCode::Delete
+                    | KeyCode::Left
+                    | KeyCode::Right
+            )
+        {
+            self.song_action = true; // on_song_action_key clears it
+            return self.on_song_action_key(key);
+        }
+
         // Control surface: numbers select · arrows within · Space · Enter · Esc.
         match key.code {
             // Esc goes up a level: pad/timeline → library; a subfolder → its
@@ -1502,6 +1520,9 @@ fn return_help(f: &mut Frame, app: &App) {
     } else if let Some(path) = &app.confirm_delete {
         let name = path.file_name().and_then(|n| n.to_str()).unwrap_or("track");
         draw_confirm_modal(f, f.area(), &format!("Delete {name}?"));
+    } else if let Some((path, buf)) = &app.rename {
+        let old = path.file_name().and_then(|n| n.to_str()).unwrap_or("");
+        draw_rename_modal(f, f.area(), old, buf);
     } else if let Some(mp) = &app.move_picker {
         draw_move_picker(f, f.area(), mp);
     } else if app.song_action {
@@ -1513,6 +1534,27 @@ fn return_help(f: &mut Frame, app: &App) {
     } else if let Some(menu) = &app.menu {
         draw_menu(f, f.area(), menu);
     }
+}
+
+/// The rename modal: the old name in the title, the new-name buffer in the body.
+fn draw_rename_modal(f: &mut Frame, area: Rect, old: &str, buf: &str) {
+    let w = ((old.len().max(buf.len()) as u16) + 8).clamp(28, 72);
+    let popup = centered(w, 4, area);
+    f.render_widget(Clear, popup);
+    let block = Block::default()
+        .borders(Borders::ALL)
+        .border_style(Style::default().fg(AMBER))
+        .title(format!(" rename {old} "));
+    let lines = vec![
+        Line::from(format!("  {buf}▏")),
+        Line::from("  enter save · esc cancel"),
+    ];
+    f.render_widget(
+        Paragraph::new(lines)
+            .block(block)
+            .style(Style::default().fg(GREEN)),
+        popup,
+    );
 }
 
 /// The song-action prompt: one command per line, key then what it does.
@@ -1677,16 +1719,7 @@ fn draw_header(f: &mut Frame, area: Rect, app: &App) {
 fn draw_crate(f: &mut Frame, area: Rect, app: &App) {
     let focused = app.focus_cell() == Focus::Crate;
     let entries = app.filtered();
-    let title = if let Some((_, buf)) = &app.rename {
-        format!("Library  rename: {buf}")
-    } else if app.move_mark.is_some() {
-        format!("Library  ({} items) [move: p to paste]", entries.len())
-    } else {
-        match &app.filter {
-            Some(q) => format!("Library  /{q}"),
-            None => format!("Library  ({} items)", entries.len()),
-        }
-    };
+    let title = format!("Library  ({} items)", entries.len());
     let block = cell_block(&title, focused);
     let inner = block.inner(area);
     let items: Vec<ListItem> = entries
@@ -2210,6 +2243,20 @@ mod tests {
         app.on_key(KeyEvent::new(KeyCode::Left, KeyModifiers::NONE));
         assert!(app.move_picker.is_some(), "left moves when inside a folder");
         let _ = fs::remove_dir_all(&tmp);
+    }
+
+    #[test]
+    fn library_song_actions_work_without_enter() {
+        let mut app = App::new();
+        app.set_crate(demo_crate());
+        app.set_focus(Focus::Crate);
+        assert!(!app.song_action, "no prompt needed");
+        // Pressing a number loads directly — no Enter first.
+        assert_eq!(app.on_key(key('2')), Action::AssignPad);
+        assert_eq!(app.take_pending_pad_load(), Some((1, "/m/a.mp3".into())));
+        // r starts a rename directly.
+        app.on_key(key('r'));
+        assert!(app.rename.is_some(), "r renames directly");
     }
 
     #[test]

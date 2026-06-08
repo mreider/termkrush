@@ -50,6 +50,7 @@
 |  | [Bug: Enter should open the context menu so M is unneeded; hint says hear](termkrush/Bug-Enter-should-open-the-context-menu-so-M-is-unneeded-hint-says-hear.md) |  |  |
 |  | [Bug: clip editor cannot trim precisely - shift-fine is too coarse and undiscoverable](termkrush/Bug-clip-editor-cannot-trim-precisely-shift-fine-is-too-coarse-and-undiscoverable.md) |  |  |
 |  | [Zoomable clip editor: windowed bar, +/- zoom, follow the active handle](termkrush/Zoomable-clip-editor-windowed-bar-zoom-follow-the-active-handle.md) | 5 |  |
+|  | [Bug: clip editor audition plays the whole selection not the active handle](termkrush/Bug-clip-editor-audition-plays-the-whole-selection-not-the-active-handle.md) |  |  |
 
 ### Accepted
 | User | Title | Points | Tags |

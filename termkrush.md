@@ -43,6 +43,8 @@
 |  | [Minimal context-mapped controls: move + Space/Enter/M menu](termkrush/Minimal-context-mapped-controls-move-Space-Enter-M-menu.md) | 8 |  |
 |  | [Bug: clip editor bar runs off screen and the in/out marks do not visibly move](termkrush/Bug-clip-editor-bar-runs-off-screen-and-the-in-out-marks-do-not-visibly-move.md) |  |  |
 |  | [Bug: timeline lanes are unlabeled so placing a pad is not discoverable](termkrush/Bug-timeline-lanes-are-unlabeled-so-placing-a-pad-is-not-discoverable.md) |  |  |
+|  | [Bug: live pad play and timeline playback sound at once - should be mutually exclusive](termkrush/Bug-live-pad-play-and-timeline-playback-sound-at-once-should-be-mutually-exclusive.md) |  |  |
+|  | [Bug: space in the clip editor replays instead of toggling the audition off](termkrush/Bug-space-in-the-clip-editor-replays-instead-of-toggling-the-audition-off.md) |  |  |
 
 ### Accepted
 | User | Title | Points | Tags |

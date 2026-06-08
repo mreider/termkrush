@@ -329,13 +329,22 @@ impl Mixer {
     /// Audition pad `i`'s current trimmed selection `[in, out)` once, at
     /// native rate — stops any prior preview on that pad first.
     pub fn audition_pad(&mut self, i: usize) {
+        let (inp, out) = self.pad_trim.get(i).copied().unwrap_or((0, 0));
+        self.audition_region(i, inp, out);
+    }
+
+    /// Audition an explicit `[from, to)` region of pad `i` once, at native
+    /// rate — stops any prior preview first. Used to hear right at a handle.
+    pub fn audition_region(&mut self, i: usize, from: usize, to: usize) {
         self.voices.retain(|v| v.pad != i);
         self.scratch_voices.retain(|v| v.pad != i);
-        let (inp, out) = self.pad_trim.get(i).copied().unwrap_or((0, 0));
         if let Some(Some(clip)) = self.pads.get(i) {
             let total = clip.len() / 2;
-            let in_f = inp.min(total);
-            let len_f = out.min(total).saturating_sub(in_f);
+            let in_f = from.min(total);
+            let len_f = to.min(total).saturating_sub(in_f);
+            if len_f == 0 {
+                return;
+            }
             self.voices.push(SampleVoice {
                 clip: Arc::clone(clip),
                 pad: i,

@@ -28,8 +28,7 @@ they do *right now*.
 - [ ] Clip editor: `←`/`→` move the active handle; **`+`/`-` zoom** the window
       (whole→10s→1s→100ms→10ms) so steps get as fine as you need; `Tab` switches
       in/out handle **and the view follows it** (so you can see/scroll to the
-      end); the minimap line shows where you are; `Space` auditions (again
-      stops), `Enter` snips, `Esc` closes.
+      end); the minimap line shows where you are; `Space` auditions ~1.5s AT the active handle (again stops), `Enter` snips, `Esc` closes.
 - [ ] Timeline: `←`/`→` step, `↑`/`↓` lane, `Enter` toggles a hit, `Space`
       plays/pauses; `Enter` menu → place / cut / region / clear / render / tempo / master.
 - [ ] No help screen or M key — Enter opens the context menu everywhere; the hint line + menus explain everything.

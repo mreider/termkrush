@@ -865,11 +865,19 @@ impl App {
                 Some(Action::Mark)
             }
             KeyCode::Char(' ') => {
-                // Toggle the audition: play the selection, or stop it.
+                // Toggle the audition. Play ~1.5s AT the active handle so you
+                // hear the exact edit point: the in-handle plays forward from
+                // in; the out-handle plays the run-up to out.
                 if self.mixer.pad_is_sounding(i) {
                     self.mixer.stop_pad(i);
                 } else {
-                    self.mixer.audition_pad(i);
+                    let prev = (self.mixer.sample_rate() as usize * 3 / 2).max(1); // ~1.5s
+                    let (from, to) = if self.ce_out {
+                        (out.saturating_sub(prev).max(inp), out)
+                    } else {
+                        (inp, (inp + prev).min(out))
+                    };
+                    self.mixer.audition_region(i, from, to);
                 }
                 Some(Action::Mark)
             }
@@ -2230,6 +2238,26 @@ mod tests {
         // Zoom back out coarsens it again.
         app.on_key(key('-'));
         assert_eq!(app.ce_zoom, 3);
+    }
+
+    #[test]
+    fn clip_editor_auditions_at_the_active_handle() {
+        // The out-handle audition should play the run-up TO out, not from in,
+        // so a zoomed-in edit at the end is actually audible.
+        let mut m = Mixer::new();
+        m.set_sample_rate(1000); // 1.5s preview = 1500 frames
+        m.assign_pad(0, vec![0.5; 40_000]); // 20_000 frames
+        m.set_pad_trim_out(0, 10_000);
+        // Region near the out handle: [10000-1500, 10000) = 1500 frames.
+        m.audition_region(0, 10_000usize.saturating_sub(1500), 10_000);
+        assert_eq!(m.active_voices(), 1, "auditions a region at the handle");
+        // It's a one-shot of ~1500 frames; after 1600 frames it has ended.
+        m.fill_mix(&mut vec![0.0; 3200]);
+        assert_eq!(
+            m.active_voices(),
+            0,
+            "preview is a short one-shot, not the whole clip"
+        );
     }
 
     #[test]

@@ -49,6 +49,7 @@
 |  | [Bug: space in the clip editor replays instead of toggling the audition off](termkrush/Bug-space-in-the-clip-editor-replays-instead-of-toggling-the-audition-off.md) |  |  |
 |  | [Bug: Enter should open the context menu so M is unneeded; hint says hear](termkrush/Bug-Enter-should-open-the-context-menu-so-M-is-unneeded-hint-says-hear.md) |  |  |
 |  | [Bug: clip editor cannot trim precisely - shift-fine is too coarse and undiscoverable](termkrush/Bug-clip-editor-cannot-trim-precisely-shift-fine-is-too-coarse-and-undiscoverable.md) |  |  |
+|  | [Zoomable clip editor: windowed bar, +/- zoom, follow the active handle](termkrush/Zoomable-clip-editor-windowed-bar-zoom-follow-the-active-handle.md) | 5 |  |
 
 ### Accepted
 | User | Title | Points | Tags |

@@ -2,11 +2,13 @@
 title: 'Zoomable clip editor: windowed bar, +/- zoom, follow the active handle'
 type: feature
 created: "2026-06-08T07:56:38Z"
-modified: "2026-06-08T07:56:38Z"
+modified: "2026-06-08T08:00:24Z"
 author: Matt Reider
-status: started
+status: delivered
 estimate: "5"
 started: "2026-06-08T07:56:38Z"
+delivered: "2026-06-08T08:00:24Z"
+project: termkrush
 ---
 
 ## Goal

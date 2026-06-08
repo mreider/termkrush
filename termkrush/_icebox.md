@@ -7,4 +7,3 @@ Stack-rank order. Top is the highest priority. Edit by hand or via `am rank` / `
 - [Fade in and fade out on timeline blocks](Fade-in-and-fade-out-on-timeline-blocks.md)
 - [Make the tutorial interactive: do-this steps the app verifies](Make-the-tutorial-interactive-do-this-steps-the-app-verifies.md)
 - [Tutorial: question-mark opens a guided walkthrough of the controls and flow](Tutorial-question-mark-opens-a-guided-walkthrough-of-the-controls-and-flow.md)
-- [Zoomable clip editor: windowed bar, +/- zoom, follow the active handle](Zoomable-clip-editor-windowed-bar-zoom-follow-the-active-handle.md)

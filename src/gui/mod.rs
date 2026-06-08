@@ -29,6 +29,10 @@ const GROUND: egui::Color32 = egui::Color32::from_rgb(0x06, 0x09, 0x07); // --bg
 const PANEL: egui::Color32 = egui::Color32::from_rgb(0x16, 0x1b, 0x16); // panel fill
 const LINE: egui::Color32 = egui::Color32::from_rgb(0x1d, 0x27, 0x1f); // --line (borders)
 
+/// Waveform cache resolution (peak pairs). Computed once per clip, mapped to the
+/// display width each frame — cheap, so audio is never starved by redrawing.
+const WAVE_COLS: usize = 1600;
+
 /// Launch the desktop app. Blocks until the window closes.
 pub fn run() -> eframe::Result<()> {
     let options = eframe::NativeOptions {
@@ -112,6 +116,11 @@ pub struct TermKrushApp {
     jog_source: Option<PathBuf>,
     /// The pad whose clip is open in the editor (central-panel mode).
     clip_edit: Option<usize>,
+    /// Cached clip-editor waveform `(pad, peaks)` — computed once on open so the
+    /// whole-clip downsample doesn't run every frame (which starved the audio).
+    clip_wave: Option<(usize, Vec<(f32, f32)>)>,
+    /// Cached scratch-platter waveform peaks (computed once when armed).
+    jog_wave: Vec<(f32, f32)>,
 
     producer: Option<rtrb::Producer<f32>>,
     _audio: Option<AudioOutput>,
@@ -163,6 +172,8 @@ impl TermKrushApp {
             new_folder: None,
             jog_source: None,
             clip_edit: None,
+            clip_wave: None,
+            jog_wave: Vec::new(),
             producer,
             _audio: audio,
             out_channels: channels.max(1),
@@ -260,7 +271,10 @@ impl TermKrushApp {
                     self.loading[i] = false;
                 }
                 Target::Preview => self.mixer.preview(done.audio.samples),
-                Target::Jog => self.mixer.set_jog_source(done.audio.samples),
+                Target::Jog => {
+                    self.mixer.set_jog_source(done.audio.samples);
+                    self.jog_wave = self.mixer.jog_peaks(WAVE_COLS);
+                }
             }
         }
     }
@@ -337,11 +351,14 @@ impl TermKrushApp {
             Act::EditClip(i) => {
                 self.mixer.stop_pad(i); // silence live playback before editing
                 self.clip_edit = Some(i);
+                // Downsample the whole clip ONCE; reused every frame while editing.
+                self.clip_wave = Some((i, self.mixer.pad_peaks(i, WAVE_COLS)));
             }
             Act::CloseClip => {
                 if let Some(i) = self.clip_edit.take() {
                     self.mixer.stop_pad(i);
                 }
+                self.clip_wave = None;
             }
             Act::SetTrimIn(i, f) => self.mixer.set_pad_trim_in(i, f),
             Act::SetTrimOut(i, f) => self.mixer.set_pad_trim_out(i, f),
@@ -388,6 +405,7 @@ impl TermKrushApp {
                     if self.mixer.has_jog() && ui.small_button("clear").clicked() {
                         self.mixer.clear_jog();
                         self.jog_source = None;
+                        self.jog_wave.clear();
                     }
                 });
                 ui.add_space(4.0);
@@ -448,15 +466,18 @@ impl TermKrushApp {
                     let wp = ui.painter_at(wr);
                     wp.rect_filled(wr, 4.0, GROUND);
                     wp.rect_stroke(wr, 4.0, egui::Stroke::new(1.0, LINE));
-                    if len > 0 {
+                    if len > 0 && !self.jog_wave.is_empty() {
                         let cols = wr.width() as usize;
-                        let peaks = self.mixer.jog_peaks(cols);
                         let mid = wr.center().y;
                         let amp = wr.height() * 0.42;
-                        for (i, (lo, hi)) in peaks.iter().enumerate() {
-                            let x = wr.left() + i as f32;
+                        for x in 0..cols {
+                            let (lo, hi) = self.jog_wave[x * self.jog_wave.len() / cols.max(1)];
+                            let xf = wr.left() + x as f32;
                             wp.line_segment(
-                                [egui::pos2(x, mid - hi * amp), egui::pos2(x, mid - lo * amp)],
+                                [
+                                    egui::pos2(xf, mid - hi * amp),
+                                    egui::pos2(xf, mid - lo * amp),
+                                ],
                                 egui::Stroke::new(1.0, DIM),
                             );
                         }
@@ -545,6 +566,7 @@ impl eframe::App for TermKrushApp {
                 new_folder,
                 playable,
                 clip_edit,
+                clip_wave,
                 ..
             } = self;
             draw_timeline_strip(ctx, mixer);
@@ -553,7 +575,12 @@ impl eframe::App for TermKrushApp {
             );
             // Central panel: the clip editor when one is open, else the pads.
             if let Some(i) = *clip_edit {
-                draw_clip_editor(ctx, mixer, pad_source, i, &mut acts);
+                let wave = clip_wave
+                    .as_ref()
+                    .filter(|(p, _)| *p == i)
+                    .map(|(_, w)| w.as_slice())
+                    .unwrap_or(&[]);
+                draw_clip_editor(ctx, mixer, pad_source, i, wave, &mut acts);
             } else {
                 draw_pad_grid(ctx, mixer, pad_source, loading, &mut acts);
             }
@@ -905,6 +932,7 @@ fn draw_clip_editor(
     mixer: &Mixer,
     pad_source: &[Option<PathBuf>; PADS],
     i: usize,
+    wave: &[(f32, f32)],
     acts: &mut Vec<Act>,
 ) {
     egui::CentralPanel::default().show(ctx, |ui| {
@@ -964,8 +992,8 @@ fn draw_clip_editor(
         let x_of = |frame: usize| rect.left() + (frame as f32 / len as f32) * rect.width();
 
         let cols = rect.width() as usize;
-        let peaks = mixer.pad_peaks(i, cols);
-        for (c, (lo, hi)) in peaks.iter().enumerate() {
+        for c in 0..cols.min(if wave.is_empty() { 0 } else { cols }) {
+            let (lo, hi) = wave[c * wave.len() / cols.max(1)];
             let x = rect.left() + c as f32;
             let frame = (c as f32 / cols.max(1) as f32 * len as f32) as usize;
             let inside = frame >= inp && frame < out;

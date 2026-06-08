@@ -2,12 +2,14 @@
 title: Free-track arrangement model in the core engine (blocks on tracks)
 type: feature
 created: "2026-06-08T13:02:29Z"
-modified: "2026-06-08T13:02:30Z"
+modified: "2026-06-08T13:04:22Z"
 author: Matt Reider
-status: started
+status: delivered
 estimate: "5"
 epic: gui
 started: "2026-06-08T13:02:30Z"
+finished: "2026-06-08T13:04:22Z"
+delivered: "2026-06-08T13:04:22Z"
 ---
 
 ## Goal

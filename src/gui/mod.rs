@@ -18,12 +18,16 @@ use termkrush_core::config::Config;
 use termkrush_core::library::Crate;
 use termkrush_core::mix::{Mixer, PadKind, PADS};
 
-// CRT identity, modernized: near-black ground, green text, amber accents.
-const GREEN: egui::Color32 = egui::Color32::from_rgb(0x3a, 0xf0, 0x6a);
-const AMBER: egui::Color32 = egui::Color32::from_rgb(0xff, 0xb0, 0x14);
+// The landing-page palette (index.html CSS vars), so the app matches the site.
+// Body text is the cream `--ink`; amber/green are accents, not the text color.
+const INK: egui::Color32 = egui::Color32::from_rgb(0xe9, 0xe7, 0xd6); // --ink (primary text)
+const GREEN: egui::Color32 = egui::Color32::from_rgb(0x45, 0xf0, 0x7d); // --green (accent)
+const AMBER: egui::Color32 = egui::Color32::from_rgb(0xff, 0xb0, 0x00); // --amber (accent)
+const DIM: egui::Color32 = egui::Color32::from_rgb(0x7e, 0x8c, 0x7f); // --dim (muted)
 const RED: egui::Color32 = egui::Color32::from_rgb(0xff, 0x52, 0x52);
-const GROUND: egui::Color32 = egui::Color32::from_rgb(0x0a, 0x0d, 0x0a);
-const PANEL: egui::Color32 = egui::Color32::from_rgb(0x10, 0x14, 0x10);
+const GROUND: egui::Color32 = egui::Color32::from_rgb(0x06, 0x09, 0x07); // --bg
+const PANEL: egui::Color32 = egui::Color32::from_rgb(0x16, 0x1b, 0x16); // panel fill
+const LINE: egui::Color32 = egui::Color32::from_rgb(0x1d, 0x27, 0x1f); // --line (borders)
 
 /// Launch the desktop app. Blocks until the window closes.
 pub fn run() -> eframe::Result<()> {
@@ -398,7 +402,7 @@ impl TermKrushApp {
                     ui.allocate_exact_size(egui::vec2(width, 48.0), egui::Sense::click_and_drag());
                 let painter = ui.painter_at(rect);
                 painter.rect_filled(rect, 4.0, GROUND);
-                painter.rect_stroke(rect, 4.0, egui::Stroke::new(1.0, GREEN.gamma_multiply(0.5)));
+                painter.rect_stroke(rect, 4.0, egui::Stroke::new(1.0, DIM));
                 let len = self.mixer.jog_len();
                 if len > 0 {
                     if let Some(pos) = self.mixer.jog_position() {
@@ -508,16 +512,40 @@ impl eframe::App for TermKrushApp {
     }
 }
 
-/// Apply the CRT amber/green look and a monospace face everywhere.
+/// Apply the landing-page palette + a monospace face. Body text is cream
+/// `INK` (set via the widget strokes, NOT `override_text_color` — overriding
+/// would flatten the amber/green accents into one low-contrast colour, which
+/// was the "barely visible" bug). Amber/green stay as per-widget accents.
 fn apply_crt_theme(ctx: &egui::Context) {
     let mut v = egui::Visuals::dark();
-    v.override_text_color = Some(GREEN);
+    v.override_text_color = None;
+
+    // Surfaces.
     v.panel_fill = GROUND;
     v.window_fill = PANEL;
     v.extreme_bg_color = GROUND;
-    v.widgets.noninteractive.bg_fill = PANEL;
-    v.widgets.inactive.bg_fill = PANEL;
-    v.selection.bg_fill = AMBER.gamma_multiply(0.35);
+    v.window_stroke = egui::Stroke::new(1.0, LINE);
+
+    // Text: cream ink at rest, amber on hover/active. Widget fills are panels;
+    // borders are the dim `--line`.
+    let line = egui::Stroke::new(1.0, LINE);
+    for w in [
+        &mut v.widgets.noninteractive,
+        &mut v.widgets.inactive,
+        &mut v.widgets.hovered,
+        &mut v.widgets.active,
+        &mut v.widgets.open,
+    ] {
+        w.bg_fill = PANEL;
+        w.weak_bg_fill = PANEL;
+        w.bg_stroke = line;
+        w.fg_stroke = egui::Stroke::new(1.0, INK);
+    }
+    v.widgets.hovered.fg_stroke = egui::Stroke::new(1.0, AMBER);
+    v.widgets.active.fg_stroke = egui::Stroke::new(1.0, AMBER);
+    v.widgets.hovered.bg_stroke = egui::Stroke::new(1.0, AMBER);
+
+    v.selection.bg_fill = AMBER.gamma_multiply(0.30);
     v.selection.stroke = egui::Stroke::new(1.0, AMBER);
     ctx.set_visuals(v);
 
@@ -811,11 +839,7 @@ fn draw_clip_editor(
             let x = rect.left() + c as f32;
             let frame = (c as f32 / cols.max(1) as f32 * len as f32) as usize;
             let inside = frame >= inp && frame < out;
-            let color = if inside {
-                AMBER
-            } else {
-                GREEN.gamma_multiply(0.35)
-            };
+            let color = if inside { AMBER } else { DIM };
             painter.line_segment(
                 [egui::pos2(x, mid - hi * amp), egui::pos2(x, mid - lo * amp)],
                 egui::Stroke::new(1.0, color),
@@ -882,14 +906,7 @@ fn draw_pad_cell(
         .unwrap_or("");
     let frame = egui::Frame::group(ui.style())
         .fill(PANEL)
-        .stroke(egui::Stroke::new(
-            1.0,
-            if loaded {
-                AMBER
-            } else {
-                GREEN.gamma_multiply(0.4)
-            },
-        ));
+        .stroke(egui::Stroke::new(1.0, if loaded { AMBER } else { LINE }));
     let _ = kind;
     let (inner, payload) = ui.dnd_drop_zone::<DragTrack, _>(frame, |ui| {
         ui.set_width(w - 16.0);

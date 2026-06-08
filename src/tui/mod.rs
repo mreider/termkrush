@@ -191,6 +191,10 @@ pub struct App {
     clip_edit: Option<usize>,
     ce_out: bool,
     ce_zoom: usize,
+    /// The pad's trim when the clip editor opened (to detect changes / revert).
+    ce_orig_trim: (usize, usize),
+    /// Pending "save trim changes?" confirm on closing the clip editor.
+    confirm_save_clip: Option<usize>,
     /// Arrangement transport.
     playing: bool,
     play_acc: f64,          // frames accumulated toward the next step
@@ -238,6 +242,8 @@ impl App {
             clip_edit: None,
             ce_out: false,
             ce_zoom: 0,
+            ce_orig_trim: (0, 0),
+            confirm_save_clip: None,
             playing: false,
             play_acc: 0.0,
             play_step: 0,
@@ -426,7 +432,7 @@ impl App {
             return "↑↓ choose · enter do · esc close";
         }
         if self.clip_edit.is_some() {
-            return "←→ move · +/- zoom · tab in/out (follows) · space play · enter snip · esc done";
+            return "←→ move · +/- zoom · tab in/out · space start over · esc stop / close";
         }
         match self.focus {
             Focus::Crate if self.crate_active => {
@@ -444,13 +450,20 @@ impl App {
     fn play(&mut self) -> Action {
         match self.focus {
             Focus::Pad(i) => {
+                // Stopping the arrangement first keeps live play exclusive.
                 if self.playing {
                     self.playing = false;
                     self.mixer.clear_voices();
-                } else {
-                    self.mixer.stop_pad(i); // re-trigger restarts, never stacks
                 }
-                self.trigger(i)
+                // While recording a scratch phrase, Space always taps (no pause).
+                if self.phrase_rec == Some(i) {
+                    self.trigger(i)
+                } else if self.mixer.pad_is_sounding(i) {
+                    self.mixer.stop_pad(i); // pause
+                    Action::Mark
+                } else {
+                    self.trigger(i) // play
+                }
             }
             Focus::Timeline => self.toggle_transport(),
             // In the library, Space previews the highlighted song (toggle).
@@ -939,6 +952,7 @@ impl App {
                 self.clip_edit = Some(i);
                 self.ce_out = false; // start on the in (left) mark
                 self.ce_zoom = 0; // whole clip
+                self.ce_orig_trim = self.mixer.pad_trim(i); // to detect/revert edits
                 return Action::Mark;
             }
         }
@@ -956,9 +970,10 @@ impl App {
     }
 
     /// Handle a key while the clip-edit modal is open. `Tab` switches the
-    /// active mark (and the window follows it), `←/→` nudge it by ~one column
-    /// at the current zoom, `+`/`-` zoom, `space` auditions, `enter` snips,
-    /// `esc` closes.
+    /// active mark (the window follows it), `←/→` nudge it by ~one column at
+    /// the current zoom, `+`/`-` zoom, `space` re-plays (starts over) the
+    /// audition, `esc` stops it — and a 2nd `esc` closes (asking to save if you
+    /// moved the handles).
     fn on_clip_key(&mut self, key: KeyEvent) -> Option<Action> {
         let i = self.clip_edit?;
         let len = self.mixer.pad_clip_frames(i).max(1);
@@ -968,8 +983,13 @@ impl App {
         let nudge = |v: usize, d: i64| (v as i64 + d).max(0) as usize;
         match key.code {
             KeyCode::Esc => {
-                self.clip_edit = None;
-                self.mixer.stop_pad(i); // stop the audition preview on close
+                if self.mixer.pad_is_sounding(i) {
+                    self.mixer.stop_pad(i); // 1st esc stops the audition
+                } else if self.mixer.pad_trim(i) != self.ce_orig_trim {
+                    self.confirm_save_clip = Some(i); // moved handles → ask to save
+                } else {
+                    self.clip_edit = None; // unchanged → just close
+                }
                 Some(Action::Mark)
             }
             KeyCode::Tab | KeyCode::Up | KeyCode::Down => {
@@ -998,25 +1018,15 @@ impl App {
                 Some(Action::Mark)
             }
             KeyCode::Char(' ') => {
-                // Toggle the audition. Play ~1.5s AT the active handle so you
-                // hear the exact edit point: the in-handle plays forward from
-                // in; the out-handle plays the run-up to out.
-                if self.mixer.pad_is_sounding(i) {
-                    self.mixer.stop_pad(i);
+                // Start over: replay ~1.5s AT the active handle so you hear the
+                // exact edit point (in plays forward from in; out plays up to out).
+                let prev = (self.mixer.sample_rate() as usize * 3 / 2).max(1); // ~1.5s
+                let (from, to) = if self.ce_out {
+                    (out.saturating_sub(prev).max(inp), out)
                 } else {
-                    let prev = (self.mixer.sample_rate() as usize * 3 / 2).max(1); // ~1.5s
-                    let (from, to) = if self.ce_out {
-                        (out.saturating_sub(prev).max(inp), out)
-                    } else {
-                        (inp, (inp + prev).min(out))
-                    };
-                    self.mixer.audition_region(i, from, to);
-                }
-                Some(Action::Mark)
-            }
-            KeyCode::Enter => {
-                self.mixer.snip_pad(i); // destructively keep only [in, out]
-                self.ce_out = false;
+                    (inp, (inp + prev).min(out))
+                };
+                self.mixer.audition_region(i, from, to);
                 Some(Action::Mark)
             }
             _ => None,
@@ -1224,6 +1234,31 @@ impl App {
             };
         }
 
+        // Save-changes-on-close (clip editor): y keeps the trim, n reverts it,
+        // esc stays in the editor.
+        if let Some(i) = self.confirm_save_clip {
+            return match key.code {
+                KeyCode::Char('y') | KeyCode::Char('Y') => {
+                    self.confirm_save_clip = None;
+                    self.clip_edit = None;
+                    self.mixer.stop_pad(i);
+                    Action::Mark
+                }
+                KeyCode::Char('n') | KeyCode::Char('N') => {
+                    let (a, b) = self.ce_orig_trim;
+                    self.mixer.set_pad_trim_out(i, b); // restore order-safe
+                    self.mixer.set_pad_trim_in(i, a);
+                    self.confirm_save_clip = None;
+                    self.clip_edit = None;
+                    self.mixer.stop_pad(i);
+                    Action::Mark
+                }
+                _ => {
+                    self.confirm_save_clip = None; // esc: back to editing
+                    Action::Mark
+                }
+            };
+        }
         // Overwrite-confirm: y loads over the existing pad, anything else cancels.
         if let Some((pad, file)) = self.confirm_override.clone() {
             self.confirm_override = None;
@@ -1602,6 +1637,8 @@ fn draw_timeline_strip(f: &mut Frame, area: Rect, app: &App) {
 fn return_help(f: &mut Frame, app: &App) {
     if app.confirm_quit {
         draw_quit_modal(f, f.area());
+    } else if app.confirm_save_clip.is_some() {
+        draw_confirm_modal(f, f.area(), "Save changes?");
     } else if let Some((pad, _)) = &app.confirm_override {
         draw_confirm_modal(
             f,
@@ -2520,43 +2557,57 @@ mod tests {
     }
 
     #[test]
-    fn clip_edit_marks_audition_and_snips_both_sides() {
+    fn clip_edit_marks_audition_and_saves_on_close() {
+        let esc = || KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE);
         let mut app = App::new();
         app.mixer.set_sample_rate(1000);
-        app.mixer.assign_pad(0, vec![0.5; 12_800]); // 6400 frames → step = 6400/64 = 100
+        app.mixer.assign_pad(0, vec![0.5; 12_800]); // 6400 frames → step = 100
         app.set_focus(Focus::Pad(0));
-        let enter = || KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE);
-        app.run_menu(MenuAction::EditClip); // menu → edit clip opens the editor
+        app.run_menu(MenuAction::EditClip);
         assert!(app.clip_edit.is_some() && !app.ce_out);
-        // Move the IN mark right 5×100 = 500 frames.
+        // Move the IN mark right 5×100 = 500.
         for _ in 0..5 {
             app.on_key(KeyEvent::new(KeyCode::Right, KeyModifiers::NONE));
         }
         assert_eq!(app.mixer.pad_trim(0).0, 500, "in mark moved");
-        // Tab to the OUT mark, pull it left 5×100 → out 5900.
+        // Tab to OUT, pull left 5×100 → out 5900.
         app.on_key(KeyEvent::new(KeyCode::Tab, KeyModifiers::NONE));
-        assert!(app.ce_out);
         for _ in 0..5 {
             app.on_key(KeyEvent::new(KeyCode::Left, KeyModifiers::NONE));
         }
         assert_eq!(app.mixer.pad_trim(0).1, 5900, "out mark moved");
-        // Space auditions the selection.
+        // Space auditions; Esc stops it.
         app.on_key(key(' '));
         assert_eq!(app.mixer.active_voices(), 1, "audition the selection");
-        // Enter snips, keeping only [500, 5900) = 5400 frames, reset to [0, len].
-        app.on_key(enter());
+        app.on_key(esc());
+        assert_eq!(app.mixer.active_voices(), 0, "esc stops the audition");
+        // Esc again: handles moved → save prompt; y keeps the trim, closes.
+        app.on_key(esc());
         assert_eq!(
-            app.mixer.pad_clip_frames(0),
-            5400,
-            "snipped to the selection"
+            app.confirm_save_clip,
+            Some(0),
+            "moved handles → save prompt"
         );
-        assert_eq!(
-            app.mixer.pad_trim(0),
-            (0, 5400),
-            "snip becomes the new full clip"
-        );
-        app.on_key(KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE));
+        app.on_key(key('y'));
         assert!(app.clip_edit.is_none());
+        assert_eq!(app.mixer.pad_trim(0), (500, 5900), "trim kept on save");
+    }
+
+    #[test]
+    fn clip_edit_discard_reverts_the_trim() {
+        let esc = || KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE);
+        let mut app = App::new();
+        app.mixer.set_sample_rate(1000);
+        app.mixer.assign_pad(0, vec![0.5; 12_800]);
+        app.set_focus(Focus::Pad(0));
+        app.run_menu(MenuAction::EditClip);
+        let orig = app.mixer.pad_trim(0);
+        app.on_key(KeyEvent::new(KeyCode::Right, KeyModifiers::NONE)); // move in
+        app.on_key(esc()); // not sounding → save prompt
+        assert_eq!(app.confirm_save_clip, Some(0));
+        app.on_key(key('n')); // discard
+        assert!(app.clip_edit.is_none());
+        assert_eq!(app.mixer.pad_trim(0), orig, "trim reverted on discard");
     }
 
     #[test]
@@ -2806,25 +2857,36 @@ mod tests {
         app.run_menu(MenuAction::EditClip);
         app.on_key(key(' '));
         assert_eq!(app.mixer.active_voices(), 1);
-        // Esc out → the audition stops.
+        // Esc stops the audition (editor stays open), Esc again closes (no
+        // handle moved → no save prompt).
         app.on_key(KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE));
-        assert_eq!(app.mixer.active_voices(), 0, "audition stops on close");
-        // Play the pad twice → still one voice (re-trigger restarts).
+        assert_eq!(app.mixer.active_voices(), 0, "first esc stops the audition");
+        app.on_key(KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE));
+        assert!(app.clip_edit.is_none(), "second esc closes");
+        // On the pad: Space plays; Space again pauses (toggle, no stacking).
         app.on_key(key(' '));
+        assert_eq!(app.mixer.active_voices(), 1, "space plays");
         app.on_key(key(' '));
-        assert_eq!(app.mixer.active_voices(), 1, "re-trigger does not stack");
+        assert_eq!(app.mixer.active_voices(), 0, "space again pauses");
     }
 
     #[test]
-    fn clip_editor_space_toggles_the_audition() {
+    fn clip_editor_space_starts_over_esc_stops() {
         let mut app = App::new();
         app.mixer.assign_pad(0, vec![0.5; 4000]);
         app.set_focus(Focus::Pad(0));
         app.run_menu(MenuAction::EditClip); // open editor
         app.on_key(key(' ')); // play the audition
         assert!(app.mixer.pad_is_sounding(0), "space plays");
-        app.on_key(key(' ')); // press again → stop
-        assert!(!app.mixer.pad_is_sounding(0), "space again pauses");
+        app.on_key(key(' ')); // space again restarts (still one voice)
+        assert!(
+            app.mixer.pad_is_sounding(0),
+            "space starts over, still playing"
+        );
+        assert_eq!(app.mixer.active_voices(), 1, "no stacking");
+        app.on_key(KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE)); // esc stops
+        assert!(!app.mixer.pad_is_sounding(0), "esc stops the audition");
+        assert!(app.clip_edit.is_some(), "editor stays open");
     }
 
     #[test]
@@ -2932,10 +2994,10 @@ mod tests {
         assert_eq!(app.mixer.pad_phrase_len(0), 3);
         app.run_menu(MenuAction::PhraseRec); // stop recording
         assert_eq!(app.phrase_rec, None);
-        // Now space plays the stored phrase — as exactly one voice (re-trigger
-        // clears any leftover tap voices first).
+        // Clear the lingering tap voices, then Space plays the stored phrase.
+        app.mixer.clear_voices();
         app.on_key(key(' '));
-        assert_eq!(app.mixer.active_voices(), 1);
+        assert_eq!(app.mixer.active_voices(), 1, "space plays the phrase");
     }
 
     #[test]
@@ -3036,8 +3098,7 @@ mod tests {
         app.mixer.set_pad_bpm(0, Some(120.0));
         app.mixer.set_master_bpm(Some(120.0));
 
-        let enter = || KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE);
-        // Pad 0 → loop (via menu); pad 1 → clip-edit (trim + snip) then back.
+        // Pad 0 → loop (via menu); pad 1 → clip-edit (trim) then back.
         app.set_focus(Focus::Pad(0));
         app.run_menu(MenuAction::CycleKind);
         assert_eq!(app.mixer.pad_kind(0), PadKind::Loop);
@@ -3047,8 +3108,9 @@ mod tests {
             app.on_key(KeyEvent::new(KeyCode::Right, KeyModifiers::NONE)); // move in-mark
         }
         app.on_key(key(' ')); // audition
-        app.on_key(enter()); // snip
-        app.on_key(KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE)); // close
+        app.on_key(KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE)); // esc stops audition
+        app.on_key(KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE)); // esc → save prompt (moved)
+        app.on_key(key('y')); // save the trim + close
         assert!(app.clip_edit.is_none());
 
         // Arrange on the timeline: place a hit, play, pause, render.

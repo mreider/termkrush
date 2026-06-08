@@ -39,6 +39,20 @@ use termkrush_core::timeline::Timeline;
 /// Per-keypress master-gain nudge (linear).
 const GAIN_NUDGE: f32 = 0.05;
 
+/// Clip-editor zoom levels — the window span. Index 0 = the whole clip.
+const CE_ZOOM_SECS: [f64; 5] = [0.0, 10.0, 1.0, 0.1, 0.01];
+const CE_ZOOM_LABELS: [&str; 5] = ["whole", "10s", "1s", "100ms", "10ms"];
+
+/// `(lo, hi)` frame bounds of a `span`-wide window centered on `center`,
+/// clamped inside `0..len`.
+fn window_bounds(center: usize, span: usize, len: usize) -> (usize, usize) {
+    let span = span.clamp(1, len.max(1));
+    let half = span / 2;
+    let lo = center.saturating_sub(half);
+    let hi = (lo + span).min(len);
+    (hi.saturating_sub(span), hi)
+}
+
 /// CRT amber, `#ffb000` — the wordmark and accents.
 pub const AMBER: Color = Color::Rgb(0xff, 0xb0, 0x00);
 /// CRT green, `#45f07d` — secondary text.
@@ -157,9 +171,10 @@ pub struct App {
     /// Open context menu (M), if any.
     menu: Option<MenuState>,
     /// Clip-edit modal: the pad being edited + which mark is active
-    /// (`false` = in/left, `true` = out/right).
+    /// (`false` = in/left, `true` = out/right) + the zoom level index.
     clip_edit: Option<usize>,
     ce_out: bool,
+    ce_zoom: usize,
     /// Arrangement transport.
     playing: bool,
     play_acc: f64,          // frames accumulated toward the next step
@@ -202,6 +217,7 @@ impl App {
             menu: None,
             clip_edit: None,
             ce_out: false,
+            ce_zoom: 0,
             playing: false,
             play_acc: 0.0,
             play_step: 0,
@@ -405,7 +421,7 @@ impl App {
             return "↑↓ choose · enter do · esc close";
         }
         if self.clip_edit.is_some() {
-            return "←→ move · shift = fine · tab in/out · space play · enter snip · esc done";
+            return "←→ move · +/- zoom · tab in/out (follows) · space play · enter snip · esc done";
         }
         match self.focus {
             Focus::Crate => "↑↓ browse · enter menu · tab → pads",
@@ -790,23 +806,32 @@ impl App {
             if self.mixer.pad_loaded(i) {
                 self.clip_edit = Some(i);
                 self.ce_out = false; // start on the in (left) mark
+                self.ce_zoom = 0; // whole clip
                 return Action::Mark;
             }
         }
         Action::None
     }
 
+    /// Frames the clip-edit window spans at the current zoom (whole clip at
+    /// zoom 0).
+    fn ce_window_frames(&self, len: usize) -> usize {
+        if self.ce_zoom == 0 {
+            return len.max(1);
+        }
+        let s = CE_ZOOM_SECS[self.ce_zoom.min(CE_ZOOM_SECS.len() - 1)];
+        ((s * self.mixer.sample_rate() as f64) as usize).clamp(1, len.max(1))
+    }
+
     /// Handle a key while the clip-edit modal is open. `Tab` switches the
-    /// active mark (in/out), `←/→` move it (shift = coarse), `space` auditions
-    /// the selection, `x` snips both sides, `e`/esc close.
+    /// active mark (and the window follows it), `←/→` nudge it by ~one column
+    /// at the current zoom, `+`/`-` zoom, `space` auditions, `enter` snips,
+    /// `esc` closes.
     fn on_clip_key(&mut self, key: KeyEvent) -> Option<Action> {
         let i = self.clip_edit?;
-        let rate = self.mixer.sample_rate() as usize;
         let len = self.mixer.pad_clip_frames(i).max(1);
-        let shift = key.modifiers.contains(KeyModifiers::SHIFT);
-        // Default step ≈ one bar-column so the mark visibly moves on any song;
-        // shift ≈ 1 ms for sample-close precision.
-        let step = (if shift { rate / 1000 } else { len / 64 }).max(1) as i64;
+        // One press ≈ one column of the current window, so precision = zoom.
+        let step = (self.ce_window_frames(len) / 64).max(1) as i64;
         let (inp, out) = self.mixer.pad_trim(i);
         let nudge = |v: usize, d: i64| (v as i64 + d).max(0) as usize;
         match key.code {
@@ -815,7 +840,15 @@ impl App {
                 Some(Action::Mark)
             }
             KeyCode::Tab | KeyCode::Up | KeyCode::Down => {
-                self.ce_out = !self.ce_out; // switch active mark
+                self.ce_out = !self.ce_out; // switch active mark (window follows)
+                Some(Action::Mark)
+            }
+            KeyCode::Char('+') | KeyCode::Char('=') => {
+                self.ce_zoom = (self.ce_zoom + 1).min(CE_ZOOM_SECS.len() - 1);
+                Some(Action::Mark)
+            }
+            KeyCode::Char('-') => {
+                self.ce_zoom = self.ce_zoom.saturating_sub(1);
                 Some(Action::Mark)
             }
             KeyCode::Left | KeyCode::Right => {
@@ -1217,29 +1250,38 @@ pub fn draw(f: &mut Frame, app: &App) {
     return_help(f, app);
 }
 
-/// The clip-edit modal: the focused pad's clip as a bar, with the trimmed
-/// region filled, the in/out handles, and a movable cursor. Arrows move the
-/// cursor; i/o set in/out; x truncates at the cursor.
+/// The clip-edit modal: a fixed-width bar showing a zoomable WINDOW of the
+/// clip that follows the active handle, a full-clip minimap, and a readout.
 fn draw_clip_edit(f: &mut Frame, area: Rect, app: &App, pad: usize) {
     let len = app.mixer.pad_clip_frames(pad).max(1);
     let (inp, out) = app.mixer.pad_trim(pad);
     let rate = app.mixer.sample_rate().max(1) as f64;
     let secs = |fr: usize| fr as f64 / rate;
-    let active = if app.ce_out {
-        "moving OUT ▸"
-    } else {
-        "◀ moving IN"
-    };
-    let title = format!("Edit Pad {} — {active}", pad + 1);
+    let active = if app.ce_out { "OUT ▸" } else { "◀ IN" };
+    let zoom = CE_ZOOM_LABELS[app.ce_zoom.min(CE_ZOOM_LABELS.len() - 1)];
+    let title = format!(
+        "Edit Pad {} — moving {active}  ·  zoom {zoom}  (+/-)",
+        pad + 1
+    );
     let block = cell_block(&title, true);
     let inner = block.inner(area);
-    // The whole clip always scaled into a fixed-width bar that fits the screen
-    // ("  [" prefix + bar + "]" must stay within inner.width).
     let w = (inner.width as usize).saturating_sub(6).clamp(8, 72);
-    let col = |fr: usize| (fr.min(len) * w / len).min(w.saturating_sub(1));
+
+    // The window of the clip we're looking at, centered on the active handle.
+    let span = app.ce_window_frames(len);
+    let center = if app.ce_out { out } else { inp };
+    let (lo, hi) = window_bounds(center, span, len);
+    let win = (hi - lo).max(1);
+    // A frame→column mapper over an arbitrary range.
+    let map = |fr: usize, a: usize, b: usize| {
+        let r = (b - a).max(1);
+        ((fr.saturating_sub(a)) * w / r).min(w - 1)
+    };
+
+    // Main bar: the window. Filled where inside [in, out); handles where visible.
     let mut bar: Vec<char> = (0..w)
         .map(|c| {
-            let fr = c * len / w;
+            let fr = lo + c * win / w;
             if fr >= inp && fr < out {
                 '█'
             } else {
@@ -1247,18 +1289,40 @@ fn draw_clip_edit(f: &mut Frame, area: Rect, app: &App, pad: usize) {
             }
         })
         .collect();
-    // In/out handles; the active one is doubled so it stands out.
-    bar[col(inp)] = if app.ce_out { '◂' } else { '◀' };
-    bar[col(out.saturating_sub(1))] = if app.ce_out { '▶' } else { '▸' };
+    if (lo..hi).contains(&inp) {
+        bar[map(inp, lo, hi)] = if app.ce_out { '◂' } else { '◀' };
+    }
+    if out > 0 && (lo..=hi).contains(&(out - 1).max(lo)) && out > lo {
+        bar[map(out.saturating_sub(1).max(lo), lo, hi)] = if app.ce_out { '▶' } else { '▸' };
+    }
+
+    // Minimap: the whole clip, with the visible window marked and both handles.
+    let mut mini: Vec<char> = (0..w)
+        .map(|c| {
+            let fr = c * len / w;
+            if fr >= lo && fr < hi {
+                '─'
+            } else {
+                '·'
+            }
+        })
+        .collect();
+    mini[map(inp, 0, len)] = '◀';
+    mini[map(out.saturating_sub(1), 0, len)] = '▸';
+
     let lines = vec![
-        Line::from(""),
         Line::from(format!("  [{}]", bar.iter().collect::<String>())),
         Line::from(""),
         Line::from(format!(
-            "  in {:.2}s   out {:.2}s   selection {:.2}s   (clip {:.2}s)",
+            "  in {:.3}s   out {:.3}s   selection {:.3}s",
             secs(inp),
             secs(out),
             secs(out.saturating_sub(inp)),
+        )),
+        Line::from(""),
+        Line::from(format!(
+            "  whole: {}  ({:.2}s)",
+            mini.iter().collect::<String>(),
             secs(len)
         )),
     ];
@@ -2144,20 +2208,28 @@ mod tests {
     }
 
     #[test]
-    fn clip_editor_shift_arrow_is_fine() {
+    fn clip_editor_zoom_makes_arrow_steps_fine() {
         let mut app = App::new();
         app.mixer.set_sample_rate(48_000);
         app.mixer.assign_pad(0, vec![0.5; 48_000 * 2 * 60]); // a long (60s) clip
         app.set_focus(Focus::Pad(0));
         app.run_menu(MenuAction::EditClip);
-        // Coarse: one ←/→ moves a big chunk of a long song.
+        assert_eq!(app.ce_zoom, 0, "opens at whole-clip zoom");
+        // Whole-clip zoom: one ←/→ moves a big chunk of a long song.
         app.on_key(KeyEvent::new(KeyCode::Right, KeyModifiers::NONE));
-        let coarse = app.mixer.pad_trim(0).0;
-        assert!(coarse > 10_000, "default step is coarse on a long song");
-        // Shift: ~1 ms (48 frames) — fine enough to dial in the start.
-        app.mixer.set_pad_trim_in(0, 0); // back to the start
-        app.on_key(KeyEvent::new(KeyCode::Right, KeyModifiers::SHIFT));
-        assert_eq!(app.mixer.pad_trim(0).0, 48, "shift = ~1ms fine");
+        assert!(app.mixer.pad_trim(0).0 > 10_000, "coarse at whole zoom");
+        // Zoom all the way in (+ four times → 10ms window).
+        app.mixer.set_pad_trim_in(0, 0);
+        for _ in 0..4 {
+            app.on_key(key('+'));
+        }
+        assert_eq!(app.ce_zoom, 4);
+        // At a 10ms window (480 frames), a step is 480/64 = 7 frames (~0.15ms).
+        app.on_key(KeyEvent::new(KeyCode::Right, KeyModifiers::NONE));
+        assert_eq!(app.mixer.pad_trim(0).0, 7, "fine step when zoomed in");
+        // Zoom back out coarsens it again.
+        app.on_key(key('-'));
+        assert_eq!(app.ce_zoom, 3);
     }
 
     #[test]

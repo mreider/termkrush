@@ -12,6 +12,7 @@
 //! - [`config`]  — user configuration.
 //! - [`logging`] — tracing setup for the binary.
 
+pub mod arrangement;
 pub mod audio;
 pub mod clip;
 pub mod config;

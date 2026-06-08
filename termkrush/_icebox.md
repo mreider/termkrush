@@ -26,3 +26,4 @@ Stack-rank order. Top is the highest priority. Edit by hand or via `am rank` / `
 - [Retire the TUI front-end once the GUI reaches parity](Retire-the-TUI-front-end-once-the-GUI-reaches-parity.md)
 - [Bug: scratch whip/wiki is not discoverable - no cue to set a pad to scratch](Bug-scratch-whip-wiki-is-not-discoverable-no-cue-to-set-a-pad-to-scratch.md)
 - [Retire the step-grid cell-toggle and tracker-only tests](Retire-the-step-grid-cell-toggle-and-tracker-only-tests.md)
+- [Free-track arrangement model in the core engine (blocks on tracks)](Free-track-arrangement-model-in-the-core-engine-blocks-on-tracks.md)

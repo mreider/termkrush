@@ -206,13 +206,15 @@ impl App {
         }
     }
 
-    /// Play / **pause** the transport. Pausing stops sound and holds the
-    /// position; resuming continues from there (not the top).
+    /// Play / **pause** the timeline transport. Pausing stops sound and holds
+    /// the position; resuming continues from there (not the top). Starting
+    /// clears live pad voices so the arrangement plays alone.
     fn toggle_transport(&mut self) -> Action {
         if self.playing {
             self.playing = false;
             self.silence_pads(); // pause = go quiet, keep play_step
         } else {
+            self.mixer.clear_voices(); // exclusive with live pad play
             self.playing = true;
             self.prev_run = [false; PADS]; // re-fire the current step's pads
             self.play_acc = self.frames_per_step(); // fire promptly
@@ -409,10 +411,18 @@ impl App {
         }
     }
 
-    /// Space — play the focused pad, or play/stop the arrangement.
+    /// Space — play the focused pad, or play/stop the arrangement. Triggering a
+    /// pad stops the timeline first, so live play and the arrangement never
+    /// sound at once.
     fn play(&mut self) -> Action {
         match self.focus {
-            Focus::Pad(i) => self.trigger(i),
+            Focus::Pad(i) => {
+                if self.playing {
+                    self.playing = false;
+                    self.mixer.clear_voices();
+                }
+                self.trigger(i)
+            }
             Focus::Timeline => self.toggle_transport(),
             Focus::Crate => Action::None,
         }
@@ -815,7 +825,12 @@ impl App {
                 Some(Action::Mark)
             }
             KeyCode::Char(' ') => {
-                self.mixer.audition_pad(i); // preview the selection
+                // Toggle the audition: play the selection, or stop it.
+                if self.mixer.pad_is_sounding(i) {
+                    self.mixer.stop_pad(i);
+                } else {
+                    self.mixer.audition_pad(i);
+                }
                 Some(Action::Mark)
             }
             KeyCode::Enter => {
@@ -2099,6 +2114,39 @@ mod tests {
         assert_eq!(app.play_step, pos, "paused holds position");
         app.toggle_transport(); // resume
         assert_eq!(app.play_step, pos, "resumes from where it paused");
+    }
+
+    #[test]
+    fn pad_play_and_timeline_play_are_mutually_exclusive() {
+        let mut app = App::new();
+        app.mixer.set_master_bpm(Some(120.0));
+        app.mixer.assign_pad(0, vec![0.5; 4000]);
+        app.mixer.assign_pad(1, vec![0.4; 4000]);
+        // Start the timeline.
+        app.set_focus(Focus::Timeline);
+        app.toggle_transport();
+        assert!(app.playing);
+        // Triggering a pad stops the timeline (no overlap).
+        app.set_focus(Focus::Pad(1));
+        app.on_key(key(' '));
+        assert!(!app.playing, "playing a pad stops the timeline");
+        assert_eq!(app.mixer.active_voices(), 1, "only the live pad sounds");
+        // Starting the timeline again clears the live voice.
+        app.set_focus(Focus::Timeline);
+        app.toggle_transport();
+        assert_eq!(app.mixer.active_voices(), 0, "timeline clears live voices");
+    }
+
+    #[test]
+    fn clip_editor_space_toggles_the_audition() {
+        let mut app = App::new();
+        app.mixer.assign_pad(0, vec![0.5; 4000]);
+        app.set_focus(Focus::Pad(0));
+        app.on_key(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE)); // open editor
+        app.on_key(key(' ')); // play the audition
+        assert!(app.mixer.pad_is_sounding(0), "space plays");
+        app.on_key(key(' ')); // press again → stop
+        assert!(!app.mixer.pad_is_sounding(0), "space again pauses");
     }
 
     #[test]

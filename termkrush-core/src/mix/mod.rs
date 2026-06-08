@@ -308,6 +308,24 @@ impl Mixer {
         }
     }
 
+    /// Stop every currently-sounding voice at once (keeps live pad play and
+    /// arrangement playback from overlapping).
+    pub fn clear_voices(&mut self) {
+        self.voices.clear();
+        self.scratch_voices.clear();
+    }
+
+    /// Stop pad `i`'s voices (e.g. to toggle an audition off).
+    pub fn stop_pad(&mut self, i: usize) {
+        self.voices.retain(|v| v.pad != i);
+        self.scratch_voices.retain(|v| v.pad != i);
+    }
+
+    /// Whether pad `i` currently has a sounding voice.
+    pub fn pad_is_sounding(&self, i: usize) -> bool {
+        self.voices.iter().any(|v| v.pad == i) || self.scratch_voices.iter().any(|v| v.pad == i)
+    }
+
     /// Audition pad `i`'s current trimmed selection `[in, out)` once, at
     /// native rate — stops any prior preview on that pad first.
     pub fn audition_pad(&mut self, i: usize) {

@@ -405,7 +405,7 @@ impl App {
         match self.focus {
             Focus::Crate => "↑↓ browse · enter load→pad · tab→pads · M menu",
             Focus::Pad(_) => "←→ pad · ↑↓ vol · space play · enter edit · tab→timeline · M menu",
-            Focus::Timeline => "←→ step · ↑↓ lane · space play · enter hit · tab→library · M menu",
+            Focus::Timeline => "←→ beat · ↑↓ pad-lane · enter place pad here · space play · M menu",
         }
     }
 
@@ -1264,7 +1264,18 @@ fn draw_timeline_strip(f: &mut Frame, area: Rect, app: &App) {
     let head = app.playhead();
     let mut lines: Vec<Line> = Vec::with_capacity(PADS);
     for lane in 0..PADS {
-        let mut s = format!(" P{} ", lane + 1);
+        // Label each lane with its pad's track so it's clear lane = pad.
+        let name = app.pad_source[lane]
+            .as_ref()
+            .and_then(|p| p.file_stem())
+            .and_then(|s| s.to_str())
+            .unwrap_or("—");
+        let mark = if focused && lane == app.tl_lane {
+            '▸'
+        } else {
+            ' '
+        };
+        let mut s = format!("{mark}P{} {name:<8.8} ", lane + 1);
         for step in 0..tl.total_steps() {
             if step > 0 && step % spb == 0 {
                 s.push('|'); // bar boundary

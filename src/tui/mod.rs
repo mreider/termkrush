@@ -74,6 +74,8 @@ pub enum Action {
     CrateNav,
     /// A track (crate selection or demo) is pending decode onto a pad.
     AssignPad,
+    /// A library song is pending decode for a one-shot preview.
+    Preview,
     TriggerPad,
     Mark,
     Record,
@@ -147,6 +149,8 @@ pub struct App {
     crate_collapsed: bool,
     /// A track pending background decode onto a pad: `(pad, path)`.
     pending_pad_load: Option<(usize, PathBuf)>,
+    /// A song pending background decode for a one-shot preview.
+    pending_preview: Option<PathBuf>,
     /// Per-pad "decoding in the background" flag, for the loading indicator.
     loading: [bool; PADS],
     /// Clips recorded this session (resamples of the live mix), newest last.
@@ -211,6 +215,7 @@ impl App {
             filter: None,
             crate_collapsed: false,
             pending_pad_load: None,
+            pending_preview: None,
             loading: [false; PADS],
             recordings: Vec::new(),
             bpm_cache: HashMap::new(),
@@ -446,7 +451,21 @@ impl App {
                 self.trigger(i)
             }
             Focus::Timeline => self.toggle_transport(),
-            Focus::Crate => Action::None,
+            // In the library, Space previews the highlighted song (toggle).
+            Focus::Crate => {
+                if self.mixer.is_previewing() {
+                    self.mixer.stop_preview();
+                    Action::Mark
+                } else if self.crate_active && !self.selected_is_dir() {
+                    if let Some(p) = self.selected_path() {
+                        self.pending_preview = Some(p);
+                        return Action::Preview;
+                    }
+                    Action::None
+                } else {
+                    Action::None
+                }
+            }
         }
     }
 
@@ -845,6 +864,10 @@ impl App {
 
     fn take_pending_pad_load(&mut self) -> Option<(usize, PathBuf)> {
         self.pending_pad_load.take()
+    }
+
+    fn take_pending_preview(&mut self) -> Option<PathBuf> {
+        self.pending_preview.take()
     }
 
     // ---- pad actions -------------------------------------------------------
@@ -1286,9 +1309,15 @@ impl App {
         }
     }
 
-    /// Apply a background-decoded track onto its pad.
+    /// Apply a background-decoded track: onto its pad, or play it as a preview.
     fn place_decoded(&mut self, d: Decoded) {
-        let LoadTarget::Pad(i) = d.target;
+        let i = match d.target {
+            LoadTarget::Pad(i) => i,
+            LoadTarget::Preview => {
+                self.mixer.preview(d.track.samples);
+                return;
+            }
+        };
         self.mixer.assign_pad(i, d.track.samples);
         if let Some(b) = d.bpm {
             self.mixer.set_pad_bpm(i, Some(b));
@@ -1960,10 +1989,12 @@ fn centered(w: u16, h: u16, area: Rect) -> Rect {
 
 // ---- background decode -----------------------------------------------------
 
-/// Where a freshly-decoded track is headed (pads only).
+/// Where a freshly-decoded track is headed.
 #[derive(Debug, Clone, Copy)]
 enum LoadTarget {
     Pad(usize),
+    /// Played once at unity gain as a library preview.
+    Preview,
 }
 
 /// A track that finished decoding off-thread, on its way to a pad.
@@ -2017,25 +2048,41 @@ fn apply_pad_assign(
     target_rate: u32,
     load_tx: &Sender<Decoded>,
 ) -> bool {
-    if action != Action::AssignPad {
-        return false;
+    match action {
+        Action::AssignPad => {
+            let Some((pad, path)) = app.take_pending_pad_load() else {
+                return false;
+            };
+            if pad < PADS {
+                app.loading[pad] = true;
+            }
+            let cached = app.bpm_cache.get(&path).copied();
+            spawn_decode(
+                LoadTarget::Pad(pad),
+                path,
+                target_rate,
+                cached.is_none(),
+                cached,
+                load_tx.clone(),
+            );
+            true
+        }
+        Action::Preview => {
+            let Some(path) = app.take_pending_preview() else {
+                return false;
+            };
+            spawn_decode(
+                LoadTarget::Preview,
+                path,
+                target_rate,
+                false,
+                None,
+                load_tx.clone(),
+            );
+            true
+        }
+        _ => false,
     }
-    let Some((pad, path)) = app.take_pending_pad_load() else {
-        return false;
-    };
-    if pad < PADS {
-        app.loading[pad] = true;
-    }
-    let cached = app.bpm_cache.get(&path).copied();
-    spawn_decode(
-        LoadTarget::Pad(pad),
-        path,
-        target_rate,
-        cached.is_none(),
-        cached,
-        load_tx.clone(),
-    );
-    true
 }
 
 // ---- terminal lifecycle ----------------------------------------------------
@@ -2326,6 +2373,38 @@ mod tests {
         // r starts a rename directly.
         app.on_key(key('r'));
         assert!(app.rename.is_some(), "r renames directly");
+    }
+
+    #[test]
+    fn space_previews_a_highlighted_library_song() {
+        use termkrush_core::audio::DecodedAudio;
+        let mut app = App::new();
+        app.set_crate(demo_crate());
+        app.set_focus(Focus::Crate);
+        app.on_key(KeyEvent::new(KeyCode::Down, KeyModifiers::NONE)); // highlight a.mp3
+                                                                      // Space queues a preview decode of the highlighted song.
+        assert_eq!(app.on_key(key(' ')), Action::Preview);
+        assert_eq!(app.pending_preview, Some("/m/a.mp3".into()));
+        // Decode completes → it plays as a unity-gain preview voice.
+        app.place_decoded(Decoded {
+            target: LoadTarget::Preview,
+            track: DecodedAudio {
+                samples: vec![0.5; 64],
+                sample_rate: 44_100,
+                channels: 2,
+                source_sample_rate: 44_100,
+                source_channels: 2,
+                duration_secs: 0.0,
+                title: None,
+                artist: None,
+            },
+            path: "/m/a.mp3".into(),
+            bpm: None,
+        });
+        assert!(app.mixer.is_previewing(), "preview plays");
+        // Space again stops it (and doesn't stack).
+        app.on_key(key(' '));
+        assert!(!app.mixer.is_previewing(), "space again stops the preview");
     }
 
     #[test]

@@ -171,6 +171,8 @@ pub struct Mixer {
     voices: Vec<SampleVoice>,
     /// Currently-sounding scratch voices (whip/wiki phrases).
     scratch_voices: Vec<ScratchVoice>,
+    /// A one-shot library preview at unity gain (not tied to a pad).
+    preview: Option<SampleVoice>,
     /// When armed, `fill_mix` appends each block of master output here so the
     /// live mix (active pads) can be resampled into a clip.
     recording: bool,
@@ -208,6 +210,7 @@ impl Mixer {
             pending: Vec::new(),
             voices: Vec::new(),
             scratch_voices: Vec::new(),
+            preview: None,
             recording: false,
             record_buf: Vec::new(),
         }
@@ -313,6 +316,31 @@ impl Mixer {
     pub fn clear_voices(&mut self) {
         self.voices.clear();
         self.scratch_voices.clear();
+    }
+
+    /// Play `samples` (interleaved stereo) once at unity gain as a library
+    /// preview — replaces any prior preview, so it never stacks.
+    pub fn preview(&mut self, samples: Vec<f32>) {
+        let len_f = samples.len() / 2;
+        self.preview = Some(SampleVoice {
+            clip: Arc::new(samples),
+            pad: 0,
+            in_f: 0,
+            len_f,
+            pos: 0.0,
+            speed: 1.0,
+            looping: false,
+        });
+    }
+
+    /// Stop the library preview, if any.
+    pub fn stop_preview(&mut self) {
+        self.preview = None;
+    }
+
+    /// Whether a library preview is currently sounding.
+    pub fn is_previewing(&self) -> bool {
+        self.preview.is_some()
     }
 
     /// Stop pad `i`'s voices (e.g. to toggle an audition off).
@@ -844,6 +872,21 @@ impl Mixer {
             }
             !v.done()
         });
+        // The library preview sums on top at unity gain (no pad gain/envelope).
+        if let Some(v) = self.preview.as_mut() {
+            for i in 0..frames {
+                match v.next_frame() {
+                    Some((l, r)) => {
+                        out[i * 2] += l;
+                        out[i * 2 + 1] += r;
+                    }
+                    None => break,
+                }
+            }
+            if v.done() {
+                self.preview = None;
+            }
+        }
     }
 
     /// Set the target master gain, clamped to `[MASTER_MIN, MASTER_MAX]`.

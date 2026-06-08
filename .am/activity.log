@@ -645,3 +645,6 @@
 2026-06-08T10:14:37Z	Matt Reider	bug	termkrush/Bug-clip-edit-audition-keeps-playing-after-esc-and-pad-re-triggers-stack-voices-pile-up.md	target=priority position=top
 2026-06-08T10:14:37Z	Matt Reider	bug	termkrush/Bug-space-on-a-highlighted-library-song-should-preview-it.md	target=priority position=top
 2026-06-08T10:14:37Z	Matt Reider	started	termkrush/Bug-clip-edit-audition-keeps-playing-after-esc-and-pad-re-triggers-stack-voices-pile-up.md	
+2026-06-08T10:17:06Z	Matt Reider	finished	termkrush/Bug-clip-edit-audition-keeps-playing-after-esc-and-pad-re-triggers-stack-voices-pile-up.md	
+2026-06-08T10:17:06Z	Matt Reider	delivered	termkrush/Bug-clip-edit-audition-keeps-playing-after-esc-and-pad-re-triggers-stack-voices-pile-up.md	The 'three times simultaneously' was: the clip-editor audition kept playing after Esc, then each pad re-trigger layered another voice. Fixes: (1) Esc out of the clip editor stops its audition (stop_pad). (2) Playing a pad live stops that pad's voices first, so re-triggering RESTARTS rather than stacking (different pads still stack together — only the same pad replaces itself). Test: audition → esc → silent; play twice → one voice. clippy + 8 suites exit 0. DELIVERED.
+2026-06-08T10:18:29Z	Matt Reider	started	termkrush/Bug-space-on-a-highlighted-library-song-should-preview-it.md	

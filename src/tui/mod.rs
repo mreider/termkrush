@@ -2196,8 +2196,10 @@ mod tests {
         fs::write(tmp.join("box/inside.wav"), b"x").unwrap();
         let mut app = App::new();
         app.set_crate(Crate::scan(&tmp));
-        // Inside box/: Right does NOT open move; Left does.
+        // Inside box/: entries are ["..", "inside.wav"] — select the file.
         app.crate_lib.enter(&tmp.join("box"));
+        app.on_key(KeyEvent::new(KeyCode::Down, KeyModifiers::NONE)); // skip ".."
+        assert_eq!(app.selected_path(), Some(tmp.join("box/inside.wav")));
         app.on_key(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE)); // song prompt
         app.on_key(KeyEvent::new(KeyCode::Right, KeyModifiers::NONE));
         assert!(

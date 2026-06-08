@@ -27,8 +27,10 @@ The app handles timing automatically (first loop sets the tempo; everything lock
 to it), so nothing is ever off-beat. One binary, cross-platform (Win/Mac/Linux),
 MIT, CRT amber/green identity.
 
-**Run it:** `scripts/dev-run.sh gui` (the default; auto-builds). `scripts/dev-run.sh tui`
-still launches the legacy terminal UI until the GUI reaches parity.
+**Run it:** `scripts/dev-run.sh gui` (the default; auto-builds *only when the binary
+is missing* — after a code change run `scripts/dev-run.sh build` first).
+`scripts/dev-run.sh tui` still launches the legacy terminal UI until the GUI reaches
+parity.
 
 ---
 
@@ -47,9 +49,61 @@ Both front-ends share the same engine, so the pivot threw away no DSP.
 
 ---
 
-## 3. Finished functionality
+## 3. UX & interaction design
 
-### 3.1 Library (file browser)  ✅
+This is the intended *feel* and the interaction grammar — deliberately not a
+pixel spec, so a designer has room. The non-negotiables are the **palette**
+(landing-page CRT), the **no-modal** principle, and the **drag-first** model.
+
+### 3.1 Feel
+- A keyboard-and-**mouse** instrument that's immediate (real-time redraw) and
+  **discoverable without docs** — every capability is visible as a control or a
+  draggable object, not a memorized command.
+- **No modal dialogs.** Choices live inline (buttons, type-in-place fields, a
+  select-then-act delete button), never a blocking pop-up.
+- CRT identity: amber/green on near-black, monospace, matching the website.
+
+### 3.2 Layout (current; a designer may re-flow it)
+Four always-visible regions, reachable without mode-switching:
+- a **top strip** (identity + the timeline),
+- a **left library** panel,
+- a **central** area (the pad grid, which swaps to the clip editor while editing),
+- a **bottom scratch platter**.
+
+The requirement is that the library, pads, timeline, and platter are all present
+together; the exact arrangement, sizing, and chrome are open.
+
+### 3.3 Core interaction patterns
+- **Direct manipulation / drag-and-drop is the spine:** drag a track onto a pad
+  (load), into a folder (move), onto the platter (arm the scratch), or onto a
+  timeline track (place); drag the trim handles; drag the platter to scratch;
+  drag blocks to move them.
+- **Inline editing:** double-click to rename; type in place; sliders for continuous
+  values, toggles for on/off.
+- **Select then act:** click to select, then a contextual button (delete / preview /
+  export) — *highlight + a delete button*, not a confirmation modal.
+- **One obvious verb per surface:** a pad plays on its ▶, a clip auditions, the
+  platter scratches, the timeline transports.
+- **Immediate audible feedback:** preview a library track, audition a trim, hear the
+  scratch as you drag — sound confirms the action.
+- **Minimal keyboard:** the mouse is primary. Keys are reserved for the few gestures
+  that genuinely benefit — the **←/→ scratch jog**, and **Cmd-C/Cmd-V** for timeline
+  blocks. No hidden keyboard-only commands.
+
+### 3.4 Affordances / status
+Loaded vs empty pads read at a glance; **unplayable files are red**; the active trim
+region and the scratch playhead are always visible; a held-still platter is silent,
+like a real one.
+
+### 3.5 Designer latitude
+Spacing, typography, waveform/knob styling, iconography, and panel arrangement are
+open. Hold the palette, the no-modal rule, and the drag-first interaction model.
+
+---
+
+## 4. Finished functionality
+
+### 4.1 Library (file browser)  ✅
 - Folder tree of audio files (`.wav` / `.mp3`), filesystem-managed — drop files in
   the directory and they appear; one level of subfolders.
 - **Drag a track onto a pad** to load it (background decode, never blocks the UI).
@@ -60,7 +114,7 @@ Both front-ends share the same engine, so the pivot threw away no DSP.
 - **Unplayable files are flagged red** — a cheap background probe
   (`audio::probe_playable`, container/codec check, no full decode) runs per folder.
 
-### 3.2 Pads  ✅
+### 4.2 Pads  ✅
 Eight pads. Each loaded pad cell has:
 - **▶/⏸** play / pause (toggle; re-triggering never stacks voices).
 - **Kind** selector — **1shot / loop / scratch** (click; clearer than a drag for a
@@ -71,7 +125,7 @@ Eight pads. Each loaded pad cell has:
   WAV), **edit** (opens the clip editor).
 - Empty pads show a "drag a track here" hint.
 
-### 3.3 Clip editor  ✅
+### 4.3 Clip editor  ✅
 - Opens inline in the central panel (a focused mode, not a modal); **done** returns.
 - **Real waveform** (`mixer.pad_peaks` min/max downsample).
 - **Draggable ◀ in / ▶ out handles** set the trim live; the selected region is amber,
@@ -80,7 +134,7 @@ Eight pads. Each loaded pad cell has:
 - **▶ play selection** auditions the trimmed region (click to stop).
 - **export** writes the trimmed WAV to the library. Trim is non-destructive.
 
-### 3.4 Scratch  ✅
+### 4.4 Scratch  ✅
 - A bottom **SCRATCH platter**: **drag a track onto it** to arm the source.
 - **Drag the platter left/right to scratch** — drag speed sets the jog velocity
   (right = *wiki* / forward, left = *whip* / backward); a held-still platter is
@@ -92,10 +146,10 @@ Eight pads. Each loaded pad cell has:
   continues where it left off), clamped at the clip edges. An amber playhead line
   tracks the position.
 - Also present in the engine from the earlier model: whip/wiki primitives, pivot/onset
-  detection, and tap-to-build scratch phrases (`Build-a-scratch-phrase`). These feed
-  the future scratch-record-to-timeline.
+  detection, and tap-to-build scratch phrases. These feed the future
+  scratch-record-to-timeline.
 
-### 3.5 Timeline / arrangement  ✅ (engine) · 🔜 (UI)
+### 4.5 Timeline / arrangement  ✅ (engine) · 🔜 (UI)
 - **Engine model — `termkrush-core::arrangement`** ✅: free, DAW-style **tracks** (not
   bound to pads) holding **blocks** — a clip's samples placed at a start frame.
   `add_track` / `add_block` / `move_block` / `remove_block` / `total_frames` /
@@ -103,9 +157,9 @@ Eight pads. Each loaded pad cell has:
 - **Looper capture engine** ✅ (from the looper pivot): a launch-quantization clock
   (master bar clock; triggers land on the next bar, never mid-bar) and an
   arrangement render-to-WAV path.
-- **The GUI timeline editor is not built yet** — see backlog §4.1.
+- **The GUI timeline editor is not built yet** — see §5.1.
 
-### 3.6 Audio engine  ✅
+### 4.6 Audio engine  ✅
 - **Mixer / master bus**: sums sampler voices, scratch voices, the library preview,
   and the jog platter; master gain with de-zipper ramp; master pause.
 - **Pad voices**: one-shot, **loop** (repeats), and scratch playback over the trimmed
@@ -119,24 +173,16 @@ Eight pads. Each loaded pad cell has:
   rate, folded to stereo); WAV write; **MP3 export** (bundled encoder, no external
   tools); offline time-stretch engine present but **not** used for loop sync.
 
-### 3.7 Identity  ✅
+### 4.7 Identity  ✅
 - **CRT amber/green**, matching the landing page palette (`index.html`): cream `--ink`
   body text, `--amber` / `--green` accents, `--bg` ground, `--line` borders,
   `--dim` muted, red for unplayable. Monospace throughout.
 
-### 3.8 Controls reference (current GUI)
-- **Mouse-first**, no modal dialogs — inline buttons + fields, drag-and-drop.
-- **Drag**: track→pad (load), track→folder (move), track→platter (arm scratch),
-  the platter↔ (scratch), clip handles (trim).
-- **Double-click**: rename a track.
-- **Keyboard** (minimal): **←/→** jog the scratch platter; per-widget buttons handle
-  the rest. (Cmd-C / Cmd-V for timeline blocks arrives with the timeline editor.)
-
 ---
 
-## 4. Backlog (specced, not built)
+## 5. Backlog (specced, not built)
 
-### 4.1 GUI free-track timeline editor  🔜 (epic `gui`, 8 pts)
+### 5.1 GUI free-track timeline editor  🔜 (epic `gui`, 8 pts)
 The visual half of the timeline, on top of the finished arrangement model:
 - Tracks as horizontal lanes; clips as **blocks** positioned by time; **add/remove
   tracks**.
@@ -147,53 +193,53 @@ The visual half of the timeline, on top of the finished arrangement model:
 - *Open design questions for the PM:* snap to the bar grid or free placement? does
   playback route through the mixer or sum alongside it? where does paste land?
 
-### 4.2 Scratch — record to the timeline  🔜 (part of `gui` platter story)
+### 5.2 Scratch — record to the timeline  🔜 (part of the `gui` platter story)
 Capture a performed jog gesture as a timeline block at a cued position. Depends on
-§4.1. (The live scratch *feel* is already done.)
+§5.1. (The live scratch *feel* is already done.)
 
-### 4.3 Session save / load — `.tekr`  🔜 (epic `session`, 8 pts)
+### 5.3 Session save / load — `.tekr`  🔜 (epic `session`, 8 pts)
 - **Save on quit**: write a `.tekr` (JSON) into the launch directory — per-pad source
   path / kind / trim / gain / active / bpm / phrase; the timeline arrangement; master
   bpm + gain. Paths, not audio.
 - **Load** (`L`): list `.tekr` files in the launch dir, restore everything by
   re-decoding the stored source paths; missing sources flag red / skip.
 
-### 4.4 Record the timeline into a pad  🔜 (epic `looper`, 5 pts)
+### 5.4 Record the timeline into a pad  🔜 (epic `looper`, 5 pts)
 From the timeline, bounce the arrangement (or its loop region) into a chosen pad;
 "are you sure?" overwrite confirm if the pad isn't empty.
 
-### 4.5 Fade-in / fade-out on timeline blocks  🔜 (epic `looper`)
+### 5.5 Fade-in / fade-out on timeline blocks  🔜 (epic `looper`)
 Per-block fades on the timeline.
 
-### 4.6 Retire the TUI  🔜 (chore, epic `gui`)
+### 5.6 Retire the TUI  🔜 (chore, epic `gui`)
 Delete `src/tui` once the GUI reaches parity (and the legacy ratatui/terminal code +
 its tests go with it).
 
-### 4.7 Release & site  🔜
+### 5.7 Release & site  🔜
 - **Refresh GitHub Pages** for the pad/GUI model; **point termkrush.com (Porkbun) DNS**
   at GitHub Pages; **wire Buy-Me-A-Coffee** into the README + site.
 - **First-release dry-run** with an rc tag; **v0.1.0 "krush"** release marker — lands
   only after the MVP stories are accepted.
 
-### 4.8 YouTube → WAV import  🔜 (note: tension with "no in-app downloads")
+### 5.8 YouTube → WAV import  🔜 (note: tension with "no in-app downloads")
 A filed feature to import a YouTube song as WAV. The inception lists in-app downloads
 as out of scope; keep or drop is a PM call.
 
 ---
 
-## 5. Retired (built, then superseded)  🗑
+## 6. Retired (built, then superseded)  🗑
 Kept here so the history is legible; **not** part of the current product:
 - **Two decks, crossfader, deck sync/cue, auto-fade, turntable platter visuals** —
   replaced wholesale by pads (2026-06-07).
 - **Tracker step-grid arrange** (place/region/cut by hand) — replaced by the performed
   looper timeline (2026-06-07).
 - **The ratatui TUI** and its keyboard-command surface — being replaced by the egui
-  GUI (2026-06-08), pending deletion (§4.6).
+  GUI (2026-06-08), pending deletion (§5.6).
 - **8-bit DJ-cat mascot** — dropped during the pad rebuild.
 
 ---
 
-## 6. Out of scope
+## 7. Out of scope
 Decks / crossfader as the interaction model; pitch-preserving sync (we chose
 varispeed); GUI-less streaming; stems / vocal isolation; networked or cloud sessions.
 In-app downloads beyond the (debated) YouTube→WAV import.

@@ -93,6 +93,7 @@ case "${RECIPE}" in
   list)
     cat <<'RECIPES'
 Recipes (run the prebuilt binary; no recompile):
+  dev            build, THEN launch the GUI (use while developing)
   gui            launch the egui desktop app               [default]
   tui            launch the legacy terminal UI             (--tui)
   tone [secs]    play a test tone for [secs] seconds       (--test-tone)
@@ -119,6 +120,14 @@ RECIPES
       echo "  cargo install cargo-watch" >&2
       exit 1
     fi
+    ;;
+
+  dev)
+    # Build, then launch the GUI — the one command to run while developing,
+    # so you always see your latest changes.
+    build
+    collect_extra "$@"
+    exec "${BIN}" "${EXTRA[@]+"${EXTRA[@]}"}"
     ;;
 
   gui)

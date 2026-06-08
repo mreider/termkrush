@@ -41,6 +41,8 @@
 |  | [Master timeline as a permanent top strip](termkrush/Master-timeline-as-a-permanent-top-strip.md) | 8 |  |
 |  | [Bug: help modal is cut off and the header keymap is stale and misleading](termkrush/Bug-help-modal-is-cut-off-and-the-header-keymap-is-stale-and-misleading.md) |  |  |
 |  | [Minimal context-mapped controls: move + Space/Enter/M menu](termkrush/Minimal-context-mapped-controls-move-Space-Enter-M-menu.md) | 8 |  |
+|  | [Bug: clip editor bar runs off screen and the in/out marks do not visibly move](termkrush/Bug-clip-editor-bar-runs-off-screen-and-the-in-out-marks-do-not-visibly-move.md) |  |  |
+|  | [Bug: timeline lanes are unlabeled so placing a pad is not discoverable](termkrush/Bug-timeline-lanes-are-unlabeled-so-placing-a-pad-is-not-discoverable.md) |  |  |
 
 ### Accepted
 | User | Title | Points | Tags |

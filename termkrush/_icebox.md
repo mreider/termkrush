@@ -15,3 +15,4 @@ Stack-rank order. Top is the highest priority. Edit by hand or via `am rank` / `
 - [Splash screen on launch with logo copyright and license](Splash-screen-on-launch-with-logo-copyright-and-license.md)
 - [Borders show numbers and question-mark help replaces inline hints](Borders-show-numbers-and-question-mark-help-replaces-inline-hints.md)
 - [Record the timeline into a pad (overwrite confirm if not empty)](Record-the-timeline-into-a-pad-overwrite-confirm-if-not-empty.md)
+- [Save and load a session as a .tekr file (pads + timeline)](Save-and-load-a-session-as-a-tekr-file-pads-timeline.md)

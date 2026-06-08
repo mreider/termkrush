@@ -104,11 +104,8 @@ enum MenuAction {
     Unload,
     PhraseRec,
     ClearPhrase,
-    // Timeline
-    PlaceHit,
+    // Timeline (looper: record a performance, edit, render)
     Record,
-    Cut,
-    Region,
     Clear,
     Render,
     TempoUp,
@@ -170,8 +167,9 @@ pub struct App {
     timeline: Timeline,
     tl_lane: usize,
     tl_step: usize,
-    /// First endpoint of a loop region being drawn (`v` marks, `v` fills).
-    tl_region_start: Option<usize>,
+    /// Looper record armed: the tape rolls and triggering a pad lands a
+    /// launch-quantized hit on the timeline in that pad's lane.
+    tl_recording: bool,
     /// Open context menu (Enter on a pad/timeline), if any.
     menu: Option<MenuState>,
     /// A library song is selected for action (load/rename/delete/move).
@@ -230,7 +228,7 @@ impl App {
             timeline: Timeline::default(),
             tl_lane: 0,
             tl_step: 0,
-            tl_region_start: None,
+            tl_recording: false,
             menu: None,
             song_action: false,
             crate_active: false,
@@ -437,6 +435,9 @@ impl App {
             }
             Focus::Crate => "↑↓ highlight a song · 1-8 jump to pad · 0 timeline · esc quit",
             Focus::Pad(_) => "↑↓ vol · space play · enter menu · 1-8/0 switch · esc library",
+            Focus::Timeline if self.tl_recording => {
+                "● REC · go to a pad, space = drop it on the next bar · enter menu to stop"
+            }
             Focus::Timeline => "←→ beat · ↑↓ lane · space play · enter menu · esc library",
         }
     }
@@ -447,6 +448,13 @@ impl App {
     fn play(&mut self) -> Action {
         match self.focus {
             Focus::Pad(i) => {
+                // Looper record: the tape keeps rolling; triggering a pad lands
+                // a launch-quantized hit on the timeline AND plays for feedback.
+                if self.tl_recording {
+                    let step = self.next_bar_step();
+                    self.timeline.set_step(i, step, true);
+                    return self.trigger(i);
+                }
                 // Stopping the arrangement first keeps live play exclusive.
                 if self.playing {
                     self.playing = false;
@@ -636,19 +644,6 @@ impl App {
         Action::Mark
     }
 
-    /// Toggle the timeline loop region (first call marks the start, second
-    /// fills to the cursor).
-    fn toggle_region(&mut self) -> Action {
-        match self.tl_region_start {
-            None => self.tl_region_start = Some(self.tl_step),
-            Some(s) => {
-                self.timeline.fill_region(self.tl_lane, s, self.tl_step);
-                self.tl_region_start = None;
-            }
-        }
-        Action::Timeline
-    }
-
     /// Enter — open the context menu for the focused area. The first item is
     /// the common action, so Enter-then-Enter does the obvious thing.
     fn open_menu(&mut self) -> Action {
@@ -681,21 +676,26 @@ impl App {
                 }
                 ("Pad", items)
             }
-            Focus::Timeline => (
-                "Timeline",
-                vec![
-                    ("place pad", PlaceHit),
-                    ("record", Record),
-                    ("cut", Cut),
-                    ("region", Region),
-                    ("clear", Clear),
-                    ("render", Render),
-                    ("tempo +", TempoUp),
-                    ("tempo -", TempoDown),
-                    ("master +", MasterUp),
-                    ("master -", MasterDown),
-                ],
-            ),
+            Focus::Timeline => {
+                // Looper: arm record, perform by triggering pads, then render.
+                let rec = if self.tl_recording {
+                    "stop recording"
+                } else {
+                    "record (then trigger pads)"
+                };
+                (
+                    "Timeline",
+                    vec![
+                        (rec, Record),
+                        ("clear", Clear),
+                        ("render", Render),
+                        ("tempo +", TempoUp),
+                        ("tempo -", TempoDown),
+                        ("master +", MasterUp),
+                        ("master -", MasterDown),
+                    ],
+                )
+            }
         };
         self.menu = Some(MenuState {
             title,
@@ -711,25 +711,13 @@ impl App {
         self.menu = None;
         match a {
             EditClip => self.open_clip_edit(),
-            PlaceHit => {
-                self.timeline.toggle(self.tl_lane, self.tl_step);
-                Action::Timeline
-            }
             CycleKind => self.cycle_kind(),
             ToggleActive => self.toggle_active(),
             Export => self.save_pad_new(), // write the trimmed clip to the library (WAV)
             Unload => self.unload(),
             PhraseRec => self.toggle_phrase_rec(),
             ClearPhrase => self.clear_phrase(),
-            Record => self.toggle_record(),
-            Cut => {
-                self.timeline.cut_at(self.tl_step);
-                self.tl_step = self
-                    .tl_step
-                    .min(self.timeline.total_steps().saturating_sub(1));
-                Action::Timeline
-            }
-            Region => self.toggle_region(),
+            Record => self.toggle_looper_record(),
             Clear => {
                 self.timeline.clear();
                 Action::Timeline
@@ -1085,23 +1073,30 @@ impl App {
         }
     }
 
-    /// `r` — toggle the live-mix recorder. On disarm the capture becomes a
-    /// clip: onto the focused pad if one is focused, else the stash.
-    fn toggle_record(&mut self) -> Action {
-        if self.mixer.is_recording() {
-            let samples = self.mixer.take_recording();
-            if samples.len() >= 2 {
-                if let Focus::Pad(i) = self.focus {
-                    self.mixer.assign_pad(i, samples);
-                } else {
-                    let name = format!("Mix {}", self.recordings.len() + 1);
-                    self.recordings.push(Clip::new(samples, None, name));
-                }
-            }
+    /// Timeline "record": arm/stop the looper. Arming rolls the tape from the
+    /// top; while armed, triggering a pad lands a launch-quantized hit on the
+    /// timeline (see `play`). Stopping parks the playhead so you can review.
+    fn toggle_looper_record(&mut self) -> Action {
+        if self.tl_recording {
+            self.tl_recording = false;
+            self.playing = false;
+            self.silence_pads();
         } else {
-            self.mixer.arm_record();
+            self.tl_recording = true;
+            self.playing = true;
+            self.play_step = 0;
+            self.prev_run = [false; PADS];
+            self.play_acc = self.frames_per_step(); // fire step 0 promptly
         }
         Action::Record
+    }
+
+    /// The next bar line at or after the current playhead — where a triggered
+    /// pad is captured, so a hit can never land mid-bar.
+    fn next_bar_step(&self) -> usize {
+        let spb = self.timeline.steps_per_bar().max(1);
+        let total = self.timeline.total_steps().max(1);
+        (((self.play_step / spb) + 1) * spb) % total
     }
 
     fn is_loading(&self, pad: usize) -> bool {
@@ -2572,19 +2567,6 @@ mod tests {
     }
 
     #[test]
-    fn menu_cut_truncates_the_arrangement() {
-        let mut app = App::new();
-        app.set_focus(Focus::Timeline);
-        app.timeline.set_step(0, 60, true);
-        for _ in 0..20 {
-            app.on_key(KeyEvent::new(KeyCode::Right, KeyModifiers::NONE)); // cursor → step 20
-        }
-        app.run_menu(MenuAction::Cut); // cut at step 20 → bar 2 → 32 steps
-        assert_eq!(app.timeline.total_steps(), 32);
-        assert!(!app.timeline.step(0, 60));
-    }
-
-    #[test]
     fn u_unloads_the_focused_pad() {
         let mut app = App::new();
         app.mixer.assign_pad(0, vec![0.5; 64]);
@@ -2881,20 +2863,19 @@ mod tests {
     }
 
     #[test]
-    fn loop_region_fills_across_steps() {
+    fn looper_capture_builds_a_playable_run() {
         let mut app = App::new();
+        app.mixer.assign_pad(0, vec![0.5; 64]);
         app.set_focus(Focus::Timeline);
-        app.toggle_region(); // mark start at step 0, lane 0
-        assert!(app.tl_region_start.is_some());
-        for _ in 0..4 {
-            app.on_key(KeyEvent::new(KeyCode::Right, KeyModifiers::NONE)); // step → 4
-        }
-        app.toggle_region(); // fill 0..=4 on lane 0
-        assert!(app.tl_region_start.is_none());
-        for s in 0..=4 {
-            assert!(app.timeline.step(0, s), "region filled at {s}");
-        }
-        assert_eq!(app.timeline.run_at(0, 2), Some((0, 5)));
+        app.run_menu(MenuAction::Record); // arm; play_step = 0
+        let spb = app.timeline.steps_per_bar();
+        // Trigger pad 0 at bar 0 and again after advancing to bar 1.
+        app.set_focus(Focus::Pad(0));
+        app.on_key(key(' '));
+        app.play_step = spb; // now on bar 1
+        app.on_key(key(' '));
+        assert!(app.timeline.step(0, spb), "first capture on bar 1");
+        assert!(app.timeline.step(0, spb * 2), "second on bar 2");
     }
 
     #[test]
@@ -2931,14 +2912,28 @@ mod tests {
     }
 
     #[test]
-    fn timeline_place_pad_toggles_a_step_at_the_cursor() {
+    fn looper_record_captures_pad_triggers_on_the_next_bar() {
         let mut app = App::new();
+        app.mixer.assign_pad(2, vec![0.5; 64]);
         app.set_focus(Focus::Timeline);
-        app.on_key(KeyEvent::new(KeyCode::Down, KeyModifiers::NONE)); // lane 1
-        app.on_key(KeyEvent::new(KeyCode::Right, KeyModifiers::NONE)); // step 1
-        assert_eq!(app.run_menu(MenuAction::PlaceHit), Action::Timeline);
-        assert!(app.timeline.step(1, 1), "pad placed at the cursor");
-        assert_eq!(app.timeline.pads_at(1), vec![1]);
+        // Arm the looper: the tape rolls from the top.
+        assert_eq!(app.run_menu(MenuAction::Record), Action::Record);
+        assert!(app.tl_recording && app.playing);
+        // Pretend the playhead is mid-bar 2 (bar = steps_per_bar steps).
+        let spb = app.timeline.steps_per_bar();
+        app.play_step = spb + 3;
+        // Go to pad 2 and trigger it → a hit lands on the NEXT bar line.
+        app.set_focus(Focus::Pad(2));
+        app.on_key(key(' '));
+        assert!(app.timeline.step(2, spb * 2), "captured on the next bar");
+        assert!(
+            !app.timeline.step(2, spb + 3),
+            "never mid-bar where triggered"
+        );
+        // Stop recording.
+        app.set_focus(Focus::Timeline);
+        app.run_menu(MenuAction::Record);
+        assert!(!app.tl_recording && !app.playing);
     }
 
     #[test]
@@ -3018,17 +3013,14 @@ mod tests {
     }
 
     #[test]
-    fn menu_records_the_live_mix_into_the_stash() {
+    fn looper_record_arms_and_stops_the_transport() {
         let mut app = App::new();
-        app.set_focus(Focus::Timeline); // not a pad → goes to the stash
-        app.mixer.assign_pad(0, vec![0.4; 4096]);
-        app.mixer.trigger_pad(0);
+        app.set_focus(Focus::Timeline);
         assert_eq!(app.run_menu(MenuAction::Record), Action::Record); // arm
-        assert!(app.mixer.is_recording());
-        app.mixer.fill_mix(&mut [0.0f32; 256]);
-        assert_eq!(app.run_menu(MenuAction::Record), Action::Record); // disarm → stash
-        assert!(!app.mixer.is_recording());
-        assert_eq!(app.recordings.len(), 1);
+        assert!(app.tl_recording && app.playing, "armed: tape rolls");
+        assert_eq!(app.play_step, 0, "rolls from the top");
+        assert_eq!(app.run_menu(MenuAction::Record), Action::Record); // stop
+        assert!(!app.tl_recording && !app.playing, "stopped");
     }
 
     #[test]
@@ -3090,9 +3082,14 @@ mod tests {
         app.on_key(key('y')); // save the trim + close
         assert!(app.clip_edit.is_none());
 
-        // Arrange on the timeline: place a hit, play, pause, render.
+        // Arrange by performing: arm the looper, trigger a pad (lands a hit),
+        // stop, then play + render.
         app.set_focus(Focus::Timeline);
-        app.run_menu(MenuAction::PlaceHit); // place pad 0 at the cursor
+        app.run_menu(MenuAction::Record); // arm looper
+        app.set_focus(Focus::Pad(0));
+        app.on_key(key(' ')); // trigger pad 0 → captured on the next bar
+        app.set_focus(Focus::Timeline);
+        app.run_menu(MenuAction::Record); // stop
         app.on_key(key(' ')); // space plays the arrangement
         app.advance_playback(600);
         app.on_key(key(' ')); // pause

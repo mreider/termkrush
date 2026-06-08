@@ -115,6 +115,11 @@ pub struct TermKrushApp {
     new_folder: Option<String>,
     /// Source loaded on the scratch platter (for its label).
     jog_source: Option<PathBuf>,
+    /// The library track currently previewing (so its row shows a stop button).
+    previewing: Option<PathBuf>,
+    /// Whether the preview has actually started sounding (to clear `previewing`
+    /// only after it finishes, not during the decode gap).
+    preview_was_on: bool,
     /// The pad whose clip is open in the editor (central-panel mode).
     clip_edit: Option<usize>,
     /// Cached clip-editor waveform `(pad, peaks)` — computed once on open so the
@@ -172,6 +177,8 @@ impl TermKrushApp {
             renaming: None,
             new_folder: None,
             jog_source: None,
+            previewing: None,
+            preview_was_on: false,
             clip_edit: None,
             clip_wave: None,
             jog_wave: Vec::new(),
@@ -288,10 +295,17 @@ impl TermKrushApp {
                 self.lib_sel = None;
             }
             Act::Preview(p) => {
-                if self.mixer.is_previewing() {
+                if self.previewing.as_deref() == Some(p.as_path()) {
+                    // Clicking the playing track's button stops it.
                     self.mixer.stop_preview();
+                    self.previewing = None;
+                    self.preview_was_on = false;
                 } else {
-                    self.spawn_load(Target::Preview, p);
+                    // Switch the preview to this track.
+                    self.mixer.stop_preview();
+                    self.spawn_load(Target::Preview, p.clone());
+                    self.previewing = Some(p);
+                    self.preview_was_on = false;
                 }
             }
             Act::StartRename(p) => {
@@ -335,6 +349,9 @@ impl TermKrushApp {
             }
             Act::CancelNewFolder => self.new_folder = None,
             Act::PlayPad(i) => {
+                // Playing a pad ends any library audition — they shouldn't overlap.
+                self.mixer.stop_preview();
+                self.previewing = None;
                 if self.mixer.pad_is_sounding(i) {
                     self.mixer.stop_pad(i);
                 } else {
@@ -543,6 +560,15 @@ impl eframe::App for TermKrushApp {
         self.drain_loads();
         ctx.request_repaint(); // keep the audio ring fed in real time
 
+        // Clear the preview indicator once it has played and finished (but not
+        // during the decode gap before it starts).
+        if self.mixer.is_previewing() {
+            self.preview_was_on = true;
+        } else if self.preview_was_on {
+            self.previewing = None;
+            self.preview_was_on = false;
+        }
+
         // Probe the current folder for unplayable files when it changes.
         while let Ok((p, ok)) = self.probe_rx.try_recv() {
             self.playable.insert(p, ok);
@@ -568,11 +594,19 @@ impl eframe::App for TermKrushApp {
                 playable,
                 clip_edit,
                 clip_wave,
+                previewing,
                 ..
             } = self;
             draw_timeline_strip(ctx, mixer);
             draw_library(
-                ctx, crate_lib, lib_sel, renaming, new_folder, playable, &mut acts,
+                ctx,
+                crate_lib,
+                lib_sel,
+                renaming,
+                new_folder,
+                playable,
+                previewing.as_deref(),
+                &mut acts,
             );
             // Central panel: the clip editor when one is open, else the pads.
             if let Some(i) = *clip_edit {
@@ -776,6 +810,7 @@ fn draw_library(
     renaming: &mut Option<(PathBuf, String)>,
     new_folder: &mut Option<String>,
     playable: &HashMap<PathBuf, bool>,
+    previewing: Option<&Path>,
     acts: &mut Vec<Act>,
 ) {
     egui::SidePanel::left("library")
@@ -841,7 +876,8 @@ fn draw_library(
                         draw_folder_row(ui, &e.name, &e.path, acts);
                     } else {
                         let bad = playable.get(&e.path) == Some(&false);
-                        draw_track_row(ui, e, sel, renaming, bad, acts);
+                        let playing = previewing == Some(e.path.as_path());
+                        draw_track_row(ui, e, sel, renaming, bad, playing, acts);
                     }
                 }
                 if lib.is_empty() {
@@ -859,21 +895,22 @@ fn draw_folder_row(ui: &mut egui::Ui, name: &str, path: &Path, acts: &mut Vec<Ac
     } else {
         format!("{name}/")
     };
-    let frame = egui::Frame::none().inner_margin(egui::Margin::symmetric(4.0, 3.0));
-    let (inner, payload) = ui.dnd_drop_zone::<DragTrack, _>(frame, |ui| {
-        ui.label(egui::RichText::new(label).color(AMBER).strong());
-        ui.allocate_space(egui::vec2(ui.available_width(), 0.0)); // full-width hit area
-    });
-    if inner.response.dnd_hover_payload::<DragTrack>().is_some() {
-        let r = inner.response.rect;
+    // A clickable label (a dnd drop zone alone doesn't sense clicks, which is
+    // why folders wouldn't open) that is also a drop target for moving in.
+    let resp = ui.add(
+        egui::Label::new(egui::RichText::new(label).color(AMBER).strong())
+            .sense(egui::Sense::click()),
+    );
+    if resp.dnd_hover_payload::<DragTrack>().is_some() {
+        let r = resp.rect.expand2(egui::vec2(4.0, 2.0));
         ui.painter().rect_filled(r, 3.0, AMBER.gamma_multiply(0.18));
         ui.painter()
             .rect_stroke(r, 3.0, egui::Stroke::new(1.5, AMBER));
     }
-    if inner.response.clicked() {
+    if resp.clicked() {
         acts.push(Act::EnterFolder(path.to_path_buf()));
     }
-    if let Some(p) = payload {
+    if let Some(p) = resp.dnd_release_payload::<DragTrack>() {
         acts.push(Act::MoveTo {
             track: p.0.clone(),
             folder: path.to_path_buf(),
@@ -888,6 +925,7 @@ fn draw_track_row(
     sel: &Option<PathBuf>,
     renaming: &mut Option<(PathBuf, String)>,
     bad: bool,
+    playing: bool,
     acts: &mut Vec<Act>,
 ) {
     // Inline rename for this row.
@@ -908,9 +946,14 @@ fn draw_track_row(
 
     let selected = sel.as_deref() == Some(e.path.as_path());
     ui.horizontal(|ui| {
-        // Per-row play button (preview). Disabled for unplayable files.
+        // Per-row play/stop button (preview). ■ while this track is playing.
+        let glyph = if playing { "■" } else { "▶" };
+        let btn =
+            egui::Button::new(egui::RichText::new(glyph).color(if playing { AMBER } else { INK }))
+                .small()
+                .frame(false);
         if ui
-            .add_enabled(!bad, egui::Button::new("▶").small().frame(false))
+            .add_enabled(!bad, btn)
             .on_hover_text("play / stop")
             .clicked()
         {

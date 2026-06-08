@@ -1587,6 +1587,13 @@ fn draw_pad_cell(
     );
     if loaded {
         cell.dnd_set_drag_payload(DragPad(i)); // drag the clip anywhere → timeline
+                                               // Arrow on hover, grabbing hand only while dragging. (Over an inner
+                                               // button/slider the cell isn't `hovered`, so those keep their cursors.)
+        if cell.dragged() {
+            ui.ctx().set_cursor_icon(egui::CursorIcon::Grabbing);
+        } else if cell.hovered() {
+            ui.ctx().set_cursor_icon(egui::CursorIcon::Default);
+        }
     }
     if cell.dnd_hover_payload::<DragTrack>().is_some() {
         let r = inner.response.rect;

@@ -87,12 +87,49 @@ impl fmt::Display for DecodeError {
 
 impl std::error::Error for DecodeError {}
 
+/// Cheap playability check: probe the container and confirm a decodable audio
+/// track exists, **without decoding any samples**. Fast enough to run per file
+/// when a folder is listed, so the UI can flag unplayable files.
+pub fn probe_playable(path: impl AsRef<Path>) -> bool {
+    let path = path.as_ref();
+    let Ok(file) = std::fs::File::open(path) else {
+        return false;
+    };
+    let mss = MediaSourceStream::new(Box::new(file), Default::default());
+    let mut hint = Hint::new();
+    if let Some(ext) = path.extension().and_then(|e| e.to_str()) {
+        hint.with_extension(ext);
+    }
+    let Ok(probed) = symphonia::default::get_probe().format(
+        &hint,
+        mss,
+        &FormatOptions::default(),
+        &MetadataOptions::default(),
+    ) else {
+        return false;
+    };
+    let Some(track) = probed
+        .format
+        .tracks()
+        .iter()
+        .find(|t| t.codec_params.codec != CODEC_TYPE_NULL)
+    else {
+        return false;
+    };
+    let params = &track.codec_params;
+    if params.sample_rate.is_none() || params.channels.map(|c| c.count()).unwrap_or(0) == 0 {
+        return false;
+    }
+    symphonia::default::get_codecs()
+        .make(params, &DecoderOptions::default())
+        .is_ok()
+}
+
 /// Decode `path` to interleaved stereo `f32` at `target_sample_rate`.
 ///
 /// Mono sources are duplicated to both channels; sources with more than
 /// two channels keep the first two as L/R. When the source rate already
-/// equals `target_sample_rate`, the samples pass through without
-/// resampling.
+/// equals `target_sample_rate`, the samples pass through without resampling.
 pub fn decode_file(
     path: impl AsRef<Path>,
     target_sample_rate: u32,
@@ -315,6 +352,26 @@ fn read_tags(rev: &MetadataRevision, title: &mut Option<String>, artist: &mut Op
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn probe_playable_accepts_wav_rejects_garbage() {
+        let dir = std::env::temp_dir().join(format!("tk-probe-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let good = dir.join("good.wav");
+        crate::audio::write_wav(&good, &vec![0.1f32; 2000], 44_100, 2).unwrap();
+        assert!(probe_playable(&good), "a real wav is playable");
+
+        let bad = dir.join("bad.wav");
+        std::fs::write(&bad, b"not actually audio data at all").unwrap();
+        assert!(!probe_playable(&bad), "garbage is not playable");
+
+        assert!(
+            !probe_playable(dir.join("missing.wav")),
+            "missing is not playable"
+        );
+        let _ = std::fs::remove_dir_all(&dir);
+    }
 
     #[test]
     fn fold_mono_duplicates_to_both_channels() {

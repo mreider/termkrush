@@ -2,11 +2,12 @@
 title: 'GUI library panel: mouse rename, drag to folder, drag to pad, delete button'
 type: feature
 created: "2026-06-08T12:17:11Z"
-modified: "2026-06-08T12:28:32Z"
+modified: "2026-06-08T12:37:01Z"
 author: Matt Reider
-status: unstarted
+status: started
 estimate: "5"
 epic: gui
+started: "2026-06-08T12:37:01Z"
 ---
 
 ## Goal

@@ -1437,7 +1437,7 @@ fn draw_timeline_strip(f: &mut Frame, area: Rect, app: &App) {
     let spb = tl.steps_per_bar();
     let focused = app.focus_cell() == Focus::Timeline;
     let transport = if app.playing { "▶" } else { "■" };
-    let title = format!("[0] TIMELINE {transport} {}×{}", tl.bars(), spb);
+    let title = format!("0 TIMELINE {transport} {}×{}", tl.bars(), spb);
     let block = cell_block(&title, focused);
     let head = app.playhead();
     let mut lines: Vec<Line> = Vec::with_capacity(PADS);

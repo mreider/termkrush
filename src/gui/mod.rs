@@ -130,6 +130,7 @@ pub struct TermKrushApp {
 
 impl TermKrushApp {
     pub fn new(cc: &eframe::CreationContext<'_>) -> Self {
+        install_fonts(&cc.egui_ctx);
         apply_crt_theme(&cc.egui_ctx);
 
         let cfg = Config::load();
@@ -372,64 +373,108 @@ impl TermKrushApp {
         });
 
         egui::TopBottomPanel::bottom("scratch")
-            .exact_height(140.0)
+            .exact_height(180.0)
             .show(ctx, |ui| {
                 ui.add_space(6.0);
                 ui.horizontal(|ui| {
-                    ui.label(egui::RichText::new("SCRATCH").color(AMBER).strong());
+                    ui.label(bungee("scratch", 14.0, AMBER));
                     let name = self
                         .jog_source
                         .as_ref()
                         .and_then(|p| p.file_stem())
                         .and_then(|s| s.to_str())
-                        .unwrap_or("drag a sound here");
+                        .unwrap_or("drag a sound onto the platter");
                     ui.label(egui::RichText::new(name).color(GREEN));
                     if self.mixer.has_jog() && ui.small_button("clear").clicked() {
                         self.mixer.clear_jog();
                         self.jog_source = None;
                     }
                 });
-                ui.label(
-                    egui::RichText::new("drag the platter ↔ to scratch · or hold ← whip / → wiki")
-                        .weak(),
-                );
                 ui.add_space(4.0);
 
-                // The platter strip: a drop target for the sound + a drag
-                // surface that jogs it. A playhead line shows the position.
-                let width = ui.available_width();
-                let (rect, resp) =
-                    ui.allocate_exact_size(egui::vec2(width, 48.0), egui::Sense::click_and_drag());
-                let painter = ui.painter_at(rect);
-                painter.rect_filled(rect, 4.0, GROUND);
-                painter.rect_stroke(rect, 4.0, egui::Stroke::new(1.0, DIM));
                 let len = self.mixer.jog_len();
-                if len > 0 {
-                    if let Some(pos) = self.mixer.jog_position() {
-                        let frac = (pos / len as f64) as f32;
-                        let x = rect.left() + frac * rect.width();
-                        painter.line_segment(
-                            [egui::pos2(x, rect.top()), egui::pos2(x, rect.bottom())],
+                let pos = self.mixer.jog_position().unwrap_or(0.0);
+                let frac = if len > 0 {
+                    (pos / len as f64) as f32
+                } else {
+                    0.0
+                };
+
+                ui.horizontal(|ui| {
+                    // --- the vinyl platter: a drop target + the scratch surface ---
+                    let size = egui::vec2(110.0, 110.0);
+                    let (rect, resp) = ui.allocate_exact_size(size, egui::Sense::click_and_drag());
+                    let p = ui.painter_at(rect);
+                    let c = rect.center();
+                    let r = 52.0;
+                    p.circle_filled(c, r, egui::Color32::from_rgb(0x12, 0x16, 0x12));
+                    for k in 1..6 {
+                        p.circle_stroke(c, r * k as f32 / 6.0, egui::Stroke::new(1.0, LINE));
+                    }
+                    // The spinning marker: angle advances with the playhead so
+                    // you can see it move as you scratch.
+                    let turns = 8.0;
+                    let ang = frac * std::f32::consts::TAU * turns - std::f32::consts::FRAC_PI_2;
+                    p.line_segment(
+                        [c, c + r * egui::vec2(ang.cos(), ang.sin())],
+                        egui::Stroke::new(2.0, AMBER),
+                    );
+                    p.circle_filled(c, 7.0, AMBER); // label
+                    let glowing = self.mixer.has_jog();
+                    p.circle_stroke(
+                        c,
+                        r,
+                        egui::Stroke::new(1.5, if glowing { AMBER } else { DIM }),
+                    );
+
+                    // Drag the platter to scratch; fixed reference so the feel
+                    // doesn't change with the disc size.
+                    const SCRUB_REF: f64 = 520.0;
+                    let vel = if resp.dragged() && len > 0 {
+                        let dx = resp.drag_delta().x as f64;
+                        (dx * len as f64 / (SCRUB_REF * self.target_rate as f64 * dt)) as f32
+                    } else {
+                        key_vel
+                    };
+                    self.mixer.set_jog_velocity(vel);
+                    if let Some(d) = resp.dnd_release_payload::<DragTrack>() {
+                        self.jog_source = Some(d.0.clone());
+                        self.spawn_load(Target::Jog, d.0.clone());
+                    }
+
+                    // --- the waveform, with a playhead ---
+                    let wave = egui::vec2(ui.available_width(), 110.0);
+                    let (wr, _) = ui.allocate_exact_size(wave, egui::Sense::hover());
+                    let wp = ui.painter_at(wr);
+                    wp.rect_filled(wr, 4.0, GROUND);
+                    wp.rect_stroke(wr, 4.0, egui::Stroke::new(1.0, LINE));
+                    if len > 0 {
+                        let cols = wr.width() as usize;
+                        let peaks = self.mixer.jog_peaks(cols);
+                        let mid = wr.center().y;
+                        let amp = wr.height() * 0.42;
+                        for (i, (lo, hi)) in peaks.iter().enumerate() {
+                            let x = wr.left() + i as f32;
+                            wp.line_segment(
+                                [egui::pos2(x, mid - hi * amp), egui::pos2(x, mid - lo * amp)],
+                                egui::Stroke::new(1.0, DIM),
+                            );
+                        }
+                        let px = wr.left() + frac * wr.width();
+                        wp.line_segment(
+                            [egui::pos2(px, wr.top()), egui::pos2(px, wr.bottom())],
                             egui::Stroke::new(2.0, AMBER),
                         );
+                    } else {
+                        wp.text(
+                            wr.center(),
+                            egui::Align2::CENTER_CENTER,
+                            "drag a sound here · hold ← whip / → wiki",
+                            egui::FontId::monospace(13.0),
+                            DIM,
+                        );
                     }
-                }
-
-                // Mouse drag → velocity (frames the drag covers, per output
-                // frame). Dragging right spins forward, left backward.
-                let vel = if resp.dragged() && len > 0 {
-                    let dx = resp.drag_delta().x as f64;
-                    (dx * len as f64 / (rect.width() as f64 * self.target_rate as f64 * dt)) as f32
-                } else {
-                    key_vel
-                };
-                self.mixer.set_jog_velocity(vel);
-
-                // Drop a track onto the platter to arm it.
-                if let Some(p) = resp.dnd_release_payload::<DragTrack>() {
-                    self.jog_source = Some(p.0.clone());
-                    self.spawn_load(Target::Jog, p.0.clone());
-                }
+                });
             });
     }
 
@@ -516,6 +561,8 @@ impl eframe::App for TermKrushApp {
         for a in acts {
             self.apply(a);
         }
+
+        crt_overlay(ctx); // faint scanlines + vignette, on top of everything
     }
 }
 
@@ -557,7 +604,7 @@ fn crt_visuals() -> egui::Visuals {
     v
 }
 
-/// Apply the palette + monospace face. Cheap, and called every frame so no
+/// Apply the palette + Space Mono body face. Cheap, called every frame so no
 /// restored/default state can ever shadow the theme.
 fn apply_crt_theme(ctx: &egui::Context) {
     ctx.set_visuals(crt_visuals());
@@ -568,13 +615,84 @@ fn apply_crt_theme(ctx: &egui::Context) {
     ctx.set_style(style);
 }
 
+/// Bundle the brand fonts: Space Mono for body/UI, Bungee for the wordmark.
+/// Called once at startup.
+fn install_fonts(ctx: &egui::Context) {
+    let mut fonts = egui::FontDefinitions::default();
+    fonts.font_data.insert(
+        "spacemono".to_owned(),
+        egui::FontData::from_static(include_bytes!("../../assets/fonts/SpaceMono-Regular.ttf")),
+    );
+    fonts.font_data.insert(
+        "bungee".to_owned(),
+        egui::FontData::from_static(include_bytes!("../../assets/fonts/Bungee-Regular.ttf")),
+    );
+    // Space Mono is the default for both families (it reads as the site's body).
+    for fam in [egui::FontFamily::Proportional, egui::FontFamily::Monospace] {
+        fonts
+            .families
+            .entry(fam)
+            .or_default()
+            .insert(0, "spacemono".to_owned());
+    }
+    // Bungee is a named family for the wordmark.
+    fonts.families.insert(
+        egui::FontFamily::Name("bungee".into()),
+        vec!["bungee".to_owned()],
+    );
+    ctx.set_fonts(fonts);
+}
+
+/// Wordmark text in the Bungee display face.
+fn bungee(text: impl Into<String>, size: f32, color: egui::Color32) -> egui::RichText {
+    egui::RichText::new(text)
+        .font(egui::FontId::new(
+            size,
+            egui::FontFamily::Name("bungee".into()),
+        ))
+        .color(color)
+}
+
+/// Subtle CRT atmosphere over everything: faint scanlines + a corner vignette.
+/// Kept low-alpha so it's mood, not noise (readability stays first).
+fn crt_overlay(ctx: &egui::Context) {
+    let rect = ctx.screen_rect();
+    let painter = ctx.layer_painter(egui::LayerId::new(
+        egui::Order::Foreground,
+        egui::Id::new("crt"),
+    ));
+    let scan = egui::Color32::from_black_alpha(16);
+    let mut y = rect.top();
+    while y < rect.bottom() {
+        painter.line_segment(
+            [egui::pos2(rect.left(), y), egui::pos2(rect.right(), y)],
+            egui::Stroke::new(1.0, scan),
+        );
+        y += 3.0;
+    }
+    // Light vignette: a darker stroke hugging the window edge.
+    painter.rect_stroke(
+        rect.shrink(1.0),
+        0.0,
+        egui::Stroke::new(2.0, egui::Color32::from_black_alpha(60)),
+    );
+}
+
 fn draw_timeline_strip(ctx: &egui::Context, mixer: &Mixer) {
     egui::TopBottomPanel::top("timeline")
         .exact_height(72.0)
         .show(ctx, |ui| {
             ui.add_space(6.0);
             ui.horizontal(|ui| {
-                ui.heading(egui::RichText::new("TermKrush").color(AMBER).strong());
+                // Brand: a little amber vinyl + the Bungee wordmark.
+                let (rect, _) =
+                    ui.allocate_exact_size(egui::vec2(22.0, 22.0), egui::Sense::hover());
+                let p = ui.painter_at(rect);
+                p.circle_filled(rect.center(), 10.0, PANEL);
+                p.circle_stroke(rect.center(), 10.0, egui::Stroke::new(1.0, LINE));
+                p.circle_filled(rect.center(), 3.0, AMBER);
+                ui.add_space(2.0);
+                ui.label(bungee("termkrush", 18.0, AMBER));
                 ui.add_space(16.0);
                 let bpm = mixer
                     .master_bpm()

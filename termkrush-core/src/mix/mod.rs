@@ -64,6 +64,29 @@ impl SampleVoice {
     }
 }
 
+/// Downsample an interleaved-stereo clip to `columns` `(min, max)` peak pairs
+/// (mono-summed), for drawing a waveform.
+fn clip_peaks(clip: &[f32], columns: usize) -> Vec<(f32, f32)> {
+    let frames = clip.len() / 2;
+    if frames == 0 || columns == 0 {
+        return Vec::new();
+    }
+    let per = (frames as f64 / columns as f64).max(1.0);
+    (0..columns)
+        .map(|c| {
+            let start = (c as f64 * per) as usize;
+            let end = (((c + 1) as f64 * per) as usize).min(frames).max(start + 1);
+            let (mut lo, mut hi) = (0.0f32, 0.0f32);
+            for f in start..end {
+                let s = 0.5 * (clip[f * 2] + clip[f * 2 + 1]);
+                lo = lo.min(s);
+                hi = hi.max(s);
+            }
+            (lo, hi)
+        })
+        .collect()
+}
+
 /// Linearly-interpolated stereo frame at absolute fractional frame `f`.
 fn interp_frame(clip: &[f32], f: f64) -> (f32, f32) {
     let total = clip.len() / 2;
@@ -292,27 +315,18 @@ impl Mixer {
     /// Downsample pad `i`'s whole clip to `columns` `(min, max)` peak pairs
     /// (mono-summed), for drawing a waveform. Empty if the pad has no clip.
     pub fn pad_peaks(&self, i: usize, columns: usize) -> Vec<(f32, f32)> {
-        let Some(clip) = self.pads.get(i).and_then(|p| p.as_ref()) else {
-            return Vec::new();
-        };
-        let frames = clip.len() / 2;
-        if frames == 0 || columns == 0 {
-            return Vec::new();
+        match self.pads.get(i).and_then(|p| p.as_ref()) {
+            Some(clip) => clip_peaks(clip, columns),
+            None => Vec::new(),
         }
-        let per = (frames as f64 / columns as f64).max(1.0);
-        (0..columns)
-            .map(|c| {
-                let start = (c as f64 * per) as usize;
-                let end = (((c + 1) as f64 * per) as usize).min(frames).max(start + 1);
-                let (mut lo, mut hi) = (0.0f32, 0.0f32);
-                for f in start..end {
-                    let s = 0.5 * (clip[f * 2] + clip[f * 2 + 1]);
-                    lo = lo.min(s);
-                    hi = hi.max(s);
-                }
-                (lo, hi)
-            })
-            .collect()
+    }
+
+    /// `(min, max)` peak pairs over the scratch-platter clip, for its waveform.
+    pub fn jog_peaks(&self, columns: usize) -> Vec<(f32, f32)> {
+        match self.jog.as_ref() {
+            Some(j) => clip_peaks(&j.clip, columns),
+            None => Vec::new(),
+        }
     }
 
     /// Clip length (frames) on pad `i`, 0 if empty.

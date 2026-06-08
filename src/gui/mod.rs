@@ -128,6 +128,9 @@ pub struct TermKrushApp {
     jog_wave: Vec<(f32, f32)>,
     /// How many background decodes are in flight (drives the loading overlay).
     pending_decodes: usize,
+    /// Spring-loaded folders: `(folder, hover-start time)` while a track is
+    /// dragged over it — after a hold we navigate in so you can drop elsewhere.
+    spring: Option<(PathBuf, f64)>,
 
     producer: Option<rtrb::Producer<f32>>,
     _audio: Option<AudioOutput>,
@@ -183,6 +186,7 @@ impl TermKrushApp {
             clip_wave: None,
             jog_wave: Vec::new(),
             pending_decodes: 0,
+            spring: None,
             producer,
             _audio: audio,
             out_channels: channels.max(1),
@@ -596,6 +600,7 @@ impl eframe::App for TermKrushApp {
         self.draw_scratch_panel(ctx);
 
         let mut acts: Vec<Act> = Vec::new();
+        let mut spring_hover: Option<PathBuf> = None;
         {
             let TermKrushApp {
                 mixer,
@@ -619,6 +624,7 @@ impl eframe::App for TermKrushApp {
                 new_folder,
                 playable,
                 previewing.as_deref(),
+                &mut spring_hover,
                 &mut acts,
             );
             // Central panel: the clip editor when one is open, else the pads.
@@ -633,6 +639,23 @@ impl eframe::App for TermKrushApp {
                 draw_pad_grid(ctx, mixer, pad_source, &mut acts);
             }
         }
+
+        // Spring-loaded folders: hold a dragged track over a folder / "up" and
+        // we navigate into it after ~0.5s, so you can drop into another folder.
+        const SPRING_SECS: f64 = 0.5;
+        let now = ctx.input(|i| i.time);
+        match (&self.spring, &spring_hover) {
+            (_, None) => self.spring = None,
+            (Some((p, t0)), Some(h)) if p == h => {
+                if now - t0 > SPRING_SECS {
+                    self.crate_lib.enter(h);
+                    self.lib_sel = None;
+                    self.spring = None;
+                }
+            }
+            (_, Some(h)) => self.spring = Some((h.clone(), now)),
+        }
+
         for a in acts {
             self.apply(a);
         }
@@ -892,6 +915,7 @@ fn draw_library(
     new_folder: &mut Option<String>,
     playable: &HashMap<PathBuf, bool>,
     previewing: Option<&Path>,
+    spring_hover: &mut Option<PathBuf>,
     acts: &mut Vec<Act>,
 ) {
     egui::SidePanel::left("library")
@@ -940,7 +964,7 @@ fn draw_library(
                 // out to the parent folder.
                 if lib.cwd() != lib.root() {
                     if let Some(parent) = lib.cwd().parent() {
-                        draw_folder_row(ui, ".. (up)", parent, acts);
+                        draw_folder_row(ui, ".. (up)", parent, spring_hover, acts);
                     }
                 }
                 for e in lib.entries() {
@@ -948,7 +972,7 @@ fn draw_library(
                         continue; // handled by the explicit up button
                     }
                     if e.is_dir {
-                        draw_folder_row(ui, &e.name, &e.path, acts);
+                        draw_folder_row(ui, &e.name, &e.path, spring_hover, acts);
                     } else {
                         let bad = playable.get(&e.path) == Some(&false);
                         let playing = previewing == Some(e.path.as_path());
@@ -964,7 +988,13 @@ fn draw_library(
 
 /// A folder row: click to open, a drop target to move a track in. Highlights
 /// amber while a track is dragged over it, so the drop target is obvious.
-fn draw_folder_row(ui: &mut egui::Ui, name: &str, path: &Path, acts: &mut Vec<Act>) {
+fn draw_folder_row(
+    ui: &mut egui::Ui,
+    name: &str,
+    path: &Path,
+    spring_hover: &mut Option<PathBuf>,
+    acts: &mut Vec<Act>,
+) {
     let is_up = name.ends_with(')'); // ".. (up)"
     let label = if is_up {
         format!("{}  {name}", ph::ARROW_UP)
@@ -984,6 +1014,8 @@ fn draw_folder_row(ui: &mut egui::Ui, name: &str, path: &Path, acts: &mut Vec<Ac
         ui.painter().rect_filled(r, 3.0, AMBER.gamma_multiply(0.18));
         ui.painter()
             .rect_stroke(r, 3.0, egui::Stroke::new(1.5, AMBER));
+        // Spring-load: tell the timer a drag is hovering this folder.
+        *spring_hover = Some(path.to_path_buf());
     }
     if resp.clicked() {
         acts.push(Act::EnterFolder(path.to_path_buf()));

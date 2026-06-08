@@ -727,7 +727,118 @@ fn apply_crt_theme(ctx: &egui::Context) {
     for font in style.text_styles.values_mut() {
         font.family = egui::FontFamily::Monospace;
     }
+    // Labels aren't text fields — no I-beam cursor / selection on them.
+    style.interaction.selectable_labels = false;
     ctx.set_style(style);
+}
+
+/// A prominent painted close button (an amber X). Returns true on click. Used
+/// everywhere we close a view, instead of a "done" word.
+fn close_x(ui: &mut egui::Ui) -> bool {
+    let (rect, resp) = ui.allocate_exact_size(egui::vec2(26.0, 26.0), egui::Sense::click());
+    let col = if resp.hovered() { AMBER } else { DIM };
+    let p = ui.painter_at(rect);
+    p.rect_stroke(rect, 4.0, egui::Stroke::new(1.0, col));
+    let m = 8.0;
+    let (tl, br) = (rect.left_top(), rect.right_bottom());
+    p.line_segment(
+        [tl + egui::vec2(m, m), br - egui::vec2(m, m)],
+        egui::Stroke::new(2.0, col),
+    );
+    p.line_segment(
+        [
+            egui::pos2(br.x - m, tl.y + m),
+            egui::pos2(tl.x + m, br.y - m),
+        ],
+        egui::Stroke::new(2.0, col),
+    );
+    resp.on_hover_cursor(egui::CursorIcon::Default).clicked()
+}
+
+/// Small painted "new folder" button (a folder tab + a +). Returns true on click.
+fn folder_plus_button(ui: &mut egui::Ui) -> bool {
+    let (rect, resp) = ui.allocate_exact_size(egui::vec2(26.0, 22.0), egui::Sense::click());
+    let col = if resp.hovered() { AMBER } else { DIM };
+    let p = ui.painter_at(rect);
+    let r = rect.shrink(4.0);
+    // folder body + tab
+    p.rect_stroke(
+        egui::Rect::from_min_max(egui::pos2(r.left(), r.top() + 3.0), r.right_bottom()),
+        1.0,
+        egui::Stroke::new(1.0, col),
+    );
+    p.line_segment(
+        [
+            egui::pos2(r.left(), r.top() + 3.0),
+            egui::pos2(r.left() + 6.0, r.top()),
+        ],
+        egui::Stroke::new(1.0, col),
+    );
+    // plus
+    let c = r.center() + egui::vec2(0.0, 2.0);
+    p.line_segment(
+        [c - egui::vec2(3.0, 0.0), c + egui::vec2(3.0, 0.0)],
+        egui::Stroke::new(1.5, col),
+    );
+    p.line_segment(
+        [c - egui::vec2(0.0, 3.0), c + egui::vec2(0.0, 3.0)],
+        egui::Stroke::new(1.5, col),
+    );
+    resp.on_hover_cursor(egui::CursorIcon::Default)
+        .on_hover_text("new folder")
+        .clicked()
+}
+
+/// Small painted trash can that is a drop target (drag a track here to delete)
+/// and clickable (delete the selection). Returns `(clicked, dropped_payload)`.
+fn trash_zone(ui: &mut egui::Ui) -> (bool, Option<std::sync::Arc<DragTrack>>) {
+    let (rect, resp) = ui.allocate_exact_size(egui::vec2(26.0, 22.0), egui::Sense::click());
+    let dropped = resp.dnd_release_payload::<DragTrack>();
+    let hovering = resp.dnd_hover_payload::<DragTrack>().is_some();
+    let col = if hovering || resp.hovered() { RED } else { DIM };
+    let p = ui.painter_at(rect);
+    let r = rect.shrink(5.0);
+    // lid + handle
+    p.line_segment(
+        [
+            egui::pos2(r.left() - 1.0, r.top()),
+            egui::pos2(r.right() + 1.0, r.top()),
+        ],
+        egui::Stroke::new(1.5, col),
+    );
+    p.line_segment(
+        [
+            egui::pos2(r.center().x - 3.0, r.top() - 2.0),
+            egui::pos2(r.center().x + 3.0, r.top() - 2.0),
+        ],
+        egui::Stroke::new(1.5, col),
+    );
+    // can body (slightly tapered) + ribs
+    p.rect_stroke(
+        egui::Rect::from_min_max(egui::pos2(r.left() + 1.0, r.top() + 3.0), r.right_bottom()),
+        1.0,
+        egui::Stroke::new(1.0, col),
+    );
+    for dx in [-2.5, 0.0, 2.5] {
+        let x = r.center().x + dx;
+        p.line_segment(
+            [
+                egui::pos2(x, r.top() + 6.0),
+                egui::pos2(x, r.bottom() - 2.0),
+            ],
+            egui::Stroke::new(1.0, col),
+        );
+    }
+    if hovering {
+        ui.painter()
+            .rect_stroke(rect, 3.0, egui::Stroke::new(1.5, RED));
+    }
+    (
+        resp.on_hover_cursor(egui::CursorIcon::Default)
+            .on_hover_text("drag here / click to delete")
+            .clicked(),
+        dropped,
+    )
 }
 
 /// Bundle the brand fonts: Space Mono for body/UI, Bungee for the wordmark.
@@ -872,27 +983,21 @@ fn draw_library(
         .show(ctx, |ui| {
             ui.add_space(6.0);
             ui.horizontal(|ui| {
-                ui.label(egui::RichText::new("LIBRARY").color(AMBER).strong());
-                if ui.small_button("+ folder").clicked() {
-                    acts.push(Act::StartNewFolder);
-                }
-                // Trash: drag a track onto it to delete (also deletes the
-                // selection on click). Highlights red while a drag hovers it.
-                let frame = egui::Frame::none().inner_margin(egui::Margin::symmetric(8.0, 3.0));
-                let (inner, dropped) = ui.dnd_drop_zone::<DragTrack, _>(frame, |ui| {
-                    ui.label(egui::RichText::new("trash").color(DIM))
-                });
-                if inner.response.dnd_hover_payload::<DragTrack>().is_some() {
-                    ui.painter()
-                        .rect_stroke(inner.response.rect, 3.0, egui::Stroke::new(1.5, RED));
-                }
-                if let Some(d) = dropped {
-                    acts.push(Act::Delete(d.0.clone()));
-                } else if inner.response.clicked() {
-                    if let Some(p) = sel {
-                        acts.push(Act::Delete(p.clone()));
+                ui.label(bungee("library", 14.0, AMBER));
+                // Right-aligned icon controls: a trash drop target + new-folder.
+                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                    let (clicked, dropped) = trash_zone(ui);
+                    if let Some(d) = dropped {
+                        acts.push(Act::Delete(d.0.clone()));
+                    } else if clicked {
+                        if let Some(p) = sel {
+                            acts.push(Act::Delete(p.clone()));
+                        }
                     }
-                }
+                    if folder_plus_button(ui) {
+                        acts.push(Act::StartNewFolder);
+                    }
+                });
             });
             ui.separator();
 
@@ -950,10 +1055,12 @@ fn draw_folder_row(ui: &mut egui::Ui, name: &str, path: &Path, acts: &mut Vec<Ac
     };
     // A clickable label (a dnd drop zone alone doesn't sense clicks, which is
     // why folders wouldn't open) that is also a drop target for moving in.
-    let resp = ui.add(
-        egui::Label::new(egui::RichText::new(label).color(AMBER).strong())
-            .sense(egui::Sense::click()),
-    );
+    let resp = ui
+        .add(
+            egui::Label::new(egui::RichText::new(label).color(AMBER).strong())
+                .sense(egui::Sense::click()),
+        )
+        .on_hover_cursor(egui::CursorIcon::Default);
     if resp.dnd_hover_payload::<DragTrack>().is_some() {
         let r = resp.rect.expand2(egui::vec2(4.0, 2.0));
         ui.painter().rect_filled(r, 3.0, AMBER.gamma_multiply(0.18));
@@ -1029,7 +1136,8 @@ fn draw_track_row(
                     label.on_hover_text("unplayable — won't decode");
                 }
             })
-            .response;
+            .response
+            .on_hover_cursor(egui::CursorIcon::Default);
         if selected {
             ui.painter().rect_stroke(
                 resp.rect.expand(1.0),
@@ -1097,18 +1205,11 @@ fn draw_clip_editor(
             .and_then(|s| s.to_str())
             .unwrap_or("clip");
         ui.horizontal(|ui| {
-            ui.label(
-                egui::RichText::new(format!("EDIT  {track}"))
-                    .color(AMBER)
-                    .strong(),
-            );
+            // Just the track name — you can see you're editing; no "EDIT" label.
+            ui.label(bungee(track, 16.0, AMBER));
             let playing = mixer.pad_is_sounding(i);
             if ui
-                .button(if playing {
-                    "⏸ stop"
-                } else {
-                    "▶ play selection"
-                })
+                .button(if playing { "■ stop" } else { "▶ play" })
                 .clicked()
             {
                 acts.push(Act::AuditionSel(i));
@@ -1116,9 +1217,12 @@ fn draw_clip_editor(
             if ui.button("export").clicked() {
                 acts.push(Act::ExportPad(i));
             }
-            if ui.button("done").clicked() {
-                acts.push(Act::CloseClip);
-            }
+            // Prominent X to close, top-right.
+            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                if close_x(ui) {
+                    acts.push(Act::CloseClip);
+                }
+            });
         });
 
         let len = mixer.pad_clip_frames(i).max(1);

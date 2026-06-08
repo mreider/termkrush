@@ -1525,12 +1525,10 @@ fn draw_pad_cell(
                     }
                 }
                 if loaded {
-                    // A grip drag-handle: drag it onto a timeline lane.
-                    ui.dnd_drag_source(egui::Id::new(("pad-drag", i)), DragPad(i), |ui| {
-                        ui.label(egui::RichText::new(ph::DOTS_SIX_VERTICAL).color(DIM));
-                    })
-                    .response
-                    .on_hover_text("drag onto the timeline");
+                    // Visual cue that the clip is draggable (the whole cell is
+                    // the drag source — see the cell interact below).
+                    ui.label(egui::RichText::new(ph::DOTS_SIX_VERTICAL).color(DIM))
+                        .on_hover_text("drag the clip onto the timeline");
                 }
                 let name = if track.is_empty() { "—" } else { &track };
                 ui.add(
@@ -1579,13 +1577,17 @@ fn draw_pad_cell(
             });
         });
     });
-    // Cell-level hover-interact handles the library-track drop (loading) +
-    // the drag-over highlight, without being a drop-zone that eats the grip.
+    // The whole cell is the drag source (Sense::drag doesn't steal the inner
+    // buttons' clicks — clicks have click-sense, this has drag-sense), and the
+    // same response receives a dragged library track (load).
     let cell = ui.interact(
         inner.response.rect,
         egui::Id::new(("clipcell", i)),
-        egui::Sense::hover(),
+        egui::Sense::drag(),
     );
+    if loaded {
+        cell.dnd_set_drag_payload(DragPad(i)); // drag the clip anywhere → timeline
+    }
     if cell.dnd_hover_payload::<DragTrack>().is_some() {
         let r = inner.response.rect;
         ui.painter().rect_filled(r, 4.0, AMBER.gamma_multiply(0.15));

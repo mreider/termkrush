@@ -361,25 +361,9 @@ impl App {
         }
     }
 
-    /// Tab / Shift-Tab — jump between the three areas (Library → Pads →
-    /// Timeline).
-    fn next_area(&mut self, fwd: bool) -> Action {
-        self.focus = match (self.focus, fwd) {
-            (Focus::Crate, true) => Focus::Pad(self.last_pad),
-            (Focus::Pad(_), true) => Focus::Timeline,
-            (Focus::Timeline, true) => Focus::Crate,
-            (Focus::Crate, false) => Focus::Timeline,
-            (Focus::Pad(_), false) => Focus::Crate,
-            (Focus::Timeline, false) => Focus::Pad(self.last_pad),
-        };
-        if let Focus::Pad(i) = self.focus {
-            self.last_pad = i;
-        }
-        Action::Focus
-    }
-
-    /// Arrow keys — context navigation: browse the library, pick a pad +
-    /// adjust its volume, or move the timeline cursor.
+    /// Arrow keys — context navigation: browse the library, adjust a pad's
+    /// volume, or move the timeline cursor. (Pads/timeline are *selected* by
+    /// number, not arrows.)
     fn nav(&mut self, dir: KeyCode) -> Action {
         match self.focus {
             Focus::Crate => match dir {
@@ -387,17 +371,9 @@ impl App {
                 KeyCode::Down => self.crate_nav(1),
                 _ => Action::None,
             },
-            Focus::Pad(i) => match dir {
+            Focus::Pad(_) => match dir {
                 KeyCode::Up => self.volume(true),
                 KeyCode::Down => self.volume(false),
-                KeyCode::Left => {
-                    self.set_focus(Focus::Pad(i.saturating_sub(1)));
-                    Action::Focus
-                }
-                KeyCode::Right => {
-                    self.set_focus(Focus::Pad((i + 1).min(PADS - 1)));
-                    Action::Focus
-                }
                 _ => Action::None,
             },
             Focus::Timeline => {
@@ -424,9 +400,9 @@ impl App {
             return "←→ move · +/- zoom · tab in/out (follows) · space play · enter snip · esc done";
         }
         match self.focus {
-            Focus::Crate => "↑↓ browse · enter menu · tab → pads",
-            Focus::Pad(_) => "←→ pad · ↑↓ vol · space play · enter menu · tab → timeline",
-            Focus::Timeline => "←→ beat · ↑↓ pad-lane · space play · enter menu · tab → library",
+            Focus::Crate => "↑↓ browse · enter menu · 1-8 pad · 0 timeline",
+            Focus::Pad(_) => "↑↓ vol · space play · enter menu · 1-8/0 switch · esc library",
+            Focus::Timeline => "←→ beat · ↑↓ lane · space play · enter menu · esc library",
         }
     }
 
@@ -1098,14 +1074,27 @@ impl App {
             }
         }
 
-        // The whole control surface: arrows · Tab · Space · Enter · Esc.
+        // Control surface: numbers select · arrows within · Space · Enter · Esc.
         match key.code {
+            // Esc goes up a level: a pad/timeline → the library; library → quit.
             KeyCode::Esc => {
-                self.confirm_quit = true;
-                Action::ConfirmQuit
+                if self.focus == Focus::Crate {
+                    self.confirm_quit = true;
+                    Action::ConfirmQuit
+                } else {
+                    self.set_focus(Focus::Crate);
+                    Action::Focus
+                }
             }
-            KeyCode::Tab => self.next_area(true),
-            KeyCode::BackTab => self.next_area(false),
+            // 1–8 select a pad, 0 selects the timeline — from anywhere.
+            KeyCode::Char('0') => {
+                self.focus = Focus::Timeline;
+                Action::Focus
+            }
+            KeyCode::Char(c @ '1'..='8') => {
+                self.set_focus(Focus::Pad(c as usize - '1' as usize));
+                Action::Focus
+            }
             KeyCode::Up | KeyCode::Down | KeyCode::Left | KeyCode::Right => self.nav(key.code),
             KeyCode::Char(' ') => self.play(),
             KeyCode::Enter => self.enter_action(),
@@ -1352,7 +1341,7 @@ fn draw_timeline_strip(f: &mut Frame, area: Rect, app: &App) {
     let spb = tl.steps_per_bar();
     let focused = app.focus_cell() == Focus::Timeline;
     let transport = if app.playing { "▶" } else { "■" };
-    let title = format!("TIMELINE {transport} {}×{}", tl.bars(), spb);
+    let title = format!("[0] TIMELINE {transport} {}×{}", tl.bars(), spb);
     let block = cell_block(&title, focused);
     let head = app.playhead();
     let mut lines: Vec<Line> = Vec::with_capacity(PADS);
@@ -1924,16 +1913,18 @@ mod tests {
     }
 
     #[test]
-    fn tab_jumps_between_the_three_areas() {
-        let tab = || KeyEvent::new(KeyCode::Tab, KeyModifiers::NONE);
+    fn numbers_select_pads_and_timeline_esc_returns_to_library() {
         let mut app = App::new();
         app.set_focus(Focus::Crate);
-        assert_eq!(app.on_key(tab()), Action::Focus);
-        assert_eq!(app.focus_cell(), Focus::Pad(0)); // Library → Pads
-        app.on_key(tab());
-        assert_eq!(app.focus_cell(), Focus::Timeline); // Pads → Timeline
-        app.on_key(tab());
-        assert_eq!(app.focus_cell(), Focus::Crate); // Timeline → Library
+        assert_eq!(app.on_key(key('3')), Action::Focus);
+        assert_eq!(app.focus_cell(), Focus::Pad(2), "3 selects pad 3");
+        assert_eq!(app.on_key(key('0')), Action::Focus);
+        assert_eq!(app.focus_cell(), Focus::Timeline, "0 selects the timeline");
+        app.on_key(key('1'));
+        assert_eq!(app.focus_cell(), Focus::Pad(0));
+        // Esc from a pad goes up a level → the library.
+        app.on_key(KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE));
+        assert_eq!(app.focus_cell(), Focus::Crate, "esc returns to the library");
     }
 
     #[test]
@@ -2069,21 +2060,19 @@ mod tests {
     }
 
     #[test]
-    fn arrows_volume_and_left_right_move_focus() {
+    fn arrows_adjust_pad_volume_and_browse_library() {
         let down = || KeyEvent::new(KeyCode::Down, KeyModifiers::NONE);
         let up = || KeyEvent::new(KeyCode::Up, KeyModifiers::NONE);
-        let right = || KeyEvent::new(KeyCode::Right, KeyModifiers::NONE);
         let mut app = App::new();
         app.set_focus(Focus::Pad(0));
-        // Up/Down change the focused pad's volume.
+        // On a pad, Up/Down change its volume.
         assert_eq!(app.on_key(down()), Action::Mark);
         assert!(app.mixer.pad_gain(0) < 1.0, "down lowers pad volume");
         app.on_key(up());
-        // Left/Right move focus (not volume).
-        let before = app.focus_cell();
-        app.on_key(right());
-        assert_ne!(app.focus_cell(), before, "right moves focus");
-        // On the library, Up/Down browse instead of changing volume.
+        // A number jumps focus (not arrows).
+        app.on_key(key('5'));
+        assert_eq!(app.focus_cell(), Focus::Pad(4));
+        // On the library, Up/Down browse the list.
         app.set_focus(Focus::Crate);
         assert_eq!(app.on_key(down()), Action::CrateNav);
     }
@@ -2308,6 +2297,7 @@ mod tests {
     fn esc_closes_the_menu_then_opens_quit() {
         let esc = || KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE);
         let mut app = App::new();
+        app.set_focus(Focus::Crate); // on the library, esc → quit
         app.on_key(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE)); // Enter opens the menu
         assert!(app.menu.is_some());
         app.on_key(esc());
@@ -2328,8 +2318,10 @@ mod tests {
         app.on_key(esc());
         assert!(app.clip_edit.is_none(), "first esc closes the clip editor");
         assert!(!app.confirm_quit);
-        app.on_key(esc());
-        assert!(app.confirm_quit, "second esc opens quit");
+        app.on_key(esc()); // pad → library
+        assert_eq!(app.focus_cell(), Focus::Crate);
+        app.on_key(esc()); // library → quit
+        assert!(app.confirm_quit, "esc from the library opens quit");
     }
 
     #[test]
@@ -2446,6 +2438,7 @@ mod tests {
     #[test]
     fn esc_opens_quit_modal_then_y_quits() {
         let mut app = App::new();
+        app.set_focus(Focus::Crate); // esc from the library opens quit
         assert_eq!(
             app.on_key(KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE)),
             Action::ConfirmQuit

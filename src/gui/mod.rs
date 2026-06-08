@@ -37,7 +37,8 @@ const WAVE_COLS: usize = 1600;
 pub fn run() -> eframe::Result<()> {
     let options = eframe::NativeOptions {
         viewport: egui::ViewportBuilder::default()
-            .with_title("TermKrush")
+            // Blank titlebar text — the in-app wordmark is the brand.
+            .with_title("")
             .with_inner_size([1100.0, 720.0])
             .with_min_inner_size([720.0, 480.0]),
         ..Default::default()
@@ -670,6 +671,33 @@ fn install_fonts(ctx: &egui::Context) {
     ctx.set_fonts(fonts);
 }
 
+/// A volume control with a *visible* track: dim rail, amber fill, a knob.
+/// Returns the new value while dragging. `0.0..=1.5` (1.0 = unity).
+fn vol_slider(ui: &mut egui::Ui, value: f32) -> Option<f32> {
+    let w = ui.available_width().clamp(60.0, 150.0);
+    let (rect, resp) = ui.allocate_exact_size(egui::vec2(w, 16.0), egui::Sense::click_and_drag());
+    let p = ui.painter_at(rect);
+    let y = rect.center().y;
+    p.line_segment(
+        [egui::pos2(rect.left(), y), egui::pos2(rect.right(), y)],
+        egui::Stroke::new(2.0, LINE),
+    );
+    let t = (value / 1.5).clamp(0.0, 1.0);
+    let knob_x = rect.left() + t * rect.width();
+    p.line_segment(
+        [egui::pos2(rect.left(), y), egui::pos2(knob_x, y)],
+        egui::Stroke::new(2.0, AMBER),
+    );
+    p.circle_filled(egui::pos2(knob_x, y), 5.0, AMBER);
+    p.circle_stroke(egui::pos2(knob_x, y), 5.0, egui::Stroke::new(1.0, GROUND));
+    if (resp.dragged() || resp.clicked()) && resp.interact_pointer_pos().is_some() {
+        let px = resp.interact_pointer_pos().unwrap().x;
+        let nt = ((px - rect.left()) / rect.width()).clamp(0.0, 1.0);
+        return Some(nt * 1.5);
+    }
+    None
+}
+
 /// Wordmark text in the Bungee display face.
 fn bungee(text: impl Into<String>, size: f32, color: egui::Color32) -> egui::RichText {
     egui::RichText::new(text)
@@ -757,24 +785,22 @@ fn draw_library(
             ui.add_space(6.0);
             ui.horizontal(|ui| {
                 ui.label(egui::RichText::new("LIBRARY").color(AMBER).strong());
-                if ui.small_button("＋ folder").clicked() {
+                if ui.small_button("+ folder").clicked() {
                     acts.push(Act::StartNewFolder);
                 }
-                let has_sel = sel.is_some();
-                if ui
-                    .add_enabled(has_sel, egui::Button::new("▶"))
-                    .on_hover_text("preview")
-                    .clicked()
-                {
-                    if let Some(p) = sel {
-                        acts.push(Act::Preview(p.clone()));
-                    }
+                // Trash: drag a track onto it to delete (also deletes the
+                // selection on click). Highlights red while a drag hovers it.
+                let frame = egui::Frame::none().inner_margin(egui::Margin::symmetric(8.0, 3.0));
+                let (inner, dropped) = ui.dnd_drop_zone::<DragTrack, _>(frame, |ui| {
+                    ui.label(egui::RichText::new("trash").color(DIM))
+                });
+                if inner.response.dnd_hover_payload::<DragTrack>().is_some() {
+                    ui.painter()
+                        .rect_stroke(inner.response.rect, 3.0, egui::Stroke::new(1.5, RED));
                 }
-                if ui
-                    .add_enabled(has_sel, egui::Button::new("🗑"))
-                    .on_hover_text("delete selected")
-                    .clicked()
-                {
+                if let Some(d) = dropped {
+                    acts.push(Act::Delete(d.0.clone()));
+                } else if inner.response.clicked() {
                     if let Some(p) = sel {
                         acts.push(Act::Delete(p.clone()));
                     }
@@ -800,12 +826,11 @@ fn draw_library(
             }
 
             egui::ScrollArea::vertical().show(ui, |ui| {
-                // Up a level.
+                // Up a level — click to go up, or drop a track here to move it
+                // out to the parent folder.
                 if lib.cwd() != lib.root() {
                     if let Some(parent) = lib.cwd().parent() {
-                        if ui.button("⬆ ..").clicked() {
-                            acts.push(Act::EnterFolder(parent.to_path_buf()));
-                        }
+                        draw_folder_row(ui, ".. (up)", parent, acts);
                     }
                 }
                 for e in lib.entries() {
@@ -826,13 +851,26 @@ fn draw_library(
         });
 }
 
-/// A folder row: click to open, a drop target to move a track in.
+/// A folder row: click to open, a drop target to move a track in. Highlights
+/// amber while a track is dragged over it, so the drop target is obvious.
 fn draw_folder_row(ui: &mut egui::Ui, name: &str, path: &Path, acts: &mut Vec<Act>) {
-    let frame = egui::Frame::none().inner_margin(egui::Margin::symmetric(4.0, 2.0));
+    let label = if name.ends_with(')') {
+        name.to_string() // ".. (up)" — leave as-is
+    } else {
+        format!("{name}/")
+    };
+    let frame = egui::Frame::none().inner_margin(egui::Margin::symmetric(4.0, 3.0));
     let (inner, payload) = ui.dnd_drop_zone::<DragTrack, _>(frame, |ui| {
-        ui.label(egui::RichText::new(format!("📁 {name}")).color(AMBER))
+        ui.label(egui::RichText::new(label).color(AMBER).strong());
+        ui.allocate_space(egui::vec2(ui.available_width(), 0.0)); // full-width hit area
     });
-    if inner.inner.clicked() || inner.response.clicked() {
+    if inner.response.dnd_hover_payload::<DragTrack>().is_some() {
+        let r = inner.response.rect;
+        ui.painter().rect_filled(r, 3.0, AMBER.gamma_multiply(0.18));
+        ui.painter()
+            .rect_stroke(r, 3.0, egui::Stroke::new(1.5, AMBER));
+    }
+    if inner.response.clicked() {
         acts.push(Act::EnterFolder(path.to_path_buf()));
     }
     if let Some(p) = payload {
@@ -869,27 +907,47 @@ fn draw_track_row(
     }
 
     let selected = sel.as_deref() == Some(e.path.as_path());
-    let id = egui::Id::new(("track", &e.path));
-    let resp = ui
-        .dnd_drag_source(id, DragTrack(e.path.clone()), |ui| {
-            let mut text = egui::RichText::new(&e.name);
-            if bad {
-                text = text.color(RED); // unplayable / failed to decode
-            } else if selected {
-                text = text.color(AMBER).strong();
-            }
-            let label = ui.label(text);
-            if bad {
-                label.on_hover_text("unplayable — won't decode");
-            }
-        })
-        .response;
-    if resp.clicked() {
-        acts.push(Act::Select(e.path.clone()));
-    }
-    if resp.double_clicked() {
-        acts.push(Act::StartRename(e.path.clone()));
-    }
+    ui.horizontal(|ui| {
+        // Per-row play button (preview). Disabled for unplayable files.
+        if ui
+            .add_enabled(!bad, egui::Button::new("▶").small().frame(false))
+            .on_hover_text("play / stop")
+            .clicked()
+        {
+            acts.push(Act::Preview(e.path.clone()));
+        }
+        // The name is the drag source (load/move); click selects, dbl-click renames.
+        let id = egui::Id::new(("track", &e.path));
+        let resp = ui
+            .dnd_drag_source(id, DragTrack(e.path.clone()), |ui| {
+                let mut text = egui::RichText::new(&e.name);
+                if bad {
+                    text = text.color(RED);
+                } else if selected {
+                    text = text.color(AMBER).strong();
+                } else {
+                    text = text.color(INK);
+                }
+                let label = ui.label(text);
+                if bad {
+                    label.on_hover_text("unplayable — won't decode");
+                }
+            })
+            .response;
+        if selected {
+            ui.painter().rect_stroke(
+                resp.rect.expand(1.0),
+                2.0,
+                egui::Stroke::new(1.0, AMBER.gamma_multiply(0.7)),
+            );
+        }
+        if resp.clicked() {
+            acts.push(Act::Select(e.path.clone()));
+        }
+        if resp.double_clicked() {
+            acts.push(Act::StartRename(e.path.clone()));
+        }
+    });
 }
 
 fn draw_pad_grid(
@@ -1112,18 +1170,18 @@ fn draw_pad_cell(
                 }
             });
 
-            // Volume.
-            let mut g = mixer.pad_gain(i);
-            if ui
-                .add(
-                    egui::Slider::new(&mut g, 0.0..=1.5)
-                        .text("vol")
-                        .show_value(false),
-                )
-                .changed()
-            {
-                acts.push(Act::SetGain(i, g));
-            }
+            // Volume — custom control with a visible amber track.
+            ui.horizontal(|ui| {
+                ui.label(egui::RichText::new("vol").color(DIM).small());
+                if let Some(v) = vol_slider(ui, mixer.pad_gain(i)) {
+                    acts.push(Act::SetGain(i, v));
+                }
+                ui.label(
+                    egui::RichText::new(format!("{:.0}", mixer.pad_gain(i) * 100.0))
+                        .color(DIM)
+                        .small(),
+                );
+            });
 
             ui.horizontal(|ui| {
                 let mut on = mixer.pad_active(i);
@@ -1146,7 +1204,14 @@ fn draw_pad_cell(
             });
         });
     });
-    let _ = inner;
+    // Highlight the pad while a track is dragged over it, so it's clear it'll
+    // load here on drop.
+    if inner.response.dnd_hover_payload::<DragTrack>().is_some() {
+        let r = inner.response.rect;
+        ui.painter().rect_filled(r, 4.0, AMBER.gamma_multiply(0.15));
+        ui.painter()
+            .rect_stroke(r, 4.0, egui::Stroke::new(2.0, AMBER));
+    }
     if let Some(p) = payload {
         acts.push(Act::LoadToPad {
             pad: i,

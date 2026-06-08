@@ -289,6 +289,32 @@ impl Mixer {
         }
     }
 
+    /// Downsample pad `i`'s whole clip to `columns` `(min, max)` peak pairs
+    /// (mono-summed), for drawing a waveform. Empty if the pad has no clip.
+    pub fn pad_peaks(&self, i: usize, columns: usize) -> Vec<(f32, f32)> {
+        let Some(clip) = self.pads.get(i).and_then(|p| p.as_ref()) else {
+            return Vec::new();
+        };
+        let frames = clip.len() / 2;
+        if frames == 0 || columns == 0 {
+            return Vec::new();
+        }
+        let per = (frames as f64 / columns as f64).max(1.0);
+        (0..columns)
+            .map(|c| {
+                let start = (c as f64 * per) as usize;
+                let end = (((c + 1) as f64 * per) as usize).min(frames).max(start + 1);
+                let (mut lo, mut hi) = (0.0f32, 0.0f32);
+                for f in start..end {
+                    let s = 0.5 * (clip[f * 2] + clip[f * 2 + 1]);
+                    lo = lo.min(s);
+                    hi = hi.max(s);
+                }
+                (lo, hi)
+            })
+            .collect()
+    }
+
     /// Clip length (frames) on pad `i`, 0 if empty.
     pub fn pad_clip_frames(&self, i: usize) -> usize {
         self.pads
@@ -1025,6 +1051,24 @@ impl Mixer {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn pad_peaks_downsamples_to_columns() {
+        let mut m = Mixer::new();
+        assert!(m.pad_peaks(0, 32).is_empty(), "empty pad has no peaks");
+        // A clip that ramps 0..1 across 1000 frames.
+        let clip: Vec<f32> = (0..1000)
+            .flat_map(|i| [i as f32 / 1000.0, i as f32 / 1000.0])
+            .collect();
+        m.assign_pad(0, clip);
+        let peaks = m.pad_peaks(0, 50);
+        assert_eq!(peaks.len(), 50);
+        // Peaks rise left-to-right; the last column's max exceeds the first's.
+        assert!(peaks.last().unwrap().1 > peaks.first().unwrap().1);
+        for (lo, hi) in &peaks {
+            assert!(lo <= hi);
+        }
+    }
 
     #[test]
     fn jog_moves_and_sounds_only_while_spinning() {

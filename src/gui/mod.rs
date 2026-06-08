@@ -83,6 +83,11 @@ enum Act {
     SetActive(usize, bool),
     ClearPad(usize),
     ExportPad(usize),
+    EditClip(usize),
+    CloseClip,
+    SetTrimIn(usize, usize),
+    SetTrimOut(usize, usize),
+    AuditionSel(usize),
 }
 
 /// The whole app: the engine, the audio sink, and the browsed library.
@@ -101,6 +106,8 @@ pub struct TermKrushApp {
     new_folder: Option<String>,
     /// Source loaded on the scratch platter (for its label).
     jog_source: Option<PathBuf>,
+    /// The pad whose clip is open in the editor (central-panel mode).
+    clip_edit: Option<usize>,
 
     producer: Option<rtrb::Producer<f32>>,
     _audio: Option<AudioOutput>,
@@ -150,6 +157,7 @@ impl TermKrushApp {
             renaming: None,
             new_folder: None,
             jog_source: None,
+            clip_edit: None,
             producer,
             _audio: audio,
             out_channels: channels.max(1),
@@ -321,6 +329,25 @@ impl TermKrushApp {
                 self.pad_source[i] = None;
             }
             Act::ExportPad(i) => self.export_pad(i),
+            Act::EditClip(i) => {
+                self.mixer.stop_pad(i); // silence live playback before editing
+                self.clip_edit = Some(i);
+            }
+            Act::CloseClip => {
+                if let Some(i) = self.clip_edit.take() {
+                    self.mixer.stop_pad(i);
+                }
+            }
+            Act::SetTrimIn(i, f) => self.mixer.set_pad_trim_in(i, f),
+            Act::SetTrimOut(i, f) => self.mixer.set_pad_trim_out(i, f),
+            Act::AuditionSel(i) => {
+                if self.mixer.pad_is_sounding(i) {
+                    self.mixer.stop_pad(i);
+                } else {
+                    let (inp, out) = self.mixer.pad_trim(i);
+                    self.mixer.audition_region(i, inp, out);
+                }
+            }
         }
     }
 
@@ -461,13 +488,19 @@ impl eframe::App for TermKrushApp {
                 renaming,
                 new_folder,
                 playable,
+                clip_edit,
                 ..
             } = self;
             draw_timeline_strip(ctx, mixer);
             draw_library(
                 ctx, crate_lib, lib_sel, renaming, new_folder, playable, &mut acts,
             );
-            draw_pad_grid(ctx, mixer, pad_source, loading, &mut acts);
+            // Central panel: the clip editor when one is open, else the pads.
+            if let Some(i) = *clip_edit {
+                draw_clip_editor(ctx, mixer, pad_source, i, &mut acts);
+            } else {
+                draw_pad_grid(ctx, mixer, pad_source, loading, &mut acts);
+            }
         }
         for a in acts {
             self.apply(a);
@@ -707,6 +740,125 @@ fn draw_pad_grid(
     });
 }
 
+/// The clip editor: a full-clip waveform with draggable in/out handles. With a
+/// mouse the handles are precise enough that no zoom window is needed.
+fn draw_clip_editor(
+    ctx: &egui::Context,
+    mixer: &Mixer,
+    pad_source: &[Option<PathBuf>; PADS],
+    i: usize,
+    acts: &mut Vec<Act>,
+) {
+    egui::CentralPanel::default().show(ctx, |ui| {
+        ui.add_space(6.0);
+        let track = pad_source[i]
+            .as_ref()
+            .and_then(|p| p.file_stem())
+            .and_then(|s| s.to_str())
+            .unwrap_or("clip");
+        ui.horizontal(|ui| {
+            ui.label(
+                egui::RichText::new(format!("EDIT  {track}"))
+                    .color(AMBER)
+                    .strong(),
+            );
+            let playing = mixer.pad_is_sounding(i);
+            if ui
+                .button(if playing {
+                    "⏸ stop"
+                } else {
+                    "▶ play selection"
+                })
+                .clicked()
+            {
+                acts.push(Act::AuditionSel(i));
+            }
+            if ui.button("export").clicked() {
+                acts.push(Act::ExportPad(i));
+            }
+            if ui.button("done").clicked() {
+                acts.push(Act::CloseClip);
+            }
+        });
+
+        let len = mixer.pad_clip_frames(i).max(1);
+        let (inp, out) = mixer.pad_trim(i);
+        let secs = |f: usize| f as f64 / mixer.sample_rate().max(1) as f64;
+        ui.label(
+            egui::RichText::new(format!(
+                "in {:.3}s   out {:.3}s   selection {:.3}s   ·  drag the ◀ ▶ handles",
+                secs(inp),
+                secs(out),
+                secs(out.saturating_sub(inp))
+            ))
+            .weak(),
+        );
+        ui.add_space(8.0);
+
+        // The waveform canvas.
+        let width = ui.available_width();
+        let height = (ui.available_height() - 16.0).clamp(80.0, 360.0);
+        let (rect, _resp) = ui.allocate_exact_size(egui::vec2(width, height), egui::Sense::hover());
+        let painter = ui.painter_at(rect);
+        painter.rect_filled(rect, 4.0, GROUND);
+        let mid = rect.center().y;
+        let amp = rect.height() * 0.45;
+        let x_of = |frame: usize| rect.left() + (frame as f32 / len as f32) * rect.width();
+
+        let cols = rect.width() as usize;
+        let peaks = mixer.pad_peaks(i, cols);
+        for (c, (lo, hi)) in peaks.iter().enumerate() {
+            let x = rect.left() + c as f32;
+            let frame = (c as f32 / cols.max(1) as f32 * len as f32) as usize;
+            let inside = frame >= inp && frame < out;
+            let color = if inside {
+                AMBER
+            } else {
+                GREEN.gamma_multiply(0.35)
+            };
+            painter.line_segment(
+                [egui::pos2(x, mid - hi * amp), egui::pos2(x, mid - lo * amp)],
+                egui::Stroke::new(1.0, color),
+            );
+        }
+
+        // Draggable handles. A thin grab rect around each in/out line.
+        for (is_out, frame) in [(false, inp), (true, out)] {
+            let hx = x_of(frame);
+            let handle = egui::Rect::from_min_max(
+                egui::pos2(hx - 5.0, rect.top()),
+                egui::pos2(hx + 5.0, rect.bottom()),
+            );
+            let id = ui.id().with(("ce_handle", is_out));
+            let resp = ui.interact(handle, id, egui::Sense::drag());
+            let painter = ui.painter_at(rect);
+            painter.line_segment(
+                [egui::pos2(hx, rect.top()), egui::pos2(hx, rect.bottom())],
+                egui::Stroke::new(2.0, AMBER),
+            );
+            let glyph = if is_out { "▶" } else { "◀" };
+            painter.text(
+                egui::pos2(hx, rect.top() + 8.0),
+                egui::Align2::CENTER_TOP,
+                glyph,
+                egui::FontId::monospace(12.0),
+                AMBER,
+            );
+            if resp.dragged() {
+                if let Some(p) = resp.interact_pointer_pos() {
+                    let f = (((p.x - rect.left()) / rect.width()).clamp(0.0, 1.0) * len as f32)
+                        as usize;
+                    if is_out {
+                        acts.push(Act::SetTrimOut(i, f));
+                    } else {
+                        acts.push(Act::SetTrimIn(i, f));
+                    }
+                }
+            }
+        }
+    });
+}
+
 #[allow(clippy::too_many_arguments)]
 fn draw_pad_cell(
     ui: &mut egui::Ui,
@@ -802,6 +954,9 @@ fn draw_pad_cell(
                 let mut on = mixer.pad_active(i);
                 if ui.checkbox(&mut on, "on").changed() {
                     acts.push(Act::SetActive(i, on));
+                }
+                if ui.button("edit").on_hover_text("trim the clip").clicked() {
+                    acts.push(Act::EditClip(i));
                 }
                 if ui.button("clear").clicked() {
                     acts.push(Act::ClearPad(i));

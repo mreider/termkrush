@@ -2,11 +2,12 @@
 title: 'GUI clip editor inline: waveform, draggable handles, zoom buttons, export'
 type: feature
 created: "2026-06-08T12:17:11Z"
-modified: "2026-06-08T12:28:32Z"
+modified: "2026-06-08T12:57:36Z"
 author: Matt Reider
-status: unstarted
+status: started
 estimate: "5"
 epic: gui
+started: "2026-06-08T12:57:36Z"
 ---
 
 ## Goal

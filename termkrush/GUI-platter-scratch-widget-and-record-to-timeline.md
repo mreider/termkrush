@@ -2,12 +2,14 @@
 title: GUI platter scratch widget and record-to-timeline
 type: feature
 created: "2026-06-08T12:17:12Z"
-modified: "2026-06-08T12:55:13Z"
+modified: "2026-06-08T12:57:13Z"
 author: Matt Reider
-status: started
+status: delivered
 estimate: "5"
 epic: gui
 started: "2026-06-08T12:55:13Z"
+finished: "2026-06-08T12:57:13Z"
+delivered: "2026-06-08T12:57:13Z"
 ---
 
 ## Goal

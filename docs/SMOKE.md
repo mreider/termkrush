@@ -17,14 +17,18 @@ they do *right now*.
 - **Esc** — back / cancel (closes the menu or editor; again = quit).
 
 ## Walkthrough
-- [ ] Tab moves the highlight Library → Pads → Timeline → Library; the hint
-      line changes to match.
-- [ ] Library: `↑`/`↓` browse; `Enter` loads the track onto the last-selected
-      pad and you **hear** it on `Space`.
-- [ ] Pad: `Space` plays; `↑`/`↓` change its volume audibly; `Enter` opens the
-      clip editor; `Enter` opens its menu (load / kind / on-off / save / export / unload).
-- [ ] Scratch pad (set kind=scratch via `M`): `Space` = wiki, `Enter` = whip;
-      `Enter` menu → record phrase, tap `Space`/`Enter`, then `Space` replays it.
+- [ ] The **library is home** on launch. `1`–`8` jump to a pad, `0` to the
+      timeline; `Esc` goes back up to the library (and from the library, quits).
+- [ ] Library: `↑`/`↓` browse; `Enter` on a song opens its actions —
+      **`1`–`8` load it onto that pad**, `r` rename, `Backspace` delete, `→`
+      move. After loading, jump to the pad (`3`) and `Space` to **hear** it.
+- [ ] Move (`Enter` → `→`): a folder modal — `↑`/`↓` pick `(root)` or a folder,
+      `n` new folder (type a name, `Enter`), `r` rename, `Backspace` delete
+      (confirm), `Enter` moves the file there. One level of folders only.
+- [ ] Pad: `Space` plays; `↑`/`↓` volume; `Enter` opens its menu (edit clip /
+      kind / on-off / save / export / unload).
+- [ ] Scratch pad (`Enter` menu → kind → scratch): `Space` = wiki; `Enter` menu
+      → record phrase, tap `Space`/`Enter`, then `Space` replays it.
 - [ ] Clip editor: `←`/`→` move the active handle; **`+`/`-` zoom** the window
       (whole→10s→1s→100ms→10ms) so steps get as fine as you need; `Tab` switches
       in/out handle **and the view follows it** (so you can see/scroll to the

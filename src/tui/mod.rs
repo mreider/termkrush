@@ -92,13 +92,6 @@ pub enum Focus {
 /// An action a context-menu item runs (routes to existing handlers).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum MenuAction {
-    // Library
-    OpenFolder,
-    Rename,
-    Delete,
-    MarkMove,
-    PasteHere,
-    Filter,
     // Pad
     Load,
     EditClip,
@@ -128,6 +121,16 @@ struct MenuState {
     title: &'static str,
     items: Vec<(&'static str, MenuAction)>,
     sel: usize,
+}
+
+/// The "move a file" modal: pick a destination folder (one level under root),
+/// with inline new/rename/delete.
+struct MovePicker {
+    file: PathBuf,                             // the file being moved
+    folders: Vec<(String, PathBuf)>,           // root subfolders; index + 1 (0 = root)
+    sel: usize,                                // 0 = (root), else folders[sel - 1]
+    naming: Option<(String, Option<PathBuf>)>, // (buffer, Some=rename target / None=new)
+    confirm_del: Option<PathBuf>,              // folder pending a delete confirm
 }
 
 /// State of the keyboard-first pads UI.
@@ -168,8 +171,12 @@ pub struct App {
     tl_step: usize,
     /// First endpoint of a loop region being drawn (`v` marks, `v` fills).
     tl_region_start: Option<usize>,
-    /// Open context menu (M), if any.
+    /// Open context menu (Enter on a pad/timeline), if any.
     menu: Option<MenuState>,
+    /// A library song is selected for action (load/rename/delete/move).
+    song_action: bool,
+    /// The move-a-file modal, if open.
+    move_picker: Option<MovePicker>,
     /// Clip-edit modal: the pad being edited + which mark is active
     /// (`false` = in/left, `true` = out/right) + the zoom level index.
     clip_edit: Option<usize>,
@@ -194,7 +201,7 @@ impl App {
             should_quit: false,
             confirm_quit: false,
             mixer: Mixer::new(),
-            focus: Focus::Pad(0),
+            focus: Focus::Crate, // the library is home
             last_pad: 0,
             crate_lib: Crate::from_entries(Vec::new()),
             crate_sel: 0,
@@ -215,6 +222,8 @@ impl App {
             tl_step: 0,
             tl_region_start: None,
             menu: None,
+            song_action: false,
+            move_picker: None,
             clip_edit: None,
             ce_out: false,
             ce_zoom: 0,
@@ -427,10 +436,134 @@ impl App {
     /// where Enter taps a whip (Space taps a wiki).
     fn enter_action(&mut self) -> Action {
         if self.phrase_rec.is_some() {
-            self.secondary() // whip tap
-        } else {
-            self.open_menu()
+            return self.secondary(); // whip tap
         }
+        match self.focus {
+            // Library: open a folder, or offer actions on a song.
+            Focus::Crate => {
+                if self.selected_is_dir() {
+                    self.enter_selected()
+                } else if self.selected_path().is_some() {
+                    self.song_action = true;
+                    Action::Mark
+                } else {
+                    Action::None
+                }
+            }
+            _ => self.open_menu(),
+        }
+    }
+
+    /// Keys while a library song's action prompt is up: `1`–`8` load it onto
+    /// that pad, `r`/Insert rename, Backspace/Delete delete, `→` move, Esc cancel.
+    fn on_song_action_key(&mut self, key: KeyEvent) -> Action {
+        self.song_action = false;
+        match key.code {
+            KeyCode::Char(c @ '1'..='8') => self.load_selected_onto(c as usize - '1' as usize),
+            KeyCode::Char('r') | KeyCode::Char('R') | KeyCode::Insert => self.start_rename(),
+            KeyCode::Backspace | KeyCode::Delete => self.arm_delete(),
+            KeyCode::Right => self.open_move_picker(),
+            _ => Action::Mark, // Esc / anything else cancels
+        }
+    }
+
+    /// Open the move-a-file modal for the highlighted song.
+    fn open_move_picker(&mut self) -> Action {
+        if let Some(file) = self.selected_path() {
+            self.move_picker = Some(MovePicker {
+                file,
+                folders: self.crate_lib.root_folders(),
+                sel: 0,
+                naming: None,
+                confirm_del: None,
+            });
+            Action::Mark
+        } else {
+            Action::None
+        }
+    }
+
+    /// Keys while the move modal is open.
+    fn on_move_key(&mut self, key: KeyEvent) -> Action {
+        let Some(mp) = self.move_picker.as_mut() else {
+            return Action::None;
+        };
+        // Name-entry sub-mode (new folder or rename).
+        if let Some((buf, target)) = mp.naming.as_mut() {
+            match key.code {
+                KeyCode::Char(c) => buf.push(c),
+                KeyCode::Backspace => {
+                    buf.pop();
+                }
+                KeyCode::Esc => mp.naming = None,
+                KeyCode::Enter => {
+                    let (name, target) = (buf.clone(), target.clone());
+                    mp.naming = None;
+                    if name.trim().is_empty() {
+                        return Action::Mark;
+                    }
+                    match target {
+                        Some(path) => {
+                            let _ = self.crate_lib.rename(&path, name.trim());
+                        }
+                        None => {
+                            let _ = self.crate_lib.make_folder(name.trim());
+                        }
+                    }
+                    if let Some(mp) = self.move_picker.as_mut() {
+                        mp.folders = self.crate_lib.root_folders();
+                        mp.sel = mp.sel.min(mp.folders.len());
+                    }
+                }
+                _ => {}
+            }
+            return Action::Mark;
+        }
+        // Delete-confirm sub-mode.
+        if let Some(path) = mp.confirm_del.clone() {
+            if matches!(key.code, KeyCode::Char('y') | KeyCode::Char('Y')) {
+                let _ = self.crate_lib.delete_folder(&path);
+                if let Some(mp) = self.move_picker.as_mut() {
+                    mp.folders = self.crate_lib.root_folders();
+                    mp.sel = mp.sel.min(mp.folders.len());
+                }
+            }
+            if let Some(mp) = self.move_picker.as_mut() {
+                mp.confirm_del = None;
+            }
+            return Action::Mark;
+        }
+        // Browsing.
+        let n = mp.folders.len();
+        match key.code {
+            KeyCode::Up => mp.sel = mp.sel.saturating_sub(1),
+            KeyCode::Down => mp.sel = (mp.sel + 1).min(n),
+            KeyCode::Char('n') | KeyCode::Char('N') => mp.naming = Some((String::new(), None)),
+            KeyCode::Char('r') | KeyCode::Char('R') | KeyCode::Insert if mp.sel > 0 => {
+                let (name, path) = mp.folders[mp.sel - 1].clone();
+                mp.naming = Some((name, Some(path)));
+            }
+            KeyCode::Backspace | KeyCode::Delete if mp.sel > 0 => {
+                mp.confirm_del = Some(mp.folders[mp.sel - 1].1.clone());
+            }
+            KeyCode::Esc | KeyCode::Left => {
+                self.move_picker = None;
+            }
+            KeyCode::Enter => {
+                // sel 0 = root, else the chosen folder.
+                let dest = if mp.sel == 0 {
+                    self.crate_lib.root().to_path_buf()
+                } else {
+                    mp.folders[mp.sel - 1].1.clone()
+                };
+                let file = mp.file.clone();
+                let _ = self.crate_lib.move_into(&file, &dest);
+                self.move_picker = None;
+                self.crate_sel = 0;
+            }
+            _ => {}
+        }
+        Action::Mark
     }
 
     /// Toggle the timeline loop region (first call marks the start, second
@@ -451,21 +584,8 @@ impl App {
     fn open_menu(&mut self) -> Action {
         use MenuAction::*;
         let (title, items): (&str, Vec<(&str, MenuAction)>) = match self.focus {
-            Focus::Crate => {
-                let mut items: Vec<(&str, MenuAction)> = if self.selected_is_dir() {
-                    vec![("open folder", OpenFolder)]
-                } else {
-                    vec![("load → selected pad", Load)]
-                };
-                items.extend([
-                    ("rename", Rename),
-                    ("delete", Delete),
-                    ("mark to move", MarkMove),
-                    ("move here", PasteHere),
-                    ("filter", Filter),
-                ]);
-                ("Library", items)
-            }
+            // The library has no menu — Enter offers song actions directly.
+            Focus::Crate => return Action::None,
             Focus::Pad(i) => {
                 let mut items: Vec<(&str, MenuAction)> = Vec::new();
                 if self.mixer.pad_loaded(i) {
@@ -515,20 +635,10 @@ impl App {
         use MenuAction::*;
         self.menu = None;
         match a {
-            OpenFolder => self.enter_selected(),
             EditClip => self.open_clip_edit(),
             PlaceHit => {
                 self.timeline.toggle(self.tl_lane, self.tl_step);
                 Action::Timeline
-            }
-            Rename => self.start_rename(),
-            Delete => self.arm_delete(),
-            MarkMove => self.mark_move(),
-            PasteHere => self.paste_move(),
-            Filter => {
-                self.filter = Some(String::new());
-                self.crate_sel = 0;
-                Action::Filter
             }
             Load => self.load_selected_onto(self.active_pad()),
             CycleKind => self.cycle_kind(),
@@ -597,29 +707,6 @@ impl App {
             }
         }
         Action::None
-    }
-
-    /// `m` — mark the highlighted track for a move (cut).
-    fn mark_move(&mut self) -> Action {
-        if self.focus == Focus::Crate {
-            if let Some(p) = self.selected_path() {
-                self.move_mark = Some(p);
-                return Action::Mark;
-            }
-        }
-        Action::None
-    }
-
-    /// `p` — move the marked track into the current folder.
-    fn paste_move(&mut self) -> Action {
-        if let Some(p) = self.move_mark.take() {
-            let dir = self.crate_lib.cwd().to_path_buf();
-            let _ = self.crate_lib.move_into(&p, &dir);
-            self.crate_sel = 0;
-            Action::Mark
-        } else {
-            Action::None
-        }
     }
 
     pub fn set_crate(&mut self, c: Crate) {
@@ -1067,6 +1154,15 @@ impl App {
             };
         }
 
+        // Move-a-file modal captures keys while open.
+        if self.move_picker.is_some() {
+            return self.on_move_key(key);
+        }
+        // Library song-action prompt captures keys while up.
+        if self.song_action {
+            return self.on_song_action_key(key);
+        }
+
         // Clip-edit modal captures keys while open.
         if self.clip_edit.is_some() {
             if let Some(a) = self.on_clip_key(key) {
@@ -1390,9 +1486,94 @@ fn return_help(f: &mut Frame, app: &App) {
     } else if let Some(path) = &app.confirm_delete {
         let name = path.file_name().and_then(|n| n.to_str()).unwrap_or("track");
         draw_confirm_modal(f, f.area(), &format!("Delete {name}?"));
+    } else if let Some(mp) = &app.move_picker {
+        draw_move_picker(f, f.area(), mp);
+    } else if app.song_action {
+        let name = app
+            .selected_path()
+            .and_then(|p| p.file_name().and_then(|n| n.to_str()).map(String::from))
+            .unwrap_or_default();
+        draw_song_action(f, f.area(), &name);
     } else if let Some(menu) = &app.menu {
         draw_menu(f, f.area(), menu);
     }
+}
+
+/// The song-action prompt: what you can do with the highlighted library song.
+fn draw_song_action(f: &mut Frame, area: Rect, name: &str) {
+    let popup = centered(54.max(name.len() as u16 + 6).min(72), 7, area);
+    f.render_widget(Clear, popup);
+    let block = Block::default()
+        .borders(Borders::ALL)
+        .border_style(Style::default().fg(AMBER))
+        .title(" Song ");
+    let lines = vec![
+        Line::from(""),
+        Line::from(format!("  {name}")),
+        Line::from(""),
+        Line::from("  load to a pad: 1-8 · r rename · ⌫ delete · → move · esc"),
+    ];
+    f.render_widget(
+        Paragraph::new(lines)
+            .block(block)
+            .style(Style::default().fg(GREEN)),
+        popup,
+    );
+}
+
+/// The move-a-file modal: the destination folders ((root) + one level),
+/// with inline new/rename/delete.
+fn draw_move_picker(f: &mut Frame, area: Rect, mp: &MovePicker) {
+    let file = mp
+        .file
+        .file_name()
+        .and_then(|n| n.to_str())
+        .unwrap_or("file");
+    let mut rows: Vec<String> = vec!["(root)".into()];
+    rows.extend(mp.folders.iter().map(|(n, _)| format!("📁 {n}")));
+    let footer = if mp.naming.is_some() {
+        "type a name · enter save · esc cancel"
+    } else if mp.confirm_del.is_some() {
+        "delete this folder and everything inside? y / n"
+    } else {
+        "↑↓ pick · enter move here · n new · r rename · ⌫ delete · esc cancel"
+    };
+    let w = rows
+        .iter()
+        .map(|r| r.chars().count())
+        .chain([footer.chars().count(), file.chars().count() + 8])
+        .max()
+        .unwrap_or(30) as u16
+        + 6;
+    let h = rows.len() as u16 + 6;
+    let popup = centered(w.clamp(28, 70), h.clamp(7, 24), area);
+    f.render_widget(Clear, popup);
+    let block = Block::default()
+        .borders(Borders::ALL)
+        .border_style(Style::default().fg(AMBER))
+        .title(format!(" Move {file} "));
+    let mut lines: Vec<Line> = Vec::new();
+    if let Some((buf, target)) = &mp.naming {
+        let what = if target.is_some() {
+            "rename to"
+        } else {
+            "new folder"
+        };
+        lines.push(Line::from(format!("  {what}: {buf}▏")));
+    } else {
+        for (i, r) in rows.iter().enumerate() {
+            let marker = if i == mp.sel { "▶ " } else { "  " };
+            lines.push(Line::from(format!("{marker}{r}")));
+        }
+    }
+    lines.push(Line::from(""));
+    lines.push(Line::from(format!("  {footer}")));
+    f.render_widget(
+        Paragraph::new(lines)
+            .block(block)
+            .style(Style::default().fg(GREEN)),
+        popup,
+    );
 }
 
 /// The context menu (M): a titled list, the selected row reversed.
@@ -1869,7 +2050,9 @@ mod tests {
         let mut app = App::new();
         app.set_crate(Crate::scan(&tmp));
         app.set_focus(Focus::Crate);
-        app.run_menu(MenuAction::Delete); // arm
+        // Enter on the song → Backspace deletes (confirm) → y.
+        app.on_key(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE));
+        app.on_key(KeyEvent::new(KeyCode::Backspace, KeyModifiers::NONE));
         assert!(app.confirm_delete.is_some());
         app.on_key(key('y')); // confirm
         assert!(!tmp.join("gone.wav").exists(), "file deleted");
@@ -1877,7 +2060,7 @@ mod tests {
     }
 
     #[test]
-    fn mark_and_paste_moves_a_track_into_a_folder() {
+    fn move_into_an_existing_folder() {
         use std::fs;
         let tmp = std::env::temp_dir().join(format!("tk-mv-{}", std::process::id()));
         let _ = fs::remove_dir_all(&tmp);
@@ -1886,14 +2069,14 @@ mod tests {
         let mut app = App::new();
         app.set_crate(Crate::scan(&tmp));
         app.set_focus(Focus::Crate);
-        // Entries: ["box", "t.wav"] — move to the track, mark it.
+        // Entries: ["box", "t.wav"] — go to the track.
         app.on_key(KeyEvent::new(KeyCode::Down, KeyModifiers::NONE));
         assert_eq!(app.selected_path(), Some(tmp.join("t.wav")));
-        app.run_menu(MenuAction::MarkMove);
-        // Back to the folder, open it (menu), paste.
-        app.crate_sel = 0;
-        app.run_menu(MenuAction::OpenFolder); // into box/
-        app.run_menu(MenuAction::PasteHere);
+        // Enter → Right opens the move modal; Down to "box"; Enter moves it.
+        app.on_key(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE));
+        app.on_key(KeyEvent::new(KeyCode::Right, KeyModifiers::NONE));
+        app.on_key(KeyEvent::new(KeyCode::Down, KeyModifiers::NONE)); // (root) → box
+        app.on_key(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE));
         assert!(tmp.join("box/t.wav").exists() && !tmp.join("t.wav").exists());
         let _ = fs::remove_dir_all(&tmp);
     }
@@ -1928,6 +2111,58 @@ mod tests {
     }
 
     #[test]
+    fn library_is_the_default_focus() {
+        assert_eq!(App::new().focus_cell(), Focus::Crate);
+    }
+
+    #[test]
+    fn library_enter_then_number_loads_that_pad() {
+        let mut app = App::new();
+        app.set_crate(demo_crate());
+        app.set_focus(Focus::Crate);
+        assert_eq!(app.selected_path(), Some("/m/a.mp3".into()));
+        // Enter on a song opens the action prompt (no pad chosen yet).
+        assert_eq!(
+            app.on_key(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE)),
+            Action::Mark
+        );
+        assert!(app.song_action);
+        // Pressing 4 loads it onto pad 4 and closes the prompt.
+        assert_eq!(app.on_key(key('4')), Action::AssignPad);
+        assert!(!app.song_action);
+        assert_eq!(app.take_pending_pad_load(), Some((3, "/m/a.mp3".into())));
+    }
+
+    #[test]
+    fn move_modal_makes_a_folder_and_moves_a_file_in() {
+        use std::fs;
+        let tmp = std::env::temp_dir().join(format!("tk-move2-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&tmp);
+        fs::create_dir_all(&tmp).unwrap();
+        fs::write(tmp.join("song.wav"), b"x").unwrap();
+        let mut app = App::new();
+        app.set_crate(Crate::scan(&tmp));
+        app.set_focus(Focus::Crate);
+        // Enter → song prompt → Right opens the move modal.
+        app.on_key(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE));
+        app.on_key(KeyEvent::new(KeyCode::Right, KeyModifiers::NONE));
+        assert!(app.move_picker.is_some());
+        // N → type "box" → Enter creates the folder.
+        app.on_key(key('n'));
+        for c in "box".chars() {
+            app.on_key(key(c));
+        }
+        app.on_key(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE));
+        assert!(tmp.join("box").is_dir(), "folder created");
+        // Select the new folder (Down) and Enter to move the file there.
+        app.on_key(KeyEvent::new(KeyCode::Down, KeyModifiers::NONE));
+        app.on_key(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE));
+        assert!(tmp.join("box/song.wav").exists() && !tmp.join("song.wav").exists());
+        assert!(app.move_picker.is_none());
+        let _ = fs::remove_dir_all(&tmp);
+    }
+
+    #[test]
     fn library_enter_loads_onto_the_selected_pad() {
         let mut app = App::new();
         app.set_crate(demo_crate());
@@ -1940,12 +2175,12 @@ mod tests {
     }
 
     #[test]
-    fn filter_narrows_the_crate() {
+    fn library_browse_selects_entries() {
         let mut app = App::new();
         app.set_crate(demo_crate());
         app.set_focus(Focus::Crate);
-        app.run_menu(MenuAction::Filter); // open filter from the menu
-        app.on_key(key('b')); // matches "Beta"
+        assert_eq!(app.selected_path(), Some("/m/a.mp3".into()));
+        app.on_key(KeyEvent::new(KeyCode::Down, KeyModifiers::NONE));
         assert_eq!(app.selected_path(), Some("/m/b.mp3".into()));
     }
 
@@ -2294,17 +2529,18 @@ mod tests {
     }
 
     #[test]
-    fn esc_closes_the_menu_then_opens_quit() {
+    fn esc_closes_the_pad_menu() {
         let esc = || KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE);
         let mut app = App::new();
-        app.set_focus(Focus::Crate); // on the library, esc → quit
-        app.on_key(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE)); // Enter opens the menu
+        app.set_focus(Focus::Pad(0)); // pad Enter opens the menu
+        app.on_key(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE));
         assert!(app.menu.is_some());
         app.on_key(esc());
-        assert!(app.menu.is_none(), "first esc closes the menu");
-        assert!(!app.confirm_quit, "and does not open quit yet");
+        assert!(app.menu.is_none(), "esc closes the menu");
+        assert!(!app.confirm_quit, "and doesn't quit");
+        // A further esc goes up a level to the library.
         app.on_key(esc());
-        assert!(app.confirm_quit, "second esc opens the quit modal");
+        assert_eq!(app.focus_cell(), Focus::Crate);
     }
 
     #[test]

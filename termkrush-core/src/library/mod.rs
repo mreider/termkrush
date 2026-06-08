@@ -99,6 +99,45 @@ impl Crate {
         &self.entries
     }
 
+    /// The library root (move targets live one level under it).
+    pub fn root(&self) -> &Path {
+        &self.root
+    }
+
+    /// Folders directly under the root, as `(name, path)`, alphabetically.
+    /// Move/save targets are one level only.
+    pub fn root_folders(&self) -> Vec<(String, PathBuf)> {
+        let mut v: Vec<(String, PathBuf)> = std::fs::read_dir(&self.root)
+            .into_iter()
+            .flatten()
+            .flatten()
+            .map(|e| e.path())
+            .filter(|p| p.is_dir())
+            .filter_map(|p| {
+                p.file_name()
+                    .and_then(|n| n.to_str())
+                    .map(|n| (n.to_string(), p.clone()))
+            })
+            .collect();
+        v.sort_by_key(|(n, _)| n.to_lowercase());
+        v
+    }
+
+    /// Create a folder `name` directly under the root (one level), then relist.
+    pub fn make_folder(&mut self, name: &str) -> io::Result<PathBuf> {
+        let dir = self.root.join(name);
+        std::fs::create_dir_all(&dir)?;
+        self.refresh();
+        Ok(dir)
+    }
+
+    /// Delete a folder and everything inside it, then relist.
+    pub fn delete_folder(&mut self, path: &Path) -> io::Result<()> {
+        std::fs::remove_dir_all(path)?;
+        self.refresh();
+        Ok(())
+    }
+
     pub fn len(&self) -> usize {
         self.entries.len()
     }

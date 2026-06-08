@@ -2,12 +2,14 @@
 title: 'GUI free-track timeline: blocks, drag to track, move, copy-paste, render'
 type: feature
 created: "2026-06-08T12:17:12Z"
-modified: "2026-06-08T16:18:00Z"
+modified: "2026-06-08T16:26:08Z"
 author: Matt Reider
-status: started
+status: delivered
 estimate: "8"
 epic: gui
 started: "2026-06-08T16:18:00Z"
+finished: "2026-06-08T16:26:08Z"
+delivered: "2026-06-08T16:26:08Z"
 ---
 
 ## Goal

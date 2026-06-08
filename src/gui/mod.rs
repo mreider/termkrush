@@ -56,6 +56,10 @@ pub fn run() -> eframe::Result<()> {
 #[derive(Clone)]
 struct DragTrack(PathBuf);
 
+/// A pad being dragged onto the timeline (its trimmed clip becomes a block).
+#[derive(Clone)]
+struct DragPad(usize);
+
 /// Where a background decode is headed when it lands.
 #[derive(Clone, Copy)]
 enum Target {
@@ -516,6 +520,7 @@ impl TermKrushApp {
                 // --- track lanes --- (collect into locals; apply after, so we
                 // never mutate self while the arrangement is borrowed)
                 let mut drop: Option<(usize, u64, PathBuf)> = None;
+                let mut drop_pad: Option<(usize, u64, usize)> = None;
                 let mut clicked: Option<(usize, usize)> = None;
                 egui::ScrollArea::vertical().max_height(150.0).show(ui, |ui| {
                     let tracks = self.arrangement.track_count();
@@ -554,17 +559,24 @@ impl TermKrushApp {
                                 }
                             }
                         }
-                        // drop a dragged library track here → a new block
-                        if resp.dnd_hover_payload::<DragTrack>().is_some() {
+                        // Drop a dragged library track OR a pad here → a block.
+                        let hovering = resp.dnd_hover_payload::<DragTrack>().is_some()
+                            || resp.dnd_hover_payload::<DragPad>().is_some();
+                        if hovering {
                             p.rect_stroke(lane, 3.0, egui::Stroke::new(1.5, GREEN));
                         }
-                        if let Some(d) = resp.dnd_release_payload::<DragTrack>() {
+                        let drop_frame = || {
                             let x = ui
                                 .input(|i| i.pointer.interact_pos())
                                 .map(|pp| pp.x)
                                 .unwrap_or(lane.left());
-                            let frame = (((x - lane.left()).max(0.0) / PXPS) * sr) as u64;
-                            drop = Some((t, snap(frame), d.0.clone()));
+                            snap((((x - lane.left()).max(0.0) / PXPS) * sr) as u64)
+                        };
+                        if let Some(d) = resp.dnd_release_payload::<DragTrack>() {
+                            drop = Some((t, drop_frame(), d.0.clone()));
+                        }
+                        if let Some(pd) = resp.dnd_release_payload::<DragPad>() {
+                            drop_pad = Some((t, drop_frame(), pd.0));
                         }
                         // playhead
                         if self.tl_playing || self.tl_playhead > 0 {
@@ -591,6 +603,26 @@ impl TermKrushApp {
                 }
                 if let Some((t, start, path)) = drop {
                     self.spawn_load(Target::Timeline { track: t, start }, path);
+                }
+                if let Some((t, start, pad)) = drop_pad {
+                    // A pad's clip is already decoded — place it directly.
+                    let samples = self.mixer.pad_clip_region(pad);
+                    if !samples.is_empty() {
+                        let label = self.pad_source[pad]
+                            .as_ref()
+                            .and_then(|p| p.file_stem())
+                            .and_then(|s| s.to_str())
+                            .unwrap_or("pad")
+                            .to_string();
+                        self.arrangement.add_block(
+                            t,
+                            Block {
+                                samples: std::sync::Arc::new(samples),
+                                start,
+                                label,
+                            },
+                        );
+                    }
                 }
             });
 
@@ -1490,10 +1522,20 @@ fn draw_pad_cell(
                         acts.push(Act::PlayPad(i));
                     }
                 }
-                let name = if track.is_empty() { "—" } else { &track };
-                ui.add(
-                    egui::Label::new(egui::RichText::new(name).color(AMBER).strong()).truncate(),
-                );
+                if loaded {
+                    // The name is a drag source — drag it onto a timeline lane.
+                    ui.dnd_drag_source(egui::Id::new(("pad-drag", i)), DragPad(i), |ui| {
+                        ui.add(
+                            egui::Label::new(egui::RichText::new(&track).color(AMBER).strong())
+                                .truncate(),
+                        )
+                        .on_hover_text("drag onto the timeline");
+                    });
+                } else {
+                    ui.add(egui::Label::new(
+                        egui::RichText::new("—").color(AMBER).strong(),
+                    ));
+                }
             });
 
             if !loaded {

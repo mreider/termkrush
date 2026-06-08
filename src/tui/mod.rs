@@ -785,8 +785,11 @@ impl App {
     fn on_clip_key(&mut self, key: KeyEvent) -> Option<Action> {
         let i = self.clip_edit?;
         let rate = self.mixer.sample_rate() as usize;
+        let len = self.mixer.pad_clip_frames(i).max(1);
         let shift = key.modifiers.contains(KeyModifiers::SHIFT);
-        let step = (if shift { rate / 10 } else { rate / 100 }).max(1) as i64; // 100ms / 10ms
+        // Default step ≈ one bar-column so the mark visibly moves on any song;
+        // shift = ~5 ms fine.
+        let step = (if shift { rate / 200 } else { len / 64 }).max(1) as i64;
         let (inp, out) = self.mixer.pad_trim(i);
         let nudge = |v: usize, d: i64| (v as i64 + d).max(0) as usize;
         match key.code {
@@ -1201,14 +1204,17 @@ fn draw_clip_edit(f: &mut Frame, area: Rect, app: &App, pad: usize) {
     let (inp, out) = app.mixer.pad_trim(pad);
     let rate = app.mixer.sample_rate().max(1) as f64;
     let secs = |fr: usize| fr as f64 / rate;
-    let active = if app.ce_out { "out ▸" } else { "◂ in" };
-    let title = format!(
-        "Edit Pad {} [{active}] — tab switch · ←/→ move · space audition · x snip · e close",
-        pad + 1
-    );
+    let active = if app.ce_out {
+        "moving OUT ▸"
+    } else {
+        "◀ moving IN"
+    };
+    let title = format!("Edit Pad {} — {active}", pad + 1);
     let block = cell_block(&title, true);
     let inner = block.inner(area);
-    let w = (inner.width as usize).saturating_sub(2).max(8);
+    // The whole clip always scaled into a fixed-width bar that fits the screen
+    // ("  [" prefix + bar + "]" must stay within inner.width).
+    let w = (inner.width as usize).saturating_sub(6).clamp(8, 72);
     let col = |fr: usize| (fr.min(len) * w / len).min(w.saturating_sub(1));
     let mut bar: Vec<char> = (0..w)
         .map(|c| {
@@ -1876,33 +1882,38 @@ mod tests {
     #[test]
     fn clip_edit_marks_audition_and_snips_both_sides() {
         let mut app = App::new();
-        app.mixer.set_sample_rate(1000); // 10ms = 10 frames
-        app.mixer.assign_pad(0, vec![0.5; 4000]); // 2000 frames
+        app.mixer.set_sample_rate(1000);
+        app.mixer.assign_pad(0, vec![0.5; 12_800]); // 6400 frames → step = 6400/64 = 100
         app.set_focus(Focus::Pad(0));
         let enter = || KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE);
         assert_eq!(app.on_key(enter()), Action::Mark); // Enter opens the editor
         assert!(app.clip_edit.is_some() && !app.ce_out);
-        // Move the IN mark right 5×10 = 50 frames.
+        // Move the IN mark right 5×100 = 500 frames.
         for _ in 0..5 {
             app.on_key(KeyEvent::new(KeyCode::Right, KeyModifiers::NONE));
         }
-        assert_eq!(app.mixer.pad_trim(0).0, 50, "in mark moved");
-        // Tab to the OUT mark, pull it left 5×10 = 50 → out 1950.
+        assert_eq!(app.mixer.pad_trim(0).0, 500, "in mark moved");
+        // Tab to the OUT mark, pull it left 5×100 → out 5900.
         app.on_key(KeyEvent::new(KeyCode::Tab, KeyModifiers::NONE));
         assert!(app.ce_out);
         for _ in 0..5 {
             app.on_key(KeyEvent::new(KeyCode::Left, KeyModifiers::NONE));
         }
-        assert_eq!(app.mixer.pad_trim(0).1, 1950, "out mark moved");
+        assert_eq!(app.mixer.pad_trim(0).1, 5900, "out mark moved");
         // Space auditions the selection.
         app.on_key(key(' '));
         assert_eq!(app.mixer.active_voices(), 1, "audition the selection");
-        // Enter snips, keeping only [50, 1950) = 1900 frames.
+        // Enter snips, keeping only [500, 5900) = 5400 frames, reset to [0, len].
         app.on_key(enter());
         assert_eq!(
             app.mixer.pad_clip_frames(0),
-            1900,
+            5400,
             "snipped to the selection"
+        );
+        assert_eq!(
+            app.mixer.pad_trim(0),
+            (0, 5400),
+            "snip becomes the new full clip"
         );
         app.on_key(KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE));
         assert!(app.clip_edit.is_none());

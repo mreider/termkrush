@@ -612,7 +612,7 @@ impl TermKrushApp {
                             .as_ref()
                             .and_then(|p| p.file_stem())
                             .and_then(|s| s.to_str())
-                            .unwrap_or("pad")
+                            .unwrap_or("clip")
                             .to_string();
                         self.arrangement.add_block(
                             t,
@@ -788,7 +788,7 @@ impl TermKrushApp {
             .as_ref()
             .and_then(|p| p.file_stem())
             .and_then(|s| s.to_str())
-            .unwrap_or("pad")
+            .unwrap_or("clip")
             .to_string();
         let dir = self.crate_lib.cwd().to_path_buf();
         let mut n = 1;
@@ -1347,8 +1347,8 @@ fn draw_pad_grid(
     egui::CentralPanel::default().show(ctx, |ui| {
         ui.add_space(6.0);
         ui.horizontal(|ui| {
-            ui.label(bungee("pads", 14.0, AMBER));
-            ui.label(egui::RichText::new("drag a track onto a pad to load").color(DIM));
+            ui.label(bungee("clips", 14.0, AMBER));
+            ui.label(egui::RichText::new("drag a track onto a clip to load").color(DIM));
         });
         ui.add_space(6.0);
         // `ui.columns` gives equal-width columns regardless of content, so the
@@ -1570,7 +1570,7 @@ fn draw_pad_cell(
                 if icon_btn(ui, ph::PENCIL_SIMPLE, "trim the clip") {
                     acts.push(Act::EditClip(i));
                 }
-                if icon_btn(ui, ph::ERASER, "clear the pad") {
+                if icon_btn(ui, ph::ERASER, "clear the clip") {
                     acts.push(Act::ClearPad(i));
                 }
                 if icon_btn(ui, ph::FLOPPY_DISK, "export to library (WAV)") {

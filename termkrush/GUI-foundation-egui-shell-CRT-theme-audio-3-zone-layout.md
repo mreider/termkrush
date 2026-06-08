@@ -2,12 +2,14 @@
 title: 'GUI foundation: egui shell, CRT theme, audio, 3-zone layout'
 type: feature
 created: "2026-06-08T12:17:10Z"
-modified: "2026-06-08T12:18:22Z"
+modified: "2026-06-08T12:27:00Z"
 author: Matt Reider
-status: started
+status: delivered
 estimate: "5"
 epic: gui
 started: "2026-06-08T12:18:22Z"
+finished: "2026-06-08T12:27:00Z"
+delivered: "2026-06-08T12:27:00Z"
 ---
 
 ## Goal

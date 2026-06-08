@@ -5,14 +5,15 @@ Run `scripts/dev-run.sh build && scripts/dev-run.sh tui` with a few tracks in
 `crate_root`.
 
 ## The whole control surface
-There are only six controls, reused by context. The header's second line always
-shows what they do *right now*.
+Five controls, reused by context. The header's second line always shows what
+they do *right now*.
 
 - **Arrows** — move. On a pad, `↑`/`↓` = that pad's volume.
 - **Tab / Shift-Tab** — jump area: Library → Pads → Timeline.
 - **Space** — play (the focused pad; the arrangement on the Timeline).
-- **Enter** — do it: Library load→pad / open folder · Pad edit-clip · Timeline toggle a hit · (scratch pad: whip).
-- **M** — context menu (the long tail for the focused area).
+- **Enter** — open the context menu (its first item is the common action, so
+  Enter-then-Enter does the obvious thing). While recording a scratch phrase,
+  Enter taps a whip instead.
 - **Esc** — back / cancel (closes the menu or editor; again = quit).
 
 ## Walkthrough
@@ -21,15 +22,13 @@ shows what they do *right now*.
 - [ ] Library: `↑`/`↓` browse; `Enter` loads the track onto the last-selected
       pad and you **hear** it on `Space`.
 - [ ] Pad: `Space` plays; `↑`/`↓` change its volume audibly; `Enter` opens the
-      clip editor; `M` lists load / kind / on-off / save / export / unload and
-      each works.
+      clip editor; `Enter` opens its menu (load / kind / on-off / save / export / unload).
 - [ ] Scratch pad (set kind=scratch via `M`): `Space` = wiki, `Enter` = whip;
-      `M` → record phrase, tap `Space`/`Enter`, then `Space` replays it.
-- [ ] Clip editor: `←`/`→` move a mark, `Tab` switches in/out, `Space`
-      auditions, `Enter` snips, `Esc` closes.
+      `Enter` menu → record phrase, tap `Space`/`Enter`, then `Space` replays it.
+- [ ] Clip editor: `←`/`→` move a mark, `Tab` switches in/out, `Space` auditions (again stops), `Enter` snips, `Esc` closes.
 - [ ] Timeline: `←`/`→` step, `↑`/`↓` lane, `Enter` toggles a hit, `Space`
-      plays/pauses; `M` → cut / region / clear / render / tempo / master.
-- [ ] No help screen is needed — the hint line + the M menus explain everything.
+      plays/pauses; `Enter` menu → place / cut / region / clear / render / tempo / master.
+- [ ] No help screen or M key — Enter opens the context menu everywhere; the hint line + menus explain everything.
 
 ## Render / export
 - [ ] Rendered `mix-*.wav` and exported `*.mp3` play correctly elsewhere and

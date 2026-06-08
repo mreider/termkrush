@@ -79,6 +79,7 @@ pub enum Focus {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum MenuAction {
     // Library
+    OpenFolder,
     Rename,
     Delete,
     MarkMove,
@@ -86,6 +87,7 @@ enum MenuAction {
     Filter,
     // Pad
     Load,
+    EditClip,
     CycleKind,
     ToggleActive,
     SaveNew,
@@ -95,6 +97,7 @@ enum MenuAction {
     PhraseRec,
     ClearPhrase,
     // Timeline
+    PlaceHit,
     Record,
     Cut,
     Region,
@@ -402,12 +405,12 @@ impl App {
             return "↑↓ choose · enter do · esc close";
         }
         if self.clip_edit.is_some() {
-            return "←→ move · tab in/out · space hear · enter snip · esc done";
+            return "←→ move · tab in/out · space play · enter snip · esc done";
         }
         match self.focus {
-            Focus::Crate => "↑↓ browse · enter load→pad · tab→pads · M menu",
-            Focus::Pad(_) => "←→ pad · ↑↓ vol · space play · enter edit · tab→timeline · M menu",
-            Focus::Timeline => "←→ beat · ↑↓ pad-lane · enter place pad here · space play · M menu",
+            Focus::Crate => "↑↓ browse · enter menu · tab → pads",
+            Focus::Pad(_) => "←→ pad · ↑↓ vol · space play · enter menu · tab → timeline",
+            Focus::Timeline => "←→ beat · ↑↓ pad-lane · space play · enter menu · tab → library",
         }
     }
 
@@ -428,28 +431,13 @@ impl App {
         }
     }
 
-    /// Enter — the primary action: load/open in the library, edit (or whip on
-    /// a scratch pad), or toggle a timeline hit.
-    fn primary(&mut self) -> Action {
-        match self.focus {
-            Focus::Crate => {
-                if self.selected_is_dir() {
-                    self.enter_selected()
-                } else {
-                    self.load_selected_onto(self.active_pad())
-                }
-            }
-            Focus::Pad(i) => {
-                if self.mixer.pad_kind(i) == PadKind::Scratch {
-                    self.secondary()
-                } else {
-                    self.open_clip_edit()
-                }
-            }
-            Focus::Timeline => {
-                self.timeline.toggle(self.tl_lane, self.tl_step);
-                Action::Timeline
-            }
+    /// Enter — open the context menu, except while recording a scratch phrase,
+    /// where Enter taps a whip (Space taps a wiki).
+    fn enter_action(&mut self) -> Action {
+        if self.phrase_rec.is_some() {
+            self.secondary() // whip tap
+        } else {
+            self.open_menu()
         }
     }
 
@@ -466,37 +454,50 @@ impl App {
         Action::Timeline
     }
 
-    /// M — open the context menu for the focused area.
+    /// Enter — open the context menu for the focused area. The first item is
+    /// the common action, so Enter-then-Enter does the obvious thing.
     fn open_menu(&mut self) -> Action {
         use MenuAction::*;
         let (title, items): (&str, Vec<(&str, MenuAction)>) = match self.focus {
-            Focus::Crate => (
-                "Library",
-                vec![
+            Focus::Crate => {
+                let mut items: Vec<(&str, MenuAction)> = if self.selected_is_dir() {
+                    vec![("open folder", OpenFolder)]
+                } else {
+                    vec![("load → selected pad", Load)]
+                };
+                items.extend([
                     ("rename", Rename),
                     ("delete", Delete),
                     ("mark to move", MarkMove),
                     ("move here", PasteHere),
                     ("filter", Filter),
-                ],
-            ),
-            Focus::Pad(_) => (
-                "Pad",
-                vec![
-                    ("load track", Load),
-                    ("kind (loop/scratch/1-shot)", CycleKind),
-                    ("on / off", ToggleActive),
-                    ("save as new", SaveNew),
-                    ("save over", SaveOver),
-                    ("export mp3", Export),
-                    ("unload", Unload),
-                    ("record phrase", PhraseRec),
-                    ("clear phrase", ClearPhrase),
-                ],
-            ),
+                ]);
+                ("Library", items)
+            }
+            Focus::Pad(i) => {
+                let mut items: Vec<(&str, MenuAction)> = Vec::new();
+                if self.mixer.pad_loaded(i) {
+                    items.push(("edit clip", EditClip));
+                }
+                items.push(("load track here", Load));
+                if self.mixer.pad_loaded(i) {
+                    items.extend([
+                        ("kind (loop/scratch/1-shot)", CycleKind),
+                        ("on / off", ToggleActive),
+                        ("save as new", SaveNew),
+                        ("save over", SaveOver),
+                        ("export mp3", Export),
+                        ("unload", Unload),
+                        ("record phrase", PhraseRec),
+                        ("clear phrase", ClearPhrase),
+                    ]);
+                }
+                ("Pad", items)
+            }
             Focus::Timeline => (
                 "Timeline",
                 vec![
+                    ("place pad here", PlaceHit),
                     ("record", Record),
                     ("cut here", Cut),
                     ("loop region", Region),
@@ -522,6 +523,12 @@ impl App {
         use MenuAction::*;
         self.menu = None;
         match a {
+            OpenFolder => self.enter_selected(),
+            EditClip => self.open_clip_edit(),
+            PlaceHit => {
+                self.timeline.toggle(self.tl_lane, self.tl_step);
+                Action::Timeline
+            }
             Rename => self.start_rename(),
             Delete => self.arm_delete(),
             MarkMove => self.mark_move(),
@@ -1035,7 +1042,7 @@ impl App {
                     let a = m.items[m.sel].1;
                     self.run_menu(a)
                 }
-                KeyCode::Esc | KeyCode::Char('m') => {
+                KeyCode::Esc => {
                     self.menu = None;
                     Action::Mark
                 }
@@ -1050,7 +1057,7 @@ impl App {
             }
         }
 
-        // The whole control surface: arrows · Tab · Space · Enter · M · Esc.
+        // The whole control surface: arrows · Tab · Space · Enter · Esc.
         match key.code {
             KeyCode::Esc => {
                 self.confirm_quit = true;
@@ -1060,8 +1067,7 @@ impl App {
             KeyCode::BackTab => self.next_area(false),
             KeyCode::Up | KeyCode::Down | KeyCode::Left | KeyCode::Right => self.nav(key.code),
             KeyCode::Char(' ') => self.play(),
-            KeyCode::Enter => self.primary(),
-            KeyCode::Char('m') => self.open_menu(),
+            KeyCode::Enter => self.enter_action(),
             _ => Action::None,
         }
     }
@@ -1823,9 +1829,9 @@ mod tests {
         app.on_key(KeyEvent::new(KeyCode::Down, KeyModifiers::NONE));
         assert_eq!(app.selected_path(), Some(tmp.join("t.wav")));
         app.run_menu(MenuAction::MarkMove);
-        // Back to the folder, enter it, paste.
+        // Back to the folder, open it (menu), paste.
         app.crate_sel = 0;
-        app.on_key(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE)); // into box/
+        app.run_menu(MenuAction::OpenFolder); // into box/
         app.run_menu(MenuAction::PasteHere);
         assert!(tmp.join("box/t.wav").exists() && !tmp.join("t.wav").exists());
         let _ = fs::remove_dir_all(&tmp);
@@ -1865,11 +1871,8 @@ mod tests {
         app.set_focus(Focus::Pad(3)); // remembers pad 3 as the target
         app.set_focus(Focus::Crate); // go to the library
         assert_eq!(app.selected_path(), Some("/m/a.mp3".into()));
-        // Enter queues the highlighted track onto the last-selected pad.
-        assert_eq!(
-            app.on_key(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE)),
-            Action::AssignPad
-        );
+        // Menu → load queues the highlighted track onto the last-selected pad.
+        assert_eq!(app.run_menu(MenuAction::Load), Action::AssignPad);
         assert_eq!(app.take_pending_pad_load(), Some((3, "/m/a.mp3".into())));
     }
 
@@ -1912,7 +1915,7 @@ mod tests {
         app.mixer.assign_pad(0, vec![0.5; 12_800]); // 6400 frames → step = 6400/64 = 100
         app.set_focus(Focus::Pad(0));
         let enter = || KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE);
-        assert_eq!(app.on_key(enter()), Action::Mark); // Enter opens the editor
+        app.run_menu(MenuAction::EditClip); // menu → edit clip opens the editor
         assert!(app.clip_edit.is_some() && !app.ce_out);
         // Move the IN mark right 5×100 = 500 frames.
         for _ in 0..5 {
@@ -1972,16 +1975,19 @@ mod tests {
     }
 
     #[test]
-    fn menu_opens_and_runs_an_action() {
-        // Full menu UX: open with M, arrow to an item, Enter runs it.
+    fn enter_opens_the_menu_and_runs_an_action() {
+        // Enter opens the context menu; arrow to an item; Enter runs it.
         let mut app = App::new();
         app.mixer.assign_pad(0, vec![0.5; 64]);
         app.set_focus(Focus::Pad(0));
-        assert_eq!(app.on_key(key('m')), Action::Mark);
-        assert!(app.menu.is_some(), "M opens the menu");
-        // First item on a pad is "load track"; second is "kind".
-        app.on_key(KeyEvent::new(KeyCode::Down, KeyModifiers::NONE));
-        app.on_key(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE));
+        let enter = || KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE);
+        let down = || KeyEvent::new(KeyCode::Down, KeyModifiers::NONE);
+        assert_eq!(app.on_key(enter()), Action::Mark);
+        assert!(app.menu.is_some(), "Enter opens the menu");
+        // Loaded pad menu: [edit clip, load track here, kind, …] → 3rd is kind.
+        app.on_key(down());
+        app.on_key(down());
+        app.on_key(enter());
         assert!(app.menu.is_none(), "running an item closes the menu");
         assert_eq!(
             app.mixer.pad_kind(0),
@@ -2142,7 +2148,7 @@ mod tests {
         let mut app = App::new();
         app.mixer.assign_pad(0, vec![0.5; 4000]);
         app.set_focus(Focus::Pad(0));
-        app.on_key(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE)); // open editor
+        app.run_menu(MenuAction::EditClip); // open editor
         app.on_key(key(' ')); // play the audition
         assert!(app.mixer.pad_is_sounding(0), "space plays");
         app.on_key(key(' ')); // press again → stop
@@ -2185,7 +2191,7 @@ mod tests {
     fn esc_closes_the_menu_then_opens_quit() {
         let esc = || KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE);
         let mut app = App::new();
-        app.on_key(key('m'));
+        app.on_key(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE)); // Enter opens the menu
         assert!(app.menu.is_some());
         app.on_key(esc());
         assert!(app.menu.is_none(), "first esc closes the menu");
@@ -2200,7 +2206,7 @@ mod tests {
         let mut app = App::new();
         app.mixer.assign_pad(0, vec![0.5; 64]);
         app.set_focus(Focus::Pad(0));
-        app.on_key(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE)); // enter = edit clip
+        app.run_menu(MenuAction::EditClip); // open the clip editor
         assert!(app.clip_edit.is_some());
         app.on_key(esc());
         assert!(app.clip_edit.is_none(), "first esc closes the clip editor");
@@ -2210,16 +2216,13 @@ mod tests {
     }
 
     #[test]
-    fn timeline_enter_toggles_a_step_at_the_cursor() {
+    fn timeline_place_pad_toggles_a_step_at_the_cursor() {
         let mut app = App::new();
         app.set_focus(Focus::Timeline);
         app.on_key(KeyEvent::new(KeyCode::Down, KeyModifiers::NONE)); // lane 1
         app.on_key(KeyEvent::new(KeyCode::Right, KeyModifiers::NONE)); // step 1
-        assert_eq!(
-            app.on_key(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE)),
-            Action::Timeline
-        );
-        assert!(app.timeline.step(1, 1), "step placed at the cursor");
+        assert_eq!(app.run_menu(MenuAction::PlaceHit), Action::Timeline);
+        assert!(app.timeline.step(1, 1), "pad placed at the cursor");
         assert_eq!(app.timeline.pads_at(1), vec![1]);
     }
 
@@ -2260,18 +2263,21 @@ mod tests {
     }
 
     #[test]
-    fn scratch_pad_space_and_enter_play_wiki_and_whip() {
+    fn scratch_pad_space_plays_wiki_enter_whips_while_recording() {
         let mut app = App::new();
         app.mixer.assign_pad(0, vec![0.5; 4000]);
         app.set_focus(Focus::Pad(0));
         app.mixer.cycle_pad_kind(0); // OneShot → Loop
         app.mixer.cycle_pad_kind(0); // → Scratch
         assert_eq!(app.mixer.pad_kind(0), PadKind::Scratch);
-        assert_eq!(app.on_key(key(' ')), Action::TriggerPad); // space = wiki
+        // Space plays a wiki live.
+        assert_eq!(app.on_key(key(' ')), Action::TriggerPad);
         assert_eq!(app.mixer.active_voices(), 1);
-        let enter = KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE);
-        assert_eq!(app.on_key(enter), Action::TriggerPad); // enter = whip
-        assert_eq!(app.mixer.active_voices(), 2);
+        // While recording a phrase, Enter taps a whip (Space taps a wiki).
+        app.run_menu(MenuAction::PhraseRec);
+        app.on_key(key(' ')); // wiki tap
+        app.on_key(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE)); // whip tap
+        assert_eq!(app.mixer.pad_phrase_glyphs(0), "><", "wiki then whip");
     }
 
     #[test]
@@ -2290,7 +2296,7 @@ mod tests {
         app.mixer.assign_pad(0, vec![0.5; 20_000]); // 10_000 frames
         app.set_focus(Focus::Pad(0));
         assert_eq!(app.mixer.pad_trim(0), (0, 10_000));
-        app.on_key(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE)); // open editor
+        app.run_menu(MenuAction::EditClip); // open editor
         app.on_key(KeyEvent::new(KeyCode::Right, KeyModifiers::NONE)); // move in-mark
         assert!(app.mixer.pad_trim(0).0 > 0);
         assert_eq!(app.mixer.pad_clip_frames(0), 10_000, "source untouched");
@@ -2359,7 +2365,7 @@ mod tests {
         app.run_menu(MenuAction::CycleKind);
         assert_eq!(app.mixer.pad_kind(0), PadKind::Loop);
         app.set_focus(Focus::Pad(1));
-        app.on_key(enter()); // Enter opens the clip editor (non-scratch)
+        app.run_menu(MenuAction::EditClip); // open the clip editor
         for _ in 0..3 {
             app.on_key(KeyEvent::new(KeyCode::Right, KeyModifiers::NONE)); // move in-mark
         }
@@ -2370,7 +2376,7 @@ mod tests {
 
         // Arrange on the timeline: place a hit, play, pause, render.
         app.set_focus(Focus::Timeline);
-        app.on_key(enter()); // toggle a hit at lane 0, step 0
+        app.run_menu(MenuAction::PlaceHit); // place pad 0 at the cursor
         app.on_key(key(' ')); // space plays the arrangement
         app.advance_playback(600);
         app.on_key(key(' ')); // pause

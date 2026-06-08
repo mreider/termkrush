@@ -1506,7 +1506,9 @@ fn draw_pad_cell(
     let frame = egui::Frame::group(ui.style())
         .fill(PANEL)
         .stroke(egui::Stroke::new(1.0, if loaded { AMBER } else { LINE }));
-    let (inner, payload) = ui.dnd_drop_zone::<DragTrack, _>(frame, |ui| {
+    // A plain group frame (NOT a dnd drop-zone — a drop-zone swallows the inner
+    // drag-handle's drag). We detect the library-track drop on its response.
+    let inner = frame.show(ui, |ui| {
         ui.set_width(ui.available_width()); // fill the equal column → uniform cells
         ui.set_min_height(96.0);
         ui.vertical(|ui| {
@@ -1523,19 +1525,17 @@ fn draw_pad_cell(
                     }
                 }
                 if loaded {
-                    // The name is a drag source — drag it onto a timeline lane.
+                    // A grip drag-handle: drag it onto a timeline lane.
                     ui.dnd_drag_source(egui::Id::new(("pad-drag", i)), DragPad(i), |ui| {
-                        ui.add(
-                            egui::Label::new(egui::RichText::new(&track).color(AMBER).strong())
-                                .truncate(),
-                        )
-                        .on_hover_text("drag onto the timeline");
-                    });
-                } else {
-                    ui.add(egui::Label::new(
-                        egui::RichText::new("—").color(AMBER).strong(),
-                    ));
+                        ui.label(egui::RichText::new(ph::DOTS_SIX_VERTICAL).color(DIM));
+                    })
+                    .response
+                    .on_hover_text("drag onto the timeline");
                 }
+                let name = if track.is_empty() { "—" } else { &track };
+                ui.add(
+                    egui::Label::new(egui::RichText::new(name).color(AMBER).strong()).truncate(),
+                );
             });
 
             if !loaded {
@@ -1579,15 +1579,20 @@ fn draw_pad_cell(
             });
         });
     });
-    // Highlight the pad while a track is dragged over it, so it's clear it'll
-    // load here on drop.
-    if inner.response.dnd_hover_payload::<DragTrack>().is_some() {
+    // Cell-level hover-interact handles the library-track drop (loading) +
+    // the drag-over highlight, without being a drop-zone that eats the grip.
+    let cell = ui.interact(
+        inner.response.rect,
+        egui::Id::new(("clipcell", i)),
+        egui::Sense::hover(),
+    );
+    if cell.dnd_hover_payload::<DragTrack>().is_some() {
         let r = inner.response.rect;
         ui.painter().rect_filled(r, 4.0, AMBER.gamma_multiply(0.15));
         ui.painter()
             .rect_stroke(r, 4.0, egui::Stroke::new(2.0, AMBER));
     }
-    if let Some(p) = payload {
+    if let Some(p) = cell.dnd_release_payload::<DragTrack>() {
         acts.push(Act::LoadToPad {
             pad: i,
             path: p.0.clone(),

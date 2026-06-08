@@ -11,6 +11,7 @@ use std::path::{Path, PathBuf};
 use std::sync::mpsc::{channel, Receiver, Sender};
 
 use eframe::egui;
+use egui_phosphor::regular as ph;
 use termkrush_core::audio::{
     decode_file, detect_bpm, probe_playable, write_wav, AudioOutput, DecodedAudio,
 };
@@ -433,7 +434,7 @@ impl TermKrushApp {
                         .and_then(|s| s.to_str())
                         .unwrap_or("drag a sound onto the platter");
                     ui.label(egui::RichText::new(name).color(GREEN));
-                    if self.mixer.has_jog() && ui.small_button("clear").clicked() {
+                    if self.mixer.has_jog() && icon_btn(ui, ph::X, "clear the platter") {
                         self.mixer.clear_jog();
                         self.jog_source = None;
                         self.jog_wave.clear();
@@ -724,110 +725,28 @@ fn apply_crt_theme(ctx: &egui::Context) {
 /// A prominent painted close button (an amber X). Returns true on click. Used
 /// everywhere we close a view, instead of a "done" word.
 fn close_x(ui: &mut egui::Ui) -> bool {
-    let (rect, resp) = ui.allocate_exact_size(egui::vec2(26.0, 26.0), egui::Sense::click());
-    let col = if resp.hovered() { AMBER } else { DIM };
-    let p = ui.painter_at(rect);
-    p.rect_stroke(rect, 4.0, egui::Stroke::new(1.0, col));
-    let m = 8.0;
-    let (tl, br) = (rect.left_top(), rect.right_bottom());
-    p.line_segment(
-        [tl + egui::vec2(m, m), br - egui::vec2(m, m)],
-        egui::Stroke::new(2.0, col),
-    );
-    p.line_segment(
-        [
-            egui::pos2(br.x - m, tl.y + m),
-            egui::pos2(tl.x + m, br.y - m),
-        ],
-        egui::Stroke::new(2.0, col),
-    );
-    resp.on_hover_cursor(egui::CursorIcon::Default).clicked()
+    ui.add(egui::Button::new(egui::RichText::new(ph::X).size(20.0)).frame(false))
+        .on_hover_cursor(egui::CursorIcon::Default)
+        .on_hover_text("close")
+        .clicked()
 }
 
 /// Small painted "new folder" button (a folder tab + a +). Returns true on click.
 fn folder_plus_button(ui: &mut egui::Ui) -> bool {
-    let (rect, resp) = ui.allocate_exact_size(egui::vec2(26.0, 22.0), egui::Sense::click());
-    let col = if resp.hovered() { AMBER } else { DIM };
-    let p = ui.painter_at(rect);
-    let r = rect.shrink(4.0);
-    // folder body + tab
-    p.rect_stroke(
-        egui::Rect::from_min_max(egui::pos2(r.left(), r.top() + 3.0), r.right_bottom()),
-        1.0,
-        egui::Stroke::new(1.0, col),
-    );
-    p.line_segment(
-        [
-            egui::pos2(r.left(), r.top() + 3.0),
-            egui::pos2(r.left() + 6.0, r.top()),
-        ],
-        egui::Stroke::new(1.0, col),
-    );
-    // plus
-    let c = r.center() + egui::vec2(0.0, 2.0);
-    p.line_segment(
-        [c - egui::vec2(3.0, 0.0), c + egui::vec2(3.0, 0.0)],
-        egui::Stroke::new(1.5, col),
-    );
-    p.line_segment(
-        [c - egui::vec2(0.0, 3.0), c + egui::vec2(0.0, 3.0)],
-        egui::Stroke::new(1.5, col),
-    );
-    resp.on_hover_cursor(egui::CursorIcon::Default)
-        .on_hover_text("new folder")
-        .clicked()
+    icon_btn(ui, ph::FOLDER_PLUS, "new folder")
 }
 
-/// Small painted trash can that is a drop target (drag a track here to delete)
-/// and clickable (delete the selection). Returns `(clicked, dropped_payload)`.
+/// Trash icon that is a drop target (drag a track here to delete) and clickable
+/// (delete the selection). Reddens while a track is being dragged.
 fn trash_zone(ui: &mut egui::Ui) -> (bool, Option<std::sync::Arc<DragTrack>>) {
-    let (rect, resp) = ui.allocate_exact_size(egui::vec2(26.0, 22.0), egui::Sense::click());
+    let dragging = egui::DragAndDrop::has_payload_of_type::<DragTrack>(ui.ctx());
+    let col = if dragging { RED } else { DIM };
+    let resp = ui
+        .add(egui::Button::new(egui::RichText::new(ph::TRASH).size(18.0).color(col)).frame(false))
+        .on_hover_cursor(egui::CursorIcon::Default)
+        .on_hover_text("drag here / click to delete");
     let dropped = resp.dnd_release_payload::<DragTrack>();
-    let hovering = resp.dnd_hover_payload::<DragTrack>().is_some();
-    let col = if hovering || resp.hovered() { RED } else { DIM };
-    let p = ui.painter_at(rect);
-    let r = rect.shrink(5.0);
-    // lid + handle
-    p.line_segment(
-        [
-            egui::pos2(r.left() - 1.0, r.top()),
-            egui::pos2(r.right() + 1.0, r.top()),
-        ],
-        egui::Stroke::new(1.5, col),
-    );
-    p.line_segment(
-        [
-            egui::pos2(r.center().x - 3.0, r.top() - 2.0),
-            egui::pos2(r.center().x + 3.0, r.top() - 2.0),
-        ],
-        egui::Stroke::new(1.5, col),
-    );
-    // can body (slightly tapered) + ribs
-    p.rect_stroke(
-        egui::Rect::from_min_max(egui::pos2(r.left() + 1.0, r.top() + 3.0), r.right_bottom()),
-        1.0,
-        egui::Stroke::new(1.0, col),
-    );
-    for dx in [-2.5, 0.0, 2.5] {
-        let x = r.center().x + dx;
-        p.line_segment(
-            [
-                egui::pos2(x, r.top() + 6.0),
-                egui::pos2(x, r.bottom() - 2.0),
-            ],
-            egui::Stroke::new(1.0, col),
-        );
-    }
-    if hovering {
-        ui.painter()
-            .rect_stroke(rect, 3.0, egui::Stroke::new(1.5, RED));
-    }
-    (
-        resp.on_hover_cursor(egui::CursorIcon::Default)
-            .on_hover_text("drag here / click to delete")
-            .clicked(),
-        dropped,
-    )
+    (resp.clicked(), dropped)
 }
 
 /// Bundle the brand fonts: Space Mono for body/UI, Bungee for the wordmark.
@@ -855,7 +774,17 @@ fn install_fonts(ctx: &egui::Context) {
         egui::FontFamily::Name("bungee".into()),
         vec!["bungee".to_owned()],
     );
+    // Phosphor icon font, appended as a fallback so icon glyphs render.
+    egui_phosphor::add_to_fonts(&mut fonts, egui_phosphor::Variant::Regular);
     ctx.set_fonts(fonts);
+}
+
+/// A clean icon-only button (no frame). Returns true on click.
+fn icon_btn(ui: &mut egui::Ui, icon: &str, tip: &str) -> bool {
+    ui.add(egui::Button::new(egui::RichText::new(icon).size(17.0)).frame(false))
+        .on_hover_cursor(egui::CursorIcon::Default)
+        .on_hover_text(tip)
+        .clicked()
 }
 
 /// A volume control with a *visible* track: dim rail, amber fill, a knob.
@@ -1037,10 +966,11 @@ fn draw_library(
 /// A folder row: click to open, a drop target to move a track in. Highlights
 /// amber while a track is dragged over it, so the drop target is obvious.
 fn draw_folder_row(ui: &mut egui::Ui, name: &str, path: &Path, acts: &mut Vec<Act>) {
-    let label = if name.ends_with(')') {
-        name.to_string() // ".. (up)" — leave as-is
+    let is_up = name.ends_with(')'); // ".. (up)"
+    let label = if is_up {
+        format!("{}  {name}", ph::ARROW_UP)
     } else {
-        format!("{name}/")
+        format!("{}  {name}/", ph::FOLDER)
     };
     // A clickable label (a dnd drop zone alone doesn't sense clicks, which is
     // why folders wouldn't open) that is also a drop target for moving in.
@@ -1095,14 +1025,17 @@ fn draw_track_row(
 
     let selected = sel.as_deref() == Some(e.path.as_path());
     ui.horizontal(|ui| {
-        // Per-row play/stop button (preview). ■ while this track is playing.
-        let glyph = if playing { "■" } else { "▶" };
-        let btn =
-            egui::Button::new(egui::RichText::new(glyph).color(if playing { AMBER } else { INK }))
-                .small()
-                .frame(false);
+        // Per-row play/stop button (preview).
+        let glyph = if playing { ph::STOP } else { ph::PLAY };
+        let btn = egui::Button::new(egui::RichText::new(glyph).size(15.0).color(if playing {
+            AMBER
+        } else {
+            INK
+        }))
+        .frame(false);
         if ui
             .add_enabled(!bad, btn)
+            .on_hover_cursor(egui::CursorIcon::Default)
             .on_hover_text("play / stop")
             .clicked()
         {
@@ -1169,6 +1102,7 @@ fn draw_pad_grid(
                         }
                     }
                 });
+                ui.add_space(8.0); // a little breathing room between pad rows
             }
         });
     });
@@ -1195,13 +1129,14 @@ fn draw_clip_editor(
             // Just the track name — you can see you're editing; no "EDIT" label.
             ui.label(bungee(track, 16.0, AMBER));
             let playing = mixer.pad_is_sounding(i);
-            if ui
-                .button(if playing { "■ stop" } else { "▶ play" })
-                .clicked()
-            {
+            if icon_btn(
+                ui,
+                if playing { ph::STOP } else { ph::PLAY },
+                "play / stop selection",
+            ) {
                 acts.push(Act::AuditionSel(i));
             }
-            if ui.button("export").clicked() {
+            if icon_btn(ui, ph::FLOPPY_DISK, "export to library (WAV)") {
                 acts.push(Act::ExportPad(i));
             }
             // Prominent X to close, top-right.
@@ -1217,7 +1152,7 @@ fn draw_clip_editor(
         let secs = |f: usize| f as f64 / mixer.sample_rate().max(1) as f64;
         ui.label(
             egui::RichText::new(format!(
-                "in {:.3}s   out {:.3}s   selection {:.3}s   ·  drag the ◀ ▶ handles",
+                "in {:.3}s   out {:.3}s   selection {:.3}s   ·  drag the handles to trim",
                 secs(inp),
                 secs(out),
                 secs(out.saturating_sub(inp))
@@ -1257,19 +1192,24 @@ fn draw_clip_editor(
                 egui::pos2(hx + 5.0, rect.bottom()),
             );
             let id = ui.id().with(("ce_handle", is_out));
-            let resp = ui.interact(handle, id, egui::Sense::drag());
+            let resp = ui
+                .interact(handle, id, egui::Sense::drag())
+                .on_hover_cursor(egui::CursorIcon::ResizeHorizontal);
             let painter = ui.painter_at(rect);
+            // The handle: a full-height line + a grab knob at the top.
             painter.line_segment(
                 [egui::pos2(hx, rect.top()), egui::pos2(hx, rect.bottom())],
                 egui::Stroke::new(2.0, AMBER),
             );
-            let glyph = if is_out { "▶" } else { "◀" };
-            painter.text(
-                egui::pos2(hx, rect.top() + 8.0),
-                egui::Align2::CENTER_TOP,
-                glyph,
-                egui::FontId::monospace(12.0),
-                AMBER,
+            let knob = egui::Rect::from_center_size(
+                egui::pos2(hx, rect.top() + 7.0),
+                egui::vec2(10.0, 12.0),
+            );
+            painter.rect_filled(knob, 3.0, AMBER);
+            painter.rect_filled(
+                egui::Rect::from_center_size(knob.center(), egui::vec2(2.0, 6.0)),
+                0.0,
+                GROUND,
             );
             if resp.dragged() {
                 if let Some(p) = resp.interact_pointer_pos() {
@@ -1311,12 +1251,12 @@ fn draw_pad_cell(
             // Header: play/pause + the (truncated) track name. No pad number.
             ui.horizontal(|ui| {
                 if loaded {
-                    let btn = if mixer.pad_is_sounding(i) {
-                        "■"
+                    let icon = if mixer.pad_is_sounding(i) {
+                        ph::PAUSE
                     } else {
-                        "▶"
+                        ph::PLAY
                     };
-                    if ui.button(btn).on_hover_text("play / pause").clicked() {
+                    if icon_btn(ui, icon, "play / pause") {
                         acts.push(Act::PlayPad(i));
                     }
                 }
@@ -1353,19 +1293,15 @@ fn draw_pad_cell(
                 }
             });
 
-            // Actions — no "on" toggle (a loaded pad is live; volume mutes).
+            // Actions — icon buttons (no "on" toggle; a loaded pad is live).
             ui.horizontal(|ui| {
-                if ui.button("edit").on_hover_text("trim the clip").clicked() {
+                if icon_btn(ui, ph::PENCIL_SIMPLE, "trim the clip") {
                     acts.push(Act::EditClip(i));
                 }
-                if ui.button("clear").clicked() {
+                if icon_btn(ui, ph::ERASER, "clear the pad") {
                     acts.push(Act::ClearPad(i));
                 }
-                if ui
-                    .button("export")
-                    .on_hover_text("save trimmed clip to library (WAV)")
-                    .clicked()
-                {
+                if icon_btn(ui, ph::FLOPPY_DISK, "export to library (WAV)") {
                     acts.push(Act::ExportPad(i));
                 }
             });

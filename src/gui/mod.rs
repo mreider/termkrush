@@ -12,6 +12,7 @@ use std::sync::mpsc::{channel, Receiver, Sender};
 
 use eframe::egui;
 use egui_phosphor::regular as ph;
+use termkrush_core::arrangement::{Arrangement, Block};
 use termkrush_core::audio::{
     decode_file, detect_bpm, probe_playable, write_wav, AudioOutput, DecodedAudio,
 };
@@ -62,6 +63,11 @@ enum Target {
     Preview,
     /// Arm the scratch platter.
     Jog,
+    /// Place a block on timeline `track` starting at `start` frames.
+    Timeline {
+        track: usize,
+        start: u64,
+    },
 }
 
 /// A finished background decode on its way to the audio engine. `audio` is
@@ -132,6 +138,16 @@ pub struct TermKrushApp {
     /// dragged over it — after a hold we navigate in so you can drop elsewhere.
     spring: Option<(PathBuf, f64)>,
 
+    /// The free-track timeline arrangement.
+    arrangement: Arrangement,
+    /// Timeline transport: rolling + playhead position (frames).
+    tl_playing: bool,
+    tl_playhead: u64,
+    /// Selected block on the timeline: `(track, index)` — for move/copy/delete.
+    tl_sel: Option<(usize, usize)>,
+    /// Copied block, for Cmd-V paste.
+    tl_clip: Option<Block>,
+
     producer: Option<rtrb::Producer<f32>>,
     _audio: Option<AudioOutput>,
     out_channels: usize,
@@ -171,6 +187,7 @@ impl TermKrushApp {
         mixer.set_sample_rate(rate);
         let (load_tx, load_rx) = channel();
         let (probe_tx, probe_rx) = channel();
+        let arrangement = Arrangement::new(rate, 4); // start with 4 tracks
 
         Self {
             mixer,
@@ -187,6 +204,11 @@ impl TermKrushApp {
             jog_wave: Vec::new(),
             pending_decodes: 0,
             spring: None,
+            arrangement,
+            tl_playing: false,
+            tl_playhead: 0,
+            tl_sel: None,
+            tl_clip: None,
             producer,
             _audio: audio,
             out_channels: channels.max(1),
@@ -234,6 +256,16 @@ impl TermKrushApp {
         }
         self.scratch.resize(frames * 2, 0.0);
         self.mixer.fill_mix(&mut self.scratch);
+        // The timeline arrangement plays on top of the live pads when rolling.
+        if self.tl_playing {
+            self.arrangement
+                .mix_into(self.tl_playhead, &mut self.scratch);
+            let total = self.arrangement.total_frames();
+            self.tl_playhead += frames as u64;
+            if total == 0 || self.tl_playhead >= total {
+                self.tl_playhead = 0; // loop back to the top
+            }
+        }
         for f in 0..frames {
             let (l, r) = (self.scratch[f * 2], self.scratch[f * 2 + 1]);
             for c in 0..ch {
@@ -302,6 +334,22 @@ impl TermKrushApp {
                 Target::Jog => {
                     self.mixer.set_jog_source(audio.samples);
                     self.jog_wave = self.mixer.jog_peaks(WAVE_COLS);
+                }
+                Target::Timeline { track, start } => {
+                    let label = done
+                        .path
+                        .file_stem()
+                        .and_then(|s| s.to_str())
+                        .unwrap_or("clip")
+                        .to_string();
+                    self.arrangement.add_block(
+                        track,
+                        Block {
+                            samples: std::sync::Arc::new(audio.samples),
+                            start,
+                            label,
+                        },
+                    );
                 }
             }
         }
@@ -405,6 +453,169 @@ impl TermKrushApp {
                     let (inp, out) = self.mixer.pad_trim(i);
                     self.mixer.audition_region(i, inp, out);
                 }
+            }
+        }
+    }
+
+    /// The timeline (top panel): brand + transport, then free tracks of blocks.
+    /// Drag a library track onto a lane to place a block (snapped to the beat);
+    /// click a block to select, Delete to remove, Cmd-C/V to copy/paste.
+    fn draw_timeline(&mut self, ctx: &egui::Context) {
+        const PXPS: f32 = 60.0; // pixels per second
+        const LANE_H: f32 = 34.0;
+        let sr = self.target_rate.max(1) as f32;
+        let x_of = |rect_left: f32, frame: u64| rect_left + (frame as f32 / sr) * PXPS;
+        // Snap a frame to the nearest beat when a master tempo is known.
+        let master_bpm = self.mixer.master_bpm();
+        let snap = |frame: u64| -> u64 {
+            match master_bpm {
+                Some(bpm) if bpm > 0.0 => {
+                    let fpb = (sr * 60.0 / bpm) as f64;
+                    ((frame as f64 / fpb).round() * fpb) as u64
+                }
+                _ => frame,
+            }
+        };
+
+        egui::TopBottomPanel::top("timeline")
+            .exact_height(220.0)
+            .show(ctx, |ui| {
+                ui.add_space(6.0);
+                // --- brand + transport ---
+                ui.horizontal(|ui| {
+                    let (r, _) = ui.allocate_exact_size(egui::vec2(22.0, 22.0), egui::Sense::hover());
+                    let p = ui.painter_at(r);
+                    p.circle_filled(r.center(), 10.0, PANEL);
+                    p.circle_stroke(r.center(), 10.0, egui::Stroke::new(1.0, LINE));
+                    p.circle_filled(r.center(), 3.0, AMBER);
+                    ui.label(bungee("termkrush", 18.0, AMBER));
+                    ui.add_space(12.0);
+                    if icon_btn(ui, if self.tl_playing { ph::PAUSE } else { ph::PLAY }, "play / pause the timeline") {
+                        self.tl_playing = !self.tl_playing;
+                    }
+                    if icon_btn(ui, ph::STOP, "stop (rewind to start)") {
+                        self.tl_playing = false;
+                        self.tl_playhead = 0;
+                    }
+                    if icon_btn(ui, ph::FLOPPY_DISK, "render the mix to the library (WAV)") {
+                        self.render_arrangement();
+                    }
+                    if icon_btn(ui, ph::PLUS, "add a track") {
+                        self.arrangement.add_track();
+                    }
+                    ui.add_space(12.0);
+                    let bpm = self
+                        .mixer
+                        .master_bpm()
+                        .map(|b| format!("{b:.0} BPM"))
+                        .unwrap_or_else(|| "-- BPM".into());
+                    ui.label(egui::RichText::new(bpm).color(GREEN));
+                });
+                ui.add_space(4.0);
+
+                // --- track lanes --- (collect into locals; apply after, so we
+                // never mutate self while the arrangement is borrowed)
+                let mut drop: Option<(usize, u64, PathBuf)> = None;
+                let mut clicked: Option<(usize, usize)> = None;
+                egui::ScrollArea::vertical().max_height(150.0).show(ui, |ui| {
+                    let tracks = self.arrangement.track_count();
+                    for t in 0..tracks {
+                        let (lane, resp) = ui.allocate_exact_size(
+                            egui::vec2(ui.available_width(), LANE_H),
+                            egui::Sense::click(),
+                        );
+                        let p = ui.painter_at(lane);
+                        p.rect_filled(lane, 3.0, PANEL);
+                        p.rect_stroke(lane, 3.0, egui::Stroke::new(1.0, LINE));
+                        // blocks
+                        for (bi, block) in self.arrangement.tracks()[t].blocks.iter().enumerate() {
+                            let x0 = x_of(lane.left(), block.start);
+                            let x1 = x_of(lane.left(), block.end());
+                            let br = egui::Rect::from_min_max(
+                                egui::pos2(x0, lane.top() + 2.0),
+                                egui::pos2(x1.max(x0 + 3.0), lane.bottom() - 2.0),
+                            );
+                            let selected = self.tl_sel == Some((t, bi));
+                            p.rect_filled(br, 2.0, AMBER.gamma_multiply(if selected { 0.5 } else { 0.3 }));
+                            p.rect_stroke(br, 2.0, egui::Stroke::new(if selected { 2.0 } else { 1.0 }, AMBER));
+                            p.text(
+                                br.left_top() + egui::vec2(4.0, 3.0),
+                                egui::Align2::LEFT_TOP,
+                                &block.label,
+                                egui::FontId::proportional(11.0),
+                                INK,
+                            );
+                            // click a block to select it
+                            if resp.clicked() {
+                                if let Some(pos) = resp.interact_pointer_pos() {
+                                    if br.contains(pos) {
+                                        clicked = Some((t, bi));
+                                    }
+                                }
+                            }
+                        }
+                        // drop a dragged library track here → a new block
+                        if resp.dnd_hover_payload::<DragTrack>().is_some() {
+                            p.rect_stroke(lane, 3.0, egui::Stroke::new(1.5, GREEN));
+                        }
+                        if let Some(d) = resp.dnd_release_payload::<DragTrack>() {
+                            let x = ui
+                                .input(|i| i.pointer.interact_pos())
+                                .map(|pp| pp.x)
+                                .unwrap_or(lane.left());
+                            let frame = (((x - lane.left()).max(0.0) / PXPS) * sr) as u64;
+                            drop = Some((t, snap(frame), d.0.clone()));
+                        }
+                        // playhead
+                        if self.tl_playing || self.tl_playhead > 0 {
+                            let px = x_of(lane.left(), self.tl_playhead);
+                            if px <= lane.right() {
+                                p.line_segment(
+                                    [egui::pos2(px, lane.top()), egui::pos2(px, lane.bottom())],
+                                    egui::Stroke::new(1.5, GREEN),
+                                );
+                            }
+                        }
+                        ui.add_space(4.0);
+                    }
+                });
+                ui.label(
+                    egui::RichText::new("drag a track onto a lane · click a block, Delete to remove · Cmd-C/V copy/paste")
+                        .color(DIM)
+                        .small(),
+                );
+
+                // Apply the gathered actions now that the arrangement isn't borrowed.
+                if let Some(s) = clicked {
+                    self.tl_sel = Some(s);
+                }
+                if let Some((t, start, path)) = drop {
+                    self.spawn_load(Target::Timeline { track: t, start }, path);
+                }
+            });
+
+        // Keyboard: Delete removes the selected block; Cmd/Ctrl-C/V copy/paste.
+        let (del, copy, paste) = ctx.input(|i| {
+            (
+                i.key_pressed(egui::Key::Delete) || i.key_pressed(egui::Key::Backspace),
+                i.modifiers.command && i.key_pressed(egui::Key::C),
+                i.modifiers.command && i.key_pressed(egui::Key::V),
+            )
+        });
+        if let Some((t, bi)) = self.tl_sel {
+            if del {
+                self.arrangement.remove_block(t, bi);
+                self.tl_sel = None;
+            } else if copy {
+                self.tl_clip = self.arrangement.tracks()[t].blocks.get(bi).cloned();
+            }
+        }
+        if paste {
+            if let Some(mut b) = self.tl_clip.clone() {
+                // Paste at the playhead on track 0 (or the selected track).
+                let t = self.tl_sel.map(|(t, _)| t).unwrap_or(0);
+                b.start = self.tl_playhead;
+                self.arrangement.add_block(t, b);
             }
         }
     }
@@ -563,6 +774,29 @@ impl TermKrushApp {
         self.crate_lib.refresh();
         self.probed_dir = None; // re-probe so the new file gets checked
     }
+
+    /// Render the whole timeline arrangement to a `mix-N.wav` in the library.
+    fn render_arrangement(&mut self) {
+        let samples = self.arrangement.render();
+        if samples.is_empty() {
+            return;
+        }
+        let dir = self.crate_lib.cwd().to_path_buf();
+        let mut n = 1;
+        let path = loop {
+            let p = dir.join(format!("mix-{n}.wav"));
+            if !p.exists() {
+                break p;
+            }
+            n += 1;
+        };
+        if let Err(e) = write_wav(&path, &samples, self.mixer.sample_rate(), 2) {
+            tracing::error!(error = %e, "render failed");
+            return;
+        }
+        self.crate_lib.refresh();
+        self.probed_dir = None;
+    }
 }
 
 impl eframe::App for TermKrushApp {
@@ -595,8 +829,9 @@ impl eframe::App for TermKrushApp {
             self.spawn_probe();
         }
 
-        // The scratch platter (bottom) draws before the central pad grid so the
-        // grid fills the space above it. It borrows &mut self directly.
+        // Top + bottom panels first (they reserve their edges); both borrow
+        // &mut self directly.
+        self.draw_timeline(ctx);
         self.draw_scratch_panel(ctx);
 
         let mut acts: Vec<Act> = Vec::new();
@@ -615,7 +850,6 @@ impl eframe::App for TermKrushApp {
                 previewing,
                 ..
             } = self;
-            draw_timeline_strip(ctx, mixer);
             draw_library(
                 ctx,
                 crate_lib,
@@ -869,41 +1103,6 @@ fn crt_overlay(ctx: &egui::Context) {
         0.0,
         egui::Stroke::new(2.0, egui::Color32::from_black_alpha(60)),
     );
-}
-
-fn draw_timeline_strip(ctx: &egui::Context, mixer: &Mixer) {
-    egui::TopBottomPanel::top("timeline")
-        .exact_height(72.0)
-        .show(ctx, |ui| {
-            ui.add_space(6.0);
-            ui.horizontal(|ui| {
-                // Brand: a little amber vinyl + the Bungee wordmark.
-                let (rect, _) =
-                    ui.allocate_exact_size(egui::vec2(22.0, 22.0), egui::Sense::hover());
-                let p = ui.painter_at(rect);
-                p.circle_filled(rect.center(), 10.0, PANEL);
-                p.circle_stroke(rect.center(), 10.0, egui::Stroke::new(1.0, LINE));
-                p.circle_filled(rect.center(), 3.0, AMBER);
-                ui.add_space(2.0);
-                ui.label(bungee("termkrush", 18.0, AMBER));
-                ui.add_space(16.0);
-                let bpm = mixer
-                    .master_bpm()
-                    .map(|b| format!("♩ {b:.0} BPM"))
-                    .unwrap_or_else(|| "♩ -- BPM".into());
-                ui.label(egui::RichText::new(bpm).color(GREEN));
-                ui.label(
-                    egui::RichText::new(format!("· master {:.0}%", mixer.master_gain() * 100.0))
-                        .weak(),
-                );
-            });
-            ui.add_space(4.0);
-            ui.label(
-                egui::RichText::new("TIMELINE  —  drag clips here (coming next)")
-                    .color(AMBER)
-                    .weak(),
-            );
-        });
 }
 
 #[allow(clippy::too_many_arguments)]

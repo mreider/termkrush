@@ -122,6 +122,31 @@ impl Arrangement {
             .unwrap_or(0)
     }
 
+    /// Sum the arrangement into `out` (interleaved stereo) starting at frame
+    /// `playhead` — for live transport playback. `out.len()/2` frames are mixed;
+    /// blocks overlapping the window contribute their samples.
+    pub fn mix_into(&self, playhead: u64, out: &mut [f32]) {
+        let frames = out.len() / 2;
+        for track in &self.tracks {
+            for block in &track.blocks {
+                let (bs, be) = (block.start, block.end());
+                // Window of global frames covered by this call: [playhead, end).
+                let win_end = playhead + frames as u64;
+                if be <= playhead || bs >= win_end {
+                    continue; // block not in this window
+                }
+                let from = bs.max(playhead);
+                let to = be.min(win_end);
+                for gf in from..to {
+                    let oi = (gf - playhead) as usize * 2;
+                    let bi = (gf - bs) as usize * 2;
+                    out[oi] += block.samples[bi];
+                    out[oi + 1] += block.samples[bi + 1];
+                }
+            }
+        }
+    }
+
     /// Render the whole arrangement to one interleaved-stereo buffer, summing
     /// every block at its start position. Empty if there are no blocks.
     pub fn render(&self) -> Vec<f32> {
@@ -198,6 +223,19 @@ mod tests {
             (out[6 * 2] - 0.8).abs() < 1e-6,
             "both blocks sum at frame 6"
         );
+    }
+
+    #[test]
+    fn mix_into_places_blocks_at_the_playhead() {
+        let mut a = Arrangement::new(1000, 1);
+        a.add_block(0, block(10, 10, 0.5)); // frames 10..20
+                                            // Window [5, 25): the block sounds at output offsets 5..15.
+        let mut out = vec![0.0f32; 20 * 2];
+        a.mix_into(5, &mut out);
+        assert_eq!(out[4 * 2], 0.0, "before the block (global frame 9)");
+        assert_eq!(out[5 * 2], 0.5, "block start (global frame 10) at offset 5");
+        assert_eq!(out[14 * 2 + 1], 0.5, "last block frame, right channel");
+        assert_eq!(out[15 * 2], 0.0, "after the block (global frame 20)");
     }
 
     #[test]

@@ -26,8 +26,6 @@ Stack-rank order. Top is the highest priority. Edit by hand or via `am rank` / `
 - [Bug: clip editor bar runs off screen and the in/out marks do not visibly move](Bug-clip-editor-bar-runs-off-screen-and-the-in-out-marks-do-not-visibly-move.md)
 - [Bug: help modal is cut off and the header keymap is stale and misleading](Bug-help-modal-is-cut-off-and-the-header-keymap-is-stale-and-misleading.md)
 - [Cruft pass: remove dead code left by the looper refactors](Cruft-pass-remove-dead-code-left-by-the-looper-refactors.md)
-- [Bug: scratch whip/wiki is not discoverable - no cue to set a pad to scratch](Bug-scratch-whip-wiki-is-not-discoverable-no-cue-to-set-a-pad-to-scratch.md)
-- [Retire the step-grid cell-toggle and tracker-only tests](Retire-the-step-grid-cell-toggle-and-tracker-only-tests.md)
 - [Bug: escape should leave the timeline modal then open quit on a second press](Bug-escape-should-leave-the-timeline-modal-then-open-quit-on-a-second-press.md)
 - [Bug: clip-edit needs audition preview and two-sided snip](Bug-clip-edit-needs-audition-preview-and-two-sided-snip.md)
 - [Bug: space is not a global play/pause - cannot pause the mix](Bug-space-is-not-a-global-play-pause-cannot-pause-the-mix.md)

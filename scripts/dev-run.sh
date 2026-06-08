@@ -82,7 +82,7 @@ collect_extra() {
   done
 }
 
-RECIPE="${1:-tui}"
+RECIPE="${1:-gui}"
 shift || true
 
 case "${RECIPE}" in
@@ -93,7 +93,8 @@ case "${RECIPE}" in
   list)
     cat <<'RECIPES'
 Recipes (run the prebuilt binary; no recompile):
-  tui            launch the fullscreen TUI                 [default]
+  gui            launch the egui desktop app               [default]
+  tui            launch the legacy terminal UI             (--tui)
   tone [secs]    play a test tone for [secs] seconds       (--test-tone)
   panic          trigger the panic/crash-hook path         (--panic-test)
 
@@ -120,10 +121,16 @@ RECIPES
     fi
     ;;
 
-  tui)
+  gui)
     ensure_built
     collect_extra "$@"
     exec "${BIN}" "${EXTRA[@]+"${EXTRA[@]}"}"
+    ;;
+
+  tui)
+    ensure_built
+    collect_extra "$@"
+    exec "${BIN}" --tui "${EXTRA[@]+"${EXTRA[@]}"}"
     ;;
 
   tone)

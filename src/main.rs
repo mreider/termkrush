@@ -3,8 +3,10 @@
 //! This is the binary entry point: a thin shell over the headless
 //! `termkrush-core` engine. `main` wires up logging, handles a couple of
 //! smoke-test flags (`--test-tone`, `--panic-test`), and otherwise hands off
-//! to the TUI (the only UI-dependent code, which lives here in the binary).
+//! to the egui desktop UI (`--tui` still launches the legacy terminal UI
+//! during the GUI migration; both live here in the binary).
 
+mod gui;
 mod tui;
 
 use termkrush_core::{audio, logging};
@@ -90,20 +92,32 @@ fn main() {
         std::process::exit(run_test_tone(secs));
     }
 
-    // Launch the fullscreen TUI when attached to a real terminal. When
-    // stdout is piped (tests, CI, `termkrush | cat`), there is no usable
-    // terminal to take over, so just print the version banner and exit —
-    // which keeps the binary scriptable.
-    use std::io::IsTerminal;
-    if std::io::stdout().is_terminal() && !args.iter().any(|a| a == "--no-tui") {
+    // Legacy terminal UI, kept during the GUI migration.
+    if args.iter().any(|a| a == "--tui") {
         if let Err(e) = tui::run() {
             tracing::error!(error = %e, "tui exited with error");
             eprintln!("termkrush: {e}");
             std::process::exit(1);
         }
-    } else {
+        return;
+    }
+
+    // When stdout is piped (tests, CI, `termkrush | cat`) or `--no-tui` is set,
+    // there is no interactive session to open — print the version banner and
+    // exit, which keeps the binary scriptable.
+    use std::io::IsTerminal;
+    if !std::io::stdout().is_terminal() || args.iter().any(|a| a == "--no-tui") {
         // The version banner is program output (stdout), not a diagnostic.
         println!("{}", version_banner());
+        return;
+    }
+
+    // Default: the egui desktop app. Needs a display; a headless box errors
+    // here, which we report and exit non-zero.
+    if let Err(e) = gui::run() {
+        tracing::error!(error = %e, "gui exited with error");
+        eprintln!("termkrush: {e}");
+        std::process::exit(1);
     }
 }
 

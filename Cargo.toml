@@ -21,6 +21,7 @@ path = "src/main.rs"
 [dependencies]
 termkrush-core = { path = "termkrush-core" }
 ratatui = "0.29"
+eframe = "0.29"
 rtrb = "0.3"
 tracing = "0.1"
 

@@ -676,3 +676,45 @@
 2026-06-08T11:12:20Z	Matt Reider	estimate	termkrush/Save-and-load-a-session-as-a-tekr-file-pads-timeline.md	8
 2026-06-08T11:27:59Z	Matt Reider	bug	termkrush/Bug-reconcile-timeline-to-the-looper-model-record-perform-capture-drop-place-pad-region-cut-step-grid.md	target=priority position=top
 2026-06-08T11:27:59Z	Matt Reider	started	termkrush/Bug-reconcile-timeline-to-the-looper-model-record-perform-capture-drop-place-pad-region-cut-step-grid.md	
+2026-06-08T11:32:02Z	Matt Reider	finished	termkrush/Bug-reconcile-timeline-to-the-looper-model-record-perform-capture-drop-place-pad-region-cut-step-grid.md	
+2026-06-08T11:32:02Z	Matt Reider	delivered	termkrush/Bug-reconcile-timeline-to-the-looper-model-record-perform-capture-drop-place-pad-region-cut-step-grid.md	Timeline reconciled to the looper pivot. Menu is now: record · clear · render · tempo ± · master ±. RECORD arms the looper — the tape rolls from the top; while armed (hint shows '● REC'), go to a pad and Space plays it AND captures a hit on the NEXT BAR LINE in that pad's lane (launch-quantized, never mid-bar). Record again to stop; Space then plays the performed arrangement; render writes a WAV. Removed the retired manual step-grid (place pad / region / cut) and the old master-bounce recorder. Tests (exit 0): arm/stop rolls+parks the transport; triggering mid-bar-2 lands the hit on bar 2's line; a performed arrangement renders audio. NEEDS-PM-HANDS-ON: the *live* sound currently triggers immediately for feedback while the recorded position is quantized — if you want the audible hit to also wait for the bar line (true launch-quant on playback feel), that's a refinement. clippy + 8 suites exit 0 (gated before commit). DELIVERED.
+2026-06-08T12:17:10Z	Matt Reider	delivered	termkrush/Bug-space-on-a-pad-should-toggle-play-pause-not-restart.md	Delivered with the Space play/pause work (pad toggles play/pause; clip editor = start-over/esc; songs = preview toggle). Superseded shortly by the GUI pivot but the behavior stands in the TUI.
+2026-06-08T12:17:10Z	Matt Reider	created	termkrush/GUI-foundation-egui-shell-CRT-theme-audio-3-zone-layout.md	target=icebox position=bottom
+2026-06-08T12:17:10Z	Matt Reider	set-type	termkrush/_icebox.md	feature
+2026-06-08T12:17:10Z	Matt Reider	estimate	termkrush/_icebox.md	5
+2026-06-08T12:17:11Z	Matt Reider	created	termkrush/GUI-library-panel-mouse-rename-drag-to-folder-drag-to-pad-delete-button.md	target=icebox position=bottom
+2026-06-08T12:17:11Z	Matt Reider	set-type	termkrush/_icebox.md	feature
+2026-06-08T12:17:11Z	Matt Reider	estimate	termkrush/_icebox.md	5
+2026-06-08T12:17:11Z	Matt Reider	created	termkrush/GUI-pad-grid-drag-to-change-kind-volume-clear-click-play.md	target=icebox position=bottom
+2026-06-08T12:17:11Z	Matt Reider	set-type	termkrush/_icebox.md	feature
+2026-06-08T12:17:11Z	Matt Reider	estimate	termkrush/_icebox.md	5
+2026-06-08T12:17:11Z	Matt Reider	created	termkrush/GUI-clip-editor-inline-waveform-draggable-handles-zoom-buttons-export.md	target=icebox position=bottom
+2026-06-08T12:17:11Z	Matt Reider	set-type	termkrush/_icebox.md	feature
+2026-06-08T12:17:11Z	Matt Reider	estimate	termkrush/_icebox.md	5
+2026-06-08T12:17:12Z	Matt Reider	created	termkrush/GUI-free-track-timeline-blocks-drag-to-track-move-copy-paste-render.md	target=icebox position=bottom
+2026-06-08T12:17:12Z	Matt Reider	set-type	termkrush/_icebox.md	feature
+2026-06-08T12:17:12Z	Matt Reider	estimate	termkrush/_icebox.md	8
+2026-06-08T12:17:12Z	Matt Reider	created	termkrush/Jog-scratch-voice-DSP-in-the-core-engine.md	target=icebox position=bottom
+2026-06-08T12:17:12Z	Matt Reider	set-type	termkrush/_icebox.md	feature
+2026-06-08T12:17:12Z	Matt Reider	estimate	termkrush/_icebox.md	5
+2026-06-08T12:17:12Z	Matt Reider	created	termkrush/GUI-platter-scratch-widget-and-record-to-timeline.md	target=icebox position=bottom
+2026-06-08T12:17:12Z	Matt Reider	set-type	termkrush/_icebox.md	feature
+2026-06-08T12:17:12Z	Matt Reider	estimate	termkrush/_icebox.md	5
+2026-06-08T12:17:13Z	Matt Reider	created	termkrush/Retire-the-TUI-front-end-once-the-GUI-reaches-parity.md	target=icebox position=bottom
+2026-06-08T12:17:13Z	Matt Reider	set-type	termkrush/_icebox.md	chore
+2026-06-08T12:17:47Z	Matt Reider	set-type	termkrush/GUI-foundation-egui-shell-CRT-theme-audio-3-zone-layout.md	feature
+2026-06-08T12:17:47Z	Matt Reider	estimate	termkrush/GUI-foundation-egui-shell-CRT-theme-audio-3-zone-layout.md	5
+2026-06-08T12:17:47Z	Matt Reider	set-type	termkrush/GUI-library-panel-mouse-rename-drag-to-folder-drag-to-pad-delete-button.md	feature
+2026-06-08T12:17:47Z	Matt Reider	estimate	termkrush/GUI-library-panel-mouse-rename-drag-to-folder-drag-to-pad-delete-button.md	5
+2026-06-08T12:17:47Z	Matt Reider	set-type	termkrush/GUI-pad-grid-drag-to-change-kind-volume-clear-click-play.md	feature
+2026-06-08T12:17:47Z	Matt Reider	estimate	termkrush/GUI-pad-grid-drag-to-change-kind-volume-clear-click-play.md	5
+2026-06-08T12:17:47Z	Matt Reider	set-type	termkrush/GUI-clip-editor-inline-waveform-draggable-handles-zoom-buttons-export.md	feature
+2026-06-08T12:17:47Z	Matt Reider	estimate	termkrush/GUI-clip-editor-inline-waveform-draggable-handles-zoom-buttons-export.md	5
+2026-06-08T12:17:48Z	Matt Reider	set-type	termkrush/GUI-free-track-timeline-blocks-drag-to-track-move-copy-paste-render.md	feature
+2026-06-08T12:17:48Z	Matt Reider	estimate	termkrush/GUI-free-track-timeline-blocks-drag-to-track-move-copy-paste-render.md	8
+2026-06-08T12:17:48Z	Matt Reider	set-type	termkrush/Jog-scratch-voice-DSP-in-the-core-engine.md	feature
+2026-06-08T12:17:48Z	Matt Reider	estimate	termkrush/Jog-scratch-voice-DSP-in-the-core-engine.md	5
+2026-06-08T12:17:48Z	Matt Reider	set-type	termkrush/GUI-platter-scratch-widget-and-record-to-timeline.md	feature
+2026-06-08T12:17:48Z	Matt Reider	estimate	termkrush/GUI-platter-scratch-widget-and-record-to-timeline.md	5
+2026-06-08T12:17:48Z	Matt Reider	set-type	termkrush/Retire-the-TUI-front-end-once-the-GUI-reaches-parity.md	chore
+2026-06-08T12:18:22Z	Matt Reider	started	termkrush/GUI-foundation-egui-shell-CRT-theme-audio-3-zone-layout.md	

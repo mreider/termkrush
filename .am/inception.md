@@ -15,6 +15,29 @@
 > dropped track sets the master tempo and every pad locks to it silently (no
 > prompt)**. Then you edit the captured blocks (move/cut/snip) and render. This
 > retires the step-grid cell-toggle as the way you arrange.
+>
+> **GUI pivot (2026-06-08).** The terminal UI is retired in favor of a native,
+> cross-platform **egui** desktop app — mouse-first, "best interface." The
+> **engine (`termkrush-core`: mixer, clips, library, timeline, audio) is
+> unchanged**; only the front-end (`src/tui`) is replaced. The TUI stays
+> functional until the GUI reaches parity, then it is removed. Decisions:
+> - **Framework: egui** (eframe), single binary, Win/Mac/Linux.
+> - **Free DAW-style timeline tracks.** Clips are **blocks** with a position +
+>   length on freely-addable tracks — no longer one-lane-per-pad. Drag a clip to
+>   the timeline; drag blocks to move; **Cmd-C / Cmd-V** copy/paste a block.
+> - **Scratch by mouse-drag on the platter** (drag direction = whip/wiki, drag
+>   speed = velocity), with the arrow-key jog as a secondary/quantized option.
+>   This sidesteps the terminal key-up problem entirely.
+> - **CRT amber/green identity, modernized** — keep the brand, proper GUI
+>   layout, real waveforms.
+> - **Mouse-driven, no modal dialogs.** Draggable trim handles + `+`/`-` zoom
+>   buttons; double-click to rename; drag a file into a folder; highlight + a
+>   delete button; drag-and-drop to change a pad's kind; inline buttons/menus
+>   for options. Keyboard shrinks to transport + copy/paste + the optional jog.
+>
+> This supersedes the "terminal-native / keyboard-first / SSH-able" constraint
+> below; "single binary, cross-platform, MIT, solo-maintainable, CRT amber/green"
+> still hold (egui keeps the single-binary property; a display is now required).
 
 ## The user
 

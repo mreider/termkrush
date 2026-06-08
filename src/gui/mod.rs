@@ -63,10 +63,11 @@ enum Target {
     Jog,
 }
 
-/// A finished background decode on its way to the audio engine.
+/// A finished background decode on its way to the audio engine. `audio` is
+/// `None` if the decode failed (so the in-flight count still settles).
 struct LoadDone {
     target: Target,
-    audio: DecodedAudio,
+    audio: Option<DecodedAudio>,
     bpm: Option<f32>,
     path: PathBuf,
 }
@@ -127,6 +128,8 @@ pub struct TermKrushApp {
     clip_wave: Option<(usize, Vec<(f32, f32)>)>,
     /// Cached scratch-platter waveform peaks (computed once when armed).
     jog_wave: Vec<(f32, f32)>,
+    /// How many background decodes are in flight (drives the loading overlay).
+    pending_decodes: usize,
 
     producer: Option<rtrb::Producer<f32>>,
     _audio: Option<AudioOutput>,
@@ -182,6 +185,7 @@ impl TermKrushApp {
             clip_edit: None,
             clip_wave: None,
             jog_wave: Vec::new(),
+            pending_decodes: 0,
             producer,
             _audio: audio,
             out_channels: channels.max(1),
@@ -243,31 +247,50 @@ impl TermKrushApp {
     }
 
     /// Decode `path` off-thread and route the result to `target`.
-    fn spawn_load(&self, target: Target, path: PathBuf) {
+    fn spawn_load(&mut self, target: Target, path: PathBuf) {
+        self.pending_decodes += 1;
         let tx = self.load_tx.clone();
         let rate = self.target_rate;
-        std::thread::spawn(move || match decode_file(&path, rate) {
-            Ok(audio) => {
-                let bpm = matches!(target, Target::Pad(_))
-                    .then(|| detect_bpm(&audio.samples, audio.channels, audio.sample_rate))
-                    .flatten();
-                let _ = tx.send(LoadDone {
-                    target,
-                    audio,
-                    bpm,
-                    path,
-                });
-            }
-            Err(e) => tracing::error!(error = %e, path = %path.display(), "decode failed"),
+        std::thread::spawn(move || {
+            let done = match decode_file(&path, rate) {
+                Ok(audio) => {
+                    let bpm = matches!(target, Target::Pad(_))
+                        .then(|| detect_bpm(&audio.samples, audio.channels, audio.sample_rate))
+                        .flatten();
+                    LoadDone {
+                        target,
+                        audio: Some(audio),
+                        bpm,
+                        path,
+                    }
+                }
+                Err(e) => {
+                    tracing::error!(error = %e, path = %path.display(), "decode failed");
+                    LoadDone {
+                        target,
+                        audio: None,
+                        bpm: None,
+                        path,
+                    }
+                }
+            };
+            let _ = tx.send(done);
         });
     }
 
     /// Drain finished decodes into the engine.
     fn drain_loads(&mut self) {
         while let Ok(done) = self.load_rx.try_recv() {
+            self.pending_decodes = self.pending_decodes.saturating_sub(1);
+            let Some(audio) = done.audio else {
+                if let Target::Pad(i) = done.target {
+                    self.loading[i] = false; // decode failed; clear the spinner
+                }
+                continue;
+            };
             match done.target {
                 Target::Pad(i) => {
-                    self.mixer.assign_pad(i, done.audio.samples);
+                    self.mixer.assign_pad(i, audio.samples);
                     if let Some(b) = done.bpm {
                         self.mixer.set_pad_bpm(i, Some(b));
                         // Auto-BPM: the first track to carry a tempo sets the master.
@@ -278,9 +301,9 @@ impl TermKrushApp {
                     self.pad_source[i] = Some(done.path);
                     self.loading[i] = false;
                 }
-                Target::Preview => self.mixer.preview(done.audio.samples),
+                Target::Preview => self.mixer.preview(audio.samples),
                 Target::Jog => {
-                    self.mixer.set_jog_source(done.audio.samples);
+                    self.mixer.set_jog_source(audio.samples);
                     self.jog_wave = self.mixer.jog_peaks(WAVE_COLS);
                 }
             }
@@ -624,8 +647,38 @@ impl eframe::App for TermKrushApp {
             self.apply(a);
         }
 
+        if self.pending_decodes > 0 {
+            draw_loading_overlay(ctx, self.pending_decodes);
+        }
         crt_overlay(ctx); // faint scanlines + vignette, on top of everything
     }
+}
+
+/// A dimmed full-window overlay with a spinner while tracks are decoding, so a
+/// slow load doesn't feel frozen. Non-blocking — it's just paint.
+fn draw_loading_overlay(ctx: &egui::Context, n: usize) {
+    let rect = ctx.screen_rect();
+    ctx.layer_painter(egui::LayerId::new(
+        egui::Order::Foreground,
+        egui::Id::new("dim"),
+    ))
+    .rect_filled(rect, 0.0, egui::Color32::from_black_alpha(150));
+    egui::Area::new("loading".into())
+        .order(egui::Order::Foreground)
+        .anchor(egui::Align2::CENTER_CENTER, egui::vec2(0.0, 0.0))
+        .interactable(false)
+        .show(ctx, |ui| {
+            ui.vertical_centered(|ui| {
+                ui.add(egui::Spinner::new().size(44.0).color(AMBER));
+                ui.add_space(8.0);
+                let label = if n > 1 {
+                    format!("loading {n} tracks…")
+                } else {
+                    "loading…".to_string()
+                };
+                ui.label(bungee(label, 14.0, INK));
+            });
+        });
 }
 
 /// Build the landing-page Visuals. Pure + testable so the palette can't silently
@@ -1191,7 +1244,10 @@ fn draw_pad_cell(
             });
 
             if loading[i] {
-                ui.label(egui::RichText::new("⏳ loading…").color(GREEN));
+                ui.horizontal(|ui| {
+                    ui.add(egui::Spinner::new().size(16.0).color(AMBER));
+                    ui.label(egui::RichText::new("loading…").color(DIM));
+                });
                 return;
             }
             if !loaded {

@@ -45,6 +45,7 @@
 |  | [Bug: timeline lanes are unlabeled so placing a pad is not discoverable](termkrush/Bug-timeline-lanes-are-unlabeled-so-placing-a-pad-is-not-discoverable.md) |  |  |
 |  | [Bug: live pad play and timeline playback sound at once - should be mutually exclusive](termkrush/Bug-live-pad-play-and-timeline-playback-sound-at-once-should-be-mutually-exclusive.md) |  |  |
 |  | [Bug: space in the clip editor replays instead of toggling the audition off](termkrush/Bug-space-in-the-clip-editor-replays-instead-of-toggling-the-audition-off.md) |  |  |
+|  | [Bug: Enter should open the context menu so M is unneeded; hint says hear](termkrush/Bug-Enter-should-open-the-context-menu-so-M-is-unneeded-hint-says-hear.md) |  |  |
 
 ### Accepted
 | User | Title | Points | Tags |

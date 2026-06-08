@@ -591,16 +591,16 @@ impl App {
                 if self.mixer.pad_loaded(i) {
                     items.push(("edit clip", EditClip));
                 }
-                items.push(("load track here", Load));
+                items.push(("load", Load));
                 if self.mixer.pad_loaded(i) {
                     items.extend([
-                        ("kind (loop/scratch/1-shot)", CycleKind),
-                        ("on / off", ToggleActive),
-                        ("save as new", SaveNew),
+                        ("kind", CycleKind),
+                        ("on/off", ToggleActive),
+                        ("save", SaveNew),
                         ("save over", SaveOver),
                         ("export mp3", Export),
                         ("unload", Unload),
-                        ("record phrase", PhraseRec),
+                        ("rec phrase", PhraseRec),
                         ("clear phrase", ClearPhrase),
                     ]);
                 }
@@ -609,12 +609,12 @@ impl App {
             Focus::Timeline => (
                 "Timeline",
                 vec![
-                    ("place pad here", PlaceHit),
+                    ("place pad", PlaceHit),
                     ("record", Record),
-                    ("cut here", Cut),
-                    ("loop region", Region),
+                    ("cut", Cut),
+                    ("region", Region),
                     ("clear", Clear),
-                    ("render to library", Render),
+                    ("render", Render),
                     ("tempo +", TempoUp),
                     ("tempo -", TempoDown),
                     ("master +", MasterUp),
@@ -1172,14 +1172,21 @@ impl App {
 
         // Control surface: numbers select · arrows within · Space · Enter · Esc.
         match key.code {
-            // Esc goes up a level: a pad/timeline → the library; library → quit.
+            // Esc goes up a level: pad/timeline → library; a subfolder → its
+            // parent; the library root → quit.
             KeyCode::Esc => {
-                if self.focus == Focus::Crate {
-                    self.confirm_quit = true;
-                    Action::ConfirmQuit
-                } else {
+                if self.focus != Focus::Crate {
                     self.set_focus(Focus::Crate);
                     Action::Focus
+                } else if self.crate_lib.cwd() != self.crate_lib.root() {
+                    if let Some(parent) = self.crate_lib.cwd().parent().map(|p| p.to_path_buf()) {
+                        self.crate_lib.enter(&parent);
+                        self.crate_sel = 0;
+                    }
+                    Action::Mark
+                } else {
+                    self.confirm_quit = true;
+                    Action::ConfirmQuit
                 }
             }
             // 1–8 select a pad, 0 selects the timeline — from anywhere.
@@ -1502,7 +1509,7 @@ fn return_help(f: &mut Frame, app: &App) {
 /// The song-action prompt: one command per line, key then what it does.
 fn draw_song_action(f: &mut Frame, area: Rect, name: &str) {
     let rows = [
-        ("1-8", "load onto that pad"),
+        ("1-8", "load to pad"),
         ("r", "rename"),
         ("⌫", "delete"),
         ("→", "move"),
@@ -1539,20 +1546,16 @@ fn draw_move_picker(f: &mut Frame, area: Rect, mp: &MovePicker) {
     rows.extend(mp.folders.iter().map(|(n, _)| format!("📁 {n}")));
     // Commands as key → explanation, one per line, per sub-mode.
     let cmds: &[(&str, &str)] = if mp.naming.is_some() {
-        &[
-            ("type", "a folder name"),
-            ("enter", "save"),
-            ("esc", "cancel"),
-        ]
+        &[("type", "name"), ("enter", "save"), ("esc", "cancel")]
     } else if mp.confirm_del.is_some() {
-        &[("y", "delete it + all inside"), ("n", "keep")]
+        &[("y", "delete + contents"), ("n", "keep")]
     } else {
         &[
-            ("↑↓", "pick a destination"),
+            ("↑↓", "pick"),
             ("enter", "move here"),
             ("n", "new folder"),
-            ("r", "rename folder"),
-            ("⌫", "delete folder"),
+            ("r", "rename"),
+            ("⌫", "delete"),
             ("esc", "cancel"),
         ]
     };
@@ -1820,7 +1823,7 @@ fn draw_pad_cell(f: &mut Frame, area: Rect, app: &App, pad: usize) {
 /// The DJ tile's two-line 8-bit cat — bobs while voices play, else rests.
 /// A small centered "Quit?" confirmation modal. `y` quits, anything else cancels.
 fn draw_quit_modal(f: &mut Frame, area: Rect) {
-    draw_confirm_modal(f, area, "Quit TermKrush?");
+    draw_confirm_modal(f, area, "Quit?");
 }
 
 /// A small centered yes/no modal. `y` confirms, anything else cancels.
@@ -2147,6 +2150,26 @@ mod tests {
         // Esc from a pad goes up a level → the library.
         app.on_key(KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE));
         assert_eq!(app.focus_cell(), Focus::Crate, "esc returns to the library");
+    }
+
+    #[test]
+    fn esc_in_a_subfolder_goes_up_not_quit() {
+        use std::fs;
+        let tmp = std::env::temp_dir().join(format!("tk-up-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&tmp);
+        fs::create_dir_all(tmp.join("box")).unwrap();
+        let mut app = App::new();
+        app.set_crate(Crate::scan(&tmp));
+        app.crate_lib.enter(&tmp.join("box")); // now inside box/
+        assert_eq!(app.crate_lib.cwd(), tmp.join("box"));
+        // Esc in a subfolder goes up to root, does not quit.
+        app.on_key(KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE));
+        assert_eq!(app.crate_lib.cwd(), tmp.as_path(), "esc went up to root");
+        assert!(!app.confirm_quit);
+        // Esc at root opens quit.
+        app.on_key(KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE));
+        assert!(app.confirm_quit, "esc at root quits");
+        let _ = fs::remove_dir_all(&tmp);
     }
 
     #[test]

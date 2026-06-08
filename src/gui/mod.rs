@@ -105,8 +105,6 @@ pub struct TermKrushApp {
     crate_lib: Crate,
     /// Source path loaded on each pad (for the cell's track name).
     pad_source: [Option<PathBuf>; PADS],
-    /// Per-pad "decoding in the background" flag.
-    loading: [bool; PADS],
     /// The selected library track (delete / preview act on it).
     lib_sel: Option<PathBuf>,
     /// Inline rename in progress: `(target, buffer)`.
@@ -174,7 +172,6 @@ impl TermKrushApp {
             mixer,
             crate_lib,
             pad_source: Default::default(),
-            loading: [false; PADS],
             lib_sel: None,
             renaming: None,
             new_folder: None,
@@ -282,10 +279,7 @@ impl TermKrushApp {
         while let Ok(done) = self.load_rx.try_recv() {
             self.pending_decodes = self.pending_decodes.saturating_sub(1);
             let Some(audio) = done.audio else {
-                if let Target::Pad(i) = done.target {
-                    self.loading[i] = false; // decode failed; clear the spinner
-                }
-                continue;
+                continue; // decode failed; the overlay clears via the counter
             };
             match done.target {
                 Target::Pad(i) => {
@@ -298,7 +292,6 @@ impl TermKrushApp {
                         }
                     }
                     self.pad_source[i] = Some(done.path);
-                    self.loading[i] = false;
                 }
                 Target::Preview => self.mixer.preview(audio.samples),
                 Target::Jog => {
@@ -357,7 +350,6 @@ impl TermKrushApp {
                 let _ = self.crate_lib.move_into(&track, &folder);
             }
             Act::LoadToPad { pad, path } => {
-                self.loading[pad] = true;
                 self.spawn_load(Target::Pad(pad), path);
             }
             Act::StartNewFolder => self.new_folder = Some(String::new()),
@@ -608,7 +600,6 @@ impl eframe::App for TermKrushApp {
                 mixer,
                 crate_lib,
                 pad_source,
-                loading,
                 lib_sel,
                 renaming,
                 new_folder,
@@ -638,7 +629,7 @@ impl eframe::App for TermKrushApp {
                     .unwrap_or(&[]);
                 draw_clip_editor(ctx, mixer, pad_source, i, wave, &mut acts);
             } else {
-                draw_pad_grid(ctx, mixer, pad_source, loading, &mut acts);
+                draw_pad_grid(ctx, mixer, pad_source, &mut acts);
             }
         }
         for a in acts {
@@ -1156,7 +1147,6 @@ fn draw_pad_grid(
     ctx: &egui::Context,
     mixer: &Mixer,
     pad_source: &[Option<PathBuf>; PADS],
-    loading: &[bool; PADS],
     acts: &mut Vec<Act>,
 ) {
     egui::CentralPanel::default().show(ctx, |ui| {
@@ -1175,7 +1165,7 @@ fn draw_pad_grid(
                     for (c, col) in cols.iter_mut().enumerate() {
                         let i = row * COLS + c;
                         if i < PADS {
-                            draw_pad_cell(col, mixer, pad_source, loading, i, acts);
+                            draw_pad_cell(col, mixer, pad_source, i, acts);
                         }
                     }
                 });
@@ -1301,7 +1291,6 @@ fn draw_pad_cell(
     ui: &mut egui::Ui,
     mixer: &Mixer,
     pad_source: &[Option<PathBuf>; PADS],
-    loading: &[bool; PADS],
     i: usize,
     acts: &mut Vec<Act>,
 ) {
@@ -1337,13 +1326,6 @@ fn draw_pad_cell(
                 );
             });
 
-            if loading[i] {
-                ui.horizontal(|ui| {
-                    ui.add(egui::Spinner::new().size(16.0).color(AMBER));
-                    ui.label(egui::RichText::new("loading…").color(DIM));
-                });
-                return;
-            }
             if !loaded {
                 ui.label(egui::RichText::new("drag a track here").weak());
                 return;

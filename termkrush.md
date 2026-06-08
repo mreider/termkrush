@@ -22,10 +22,9 @@
 |  | [Flag unplayable files in red on open](termkrush/Flag-unplayable-files-in-red-on-open.md) | 3 |  |
 |  | [Library home: Enter on a song offers load rename delete move](termkrush/Library-home-Enter-on-a-song-offers-load-rename-delete-move.md) | 5 |  |
 |  | [Move a file to a folder via a folder-picker modal](termkrush/Move-a-file-to-a-folder-via-a-folder-picker-modal.md) | 8 |  |
-|  | [Number keys select pads 1-8 and 0 selects the timeline](termkrush/Number-keys-select-pads-1-8-and-0-selects-the-timeline.md) | 5 |  |
 |  | [Save a pad or timeline to the library with ctrl-S](termkrush/Save-a-pad-or-timeline-to-the-library-with-ctrl-S.md) | 5 |  |
 |  | [Splash screen on launch with logo copyright and license](termkrush/Splash-screen-on-launch-with-logo-copyright-and-license.md) | 3 |  |
-| Total Points | | 75 | |
+| Total Points | | 70 | |
 
 ### Started
 | User | Title | Points | Tags |
@@ -59,6 +58,7 @@
 |  | [Bug: clip editor cannot trim precisely - shift-fine is too coarse and undiscoverable](termkrush/Bug-clip-editor-cannot-trim-precisely-shift-fine-is-too-coarse-and-undiscoverable.md) |  |  |
 |  | [Zoomable clip editor: windowed bar, +/- zoom, follow the active handle](termkrush/Zoomable-clip-editor-windowed-bar-zoom-follow-the-active-handle.md) | 5 |  |
 |  | [Bug: clip editor audition plays the whole selection not the active handle](termkrush/Bug-clip-editor-audition-plays-the-whole-selection-not-the-active-handle.md) |  |  |
+|  | [Number keys select pads 1-8 and 0 selects the timeline](termkrush/Number-keys-select-pads-1-8-and-0-selects-the-timeline.md) | 5 |  |
 
 ### Accepted
 | User | Title | Points | Tags |

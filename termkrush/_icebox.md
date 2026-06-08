@@ -7,7 +7,6 @@ Stack-rank order. Top is the highest priority. Edit by hand or via `am rank` / `
 - [Fade in and fade out on timeline blocks](Fade-in-and-fade-out-on-timeline-blocks.md)
 - [Make the tutorial interactive: do-this steps the app verifies](Make-the-tutorial-interactive-do-this-steps-the-app-verifies.md)
 - [Tutorial: question-mark opens a guided walkthrough of the controls and flow](Tutorial-question-mark-opens-a-guided-walkthrough-of-the-controls-and-flow.md)
-- [Number keys select pads 1-8 and 0 selects the timeline](Number-keys-select-pads-1-8-and-0-selects-the-timeline.md)
 - [Library home: Enter on a song offers load rename delete move](Library-home-Enter-on-a-song-offers-load-rename-delete-move.md)
 - [Move a file to a folder via a folder-picker modal](Move-a-file-to-a-folder-via-a-folder-picker-modal.md)
 - [Browse one level of subfolders in the library](Browse-one-level-of-subfolders-in-the-library.md)

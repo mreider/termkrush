@@ -119,3 +119,4 @@ Stack-rank order. Top is the highest priority. Edit by hand or via `am rank` / `
 - [Master timeline as a permanent top strip](Master-timeline-as-a-permanent-top-strip.md)
 - [Minimal context-mapped controls: move + Space/Enter/M menu](Minimal-context-mapped-controls-move-Space-Enter-M-menu.md)
 - [Zoomable clip editor: windowed bar, +/- zoom, follow the active handle](Zoomable-clip-editor-windowed-bar-zoom-follow-the-active-handle.md)
+- [Number keys select pads 1-8 and 0 selects the timeline](Number-keys-select-pads-1-8-and-0-selects-the-timeline.md)

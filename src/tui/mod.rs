@@ -97,12 +97,9 @@ pub enum Focus {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum MenuAction {
     // Pad
-    Load,
     EditClip,
     CycleKind,
     ToggleActive,
-    SaveNew,
-    SaveOver,
     Export,
     Unload,
     PhraseRec,
@@ -660,22 +657,27 @@ impl App {
             // The library has no menu — Enter offers song actions directly.
             Focus::Crate => return Action::None,
             Focus::Pad(i) => {
-                let mut items: Vec<(&str, MenuAction)> = Vec::new();
-                if self.mixer.pad_loaded(i) {
-                    items.push(("edit clip", EditClip));
+                // Empty pad: nothing to do here — load from the library.
+                if !self.mixer.pad_loaded(i) {
+                    return Action::None;
                 }
-                items.push(("load", Load));
-                if self.mixer.pad_loaded(i) {
-                    items.extend([
-                        ("kind", CycleKind),
-                        ("on/off", ToggleActive),
-                        ("save", SaveNew),
-                        ("save over", SaveOver),
-                        ("export mp3", Export),
-                        ("unload", Unload),
-                        ("rec phrase", PhraseRec),
-                        ("clear phrase", ClearPhrase),
-                    ]);
+                // The kind row shows the current kind; ←/→ change it in place.
+                let kind = match self.mixer.pad_kind(i) {
+                    PadKind::OneShot => "kind: 1shot  (←/→)",
+                    PadKind::Loop => "kind: loop  (←/→)",
+                    PadKind::Scratch => "kind: scratch  (←/→)",
+                };
+                let mut items: Vec<(&str, MenuAction)> = vec![
+                    ("edit clip", EditClip),
+                    (kind, CycleKind),
+                    ("on/off", ToggleActive),
+                    ("export", Export),
+                    ("clear", Unload),
+                ];
+                // Phrase recording only makes sense on a scratch pad.
+                if self.mixer.pad_kind(i) == PadKind::Scratch {
+                    items.push(("rec phrase", PhraseRec));
+                    items.push(("clear phrase", ClearPhrase));
                 }
                 ("Pad", items)
             }
@@ -713,12 +715,9 @@ impl App {
                 self.timeline.toggle(self.tl_lane, self.tl_step);
                 Action::Timeline
             }
-            Load => self.load_selected_onto(self.active_pad()),
             CycleKind => self.cycle_kind(),
             ToggleActive => self.toggle_active(),
-            SaveNew => self.save_pad_new(),
-            SaveOver => self.save_pad_over(),
-            Export => self.export_pad_mp3(),
+            Export => self.save_pad_new(), // write the trimmed clip to the library (WAV)
             Unload => self.unload(),
             PhraseRec => self.toggle_phrase_rec(),
             ClearPhrase => self.clear_phrase(),
@@ -1223,6 +1222,25 @@ impl App {
                     m.sel = (m.sel + 1).min(m.items.len().saturating_sub(1));
                     Action::Mark
                 }
+                // On the kind row, ←/→ change the kind in place (label updates).
+                KeyCode::Left | KeyCode::Right => {
+                    let (a, sel) = (m.items[m.sel].1, m.sel);
+                    if a == MenuAction::CycleKind {
+                        if let Focus::Pad(i) = self.focus {
+                            self.mixer.cycle_pad_kind(i); // forward
+                            if key.code == KeyCode::Left {
+                                self.mixer.cycle_pad_kind(i); // net backward (3 kinds)
+                            }
+                        }
+                        self.open_menu(); // rebuild to refresh the label
+                        if let Some(m) = self.menu.as_mut() {
+                            m.sel = sel;
+                        }
+                        Action::Mark
+                    } else {
+                        Action::None
+                    }
+                }
                 KeyCode::Enter => {
                     let a = m.items[m.sel].1;
                     self.run_menu(a)
@@ -1398,52 +1416,6 @@ impl App {
             n += 1;
         };
         let _ = termkrush_core::audio::write_wav(&path, &region, self.mixer.sample_rate(), 2);
-        self.crate_lib.refresh();
-        Action::Record
-    }
-
-    /// `E` — export the focused pad's trimmed clip to an MP3 in the library.
-    fn export_pad_mp3(&mut self) -> Action {
-        let Focus::Pad(i) = self.focus else {
-            return Action::None;
-        };
-        let region = self.mixer.pad_clip_region(i);
-        if region.is_empty() {
-            return Action::None;
-        }
-        let stem = self.pad_source[i]
-            .as_ref()
-            .and_then(|p| p.file_stem())
-            .and_then(|s| s.to_str())
-            .unwrap_or("pad")
-            .to_string();
-        let dir = self.crate_lib.cwd().to_path_buf();
-        let mut n = 1;
-        let path = loop {
-            let p = dir.join(format!("{stem}-{n}.mp3"));
-            if !p.exists() {
-                break p;
-            }
-            n += 1;
-        };
-        let _ = termkrush_core::audio::export_mp3(&path, &region, self.mixer.sample_rate(), 2);
-        self.crate_lib.refresh();
-        Action::Record
-    }
-
-    /// `O` — overwrite the focused pad's source file with its trimmed clip.
-    fn save_pad_over(&mut self) -> Action {
-        let Focus::Pad(i) = self.focus else {
-            return Action::None;
-        };
-        let Some(src) = self.pad_source[i].clone() else {
-            return Action::None;
-        };
-        let region = self.mixer.pad_clip_region(i);
-        if region.is_empty() {
-            return Action::None;
-        }
-        let _ = termkrush_core::audio::write_wav(&src, &region, self.mixer.sample_rate(), 2);
         self.crate_lib.refresh();
         Action::Record
     }
@@ -2513,18 +2485,6 @@ mod tests {
     }
 
     #[test]
-    fn library_enter_loads_onto_the_selected_pad() {
-        let mut app = App::new();
-        app.set_crate(demo_crate());
-        app.set_focus(Focus::Pad(3)); // remembers pad 3 as the target
-        app.set_focus(Focus::Crate); // go to the library
-        assert_eq!(app.selected_path(), Some("/m/a.mp3".into()));
-        // Menu → load queues the highlighted track onto the last-selected pad.
-        assert_eq!(app.run_menu(MenuAction::Load), Action::AssignPad);
-        assert_eq!(app.take_pending_pad_load(), Some((3, "/m/a.mp3".into())));
-    }
-
-    #[test]
     fn library_browse_selects_entries() {
         let mut app = App::new();
         app.set_crate(demo_crate());
@@ -2647,16 +2607,30 @@ mod tests {
         let down = || KeyEvent::new(KeyCode::Down, KeyModifiers::NONE);
         assert_eq!(app.on_key(enter()), Action::Mark);
         assert!(app.menu.is_some(), "Enter opens the menu");
-        // Loaded pad menu: [edit clip, load track here, kind, …] → 3rd is kind.
+        // Loaded pad menu: [edit clip, kind, on/off, export, clear] → 2nd is kind.
         app.on_key(down());
-        app.on_key(down());
-        app.on_key(enter());
+        app.on_key(enter()); // Enter on kind cycles it
         assert!(app.menu.is_none(), "running an item closes the menu");
         assert_eq!(
             app.mixer.pad_kind(0),
             PadKind::Loop,
             "kind cycled via the menu"
         );
+    }
+
+    #[test]
+    fn kind_row_arrows_change_the_kind_in_place() {
+        let mut app = App::new();
+        app.mixer.assign_pad(0, vec![0.5; 64]);
+        app.set_focus(Focus::Pad(0));
+        app.on_key(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE)); // open menu
+        app.on_key(KeyEvent::new(KeyCode::Down, KeyModifiers::NONE)); // highlight kind
+                                                                      // Right cycles forward; Left back. Menu stays open, sel stays on kind.
+        app.on_key(KeyEvent::new(KeyCode::Right, KeyModifiers::NONE));
+        assert_eq!(app.mixer.pad_kind(0), PadKind::Loop);
+        assert!(app.menu.is_some(), "menu stays open");
+        app.on_key(KeyEvent::new(KeyCode::Left, KeyModifiers::NONE));
+        assert_eq!(app.mixer.pad_kind(0), PadKind::OneShot, "left goes back");
     }
 
     #[test]
@@ -2687,9 +2661,9 @@ mod tests {
     }
 
     #[test]
-    fn save_pad_writes_trimmed_clip_new_and_over() {
+    fn export_writes_the_trimmed_clip_to_the_library_as_wav() {
         use std::fs;
-        let tmp = std::env::temp_dir().join(format!("tk-saveback-{}", std::process::id()));
+        let tmp = std::env::temp_dir().join(format!("tk-export-{}", std::process::id()));
         let _ = fs::remove_dir_all(&tmp);
         fs::create_dir_all(&tmp).unwrap();
         let src = tmp.join("loop.wav");
@@ -2697,17 +2671,12 @@ mod tests {
         let mut app = App::new();
         app.set_crate(Crate::scan(&tmp));
         app.set_focus(Focus::Pad(0));
-        app.mixer.assign_pad(0, vec![0.5; 2000]); // 1000 frames
-        app.pad_source[0] = Some(src.clone());
+        app.mixer.assign_pad(0, vec![0.5; 2000]);
+        app.pad_source[0] = Some(src);
         app.mixer.nudge_pad_out(0, -10_000); // trim it down
-                                             // Save as new → a -edit file appears.
-        assert_eq!(app.run_menu(MenuAction::SaveNew), Action::Record);
-        assert!(tmp.join("loop-edit1.wav").exists());
-        // Overwrite the source with the (smaller) trimmed clip.
-        let before = fs::metadata(&src).unwrap().len();
-        assert_eq!(app.run_menu(MenuAction::SaveOver), Action::Record);
-        let after = fs::metadata(&src).unwrap().len();
-        assert!(after < before, "source overwritten with the shorter trim");
+                                             // Export → a new WAV in the library (no mp3).
+        assert_eq!(app.run_menu(MenuAction::Export), Action::Record);
+        assert!(tmp.join("loop-edit1.wav").exists(), "export wrote a WAV");
         let _ = fs::remove_dir_all(&tmp);
     }
 
@@ -2932,6 +2901,7 @@ mod tests {
     fn esc_closes_the_pad_menu() {
         let esc = || KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE);
         let mut app = App::new();
+        app.mixer.assign_pad(0, vec![0.5; 64]); // loaded → the menu has items
         app.set_focus(Focus::Pad(0)); // pad Enter opens the menu
         app.on_key(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE));
         assert!(app.menu.is_some());
@@ -3132,20 +3102,21 @@ mod tests {
             "arrangement renders audio"
         );
 
-        // Export pad 1 to mp3 (menu), then unload pad 0 (menu).
+        // Export pad 1 to a WAV in the library (menu), then clear pad 0 (menu).
         app.set_focus(Focus::Pad(1));
         assert_eq!(app.run_menu(MenuAction::Export), Action::Record);
         assert!(
-            fs::read_dir(&tmp).unwrap().any(|e| e
-                .unwrap()
-                .path()
-                .extension()
-                .is_some_and(|x| x == "mp3")),
-            "mp3 exported"
+            fs::read_dir(&tmp).unwrap().any(|e| {
+                let p = e.unwrap().path();
+                p.extension().is_some_and(|x| x == "wav")
+                    && p.file_stem()
+                        .is_some_and(|s| s.to_string_lossy().contains("-edit"))
+            }),
+            "exported a trimmed WAV to the library"
         );
         app.set_focus(Focus::Pad(0));
         app.run_menu(MenuAction::Unload);
-        assert!(!app.mixer.pad_loaded(0), "unloaded");
+        assert!(!app.mixer.pad_loaded(0), "cleared");
         let _ = fs::remove_dir_all(&tmp);
     }
 

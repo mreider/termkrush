@@ -26,10 +26,13 @@ they do *right now*.
 - [ ] Move: a folder modal — `↑`/`↓` pick `(root)` or a folder,
       `n` new folder (type a name, `Enter`), `r` rename, `Backspace` delete
       (confirm), `Enter` moves the file there. One level of folders only.
-- [ ] Pad: `Space` plays; `↑`/`↓` volume; `Enter` opens its menu (edit clip /
-      kind / on-off / save / export / unload).
-- [ ] Scratch pad (`Enter` menu → kind → scratch): `Space` = wiki; `Enter` menu
-      → record phrase, tap `Space`/`Enter`, then `Space` replays it.
+- [ ] Pad: `Space` plays/pauses; `↑`/`↓` volume; `Enter` opens its menu —
+      edit clip / **kind** (highlight it, `←`/`→` to change 1shot↔loop↔scratch) /
+      on-off / **export** (WAV to the library) / **clear**. Empty pads have no
+      menu — load from the library. (No load / save / save-over / mp3.)
+- [ ] Scratch pad (set kind → scratch): the menu then also shows **rec phrase /
+      clear phrase**; `Space` = wiki, `Enter` menu → record phrase, tap
+      `Space`/`Enter`, then `Space` replays it.
 - [ ] Clip editor: `←`/`→` move the active handle; **`+`/`-` zoom** the window
       (whole→10s→1s→100ms→10ms) so steps get as fine as you need; `Tab` switches
       in/out handle **and the view follows it** (so you can see/scroll to the

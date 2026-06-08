@@ -79,7 +79,7 @@
   .nav-inner {
     display: flex;
     align-items: center;
-    justify-content: space-between;
+    justify-content: flex-end;
     height: 64px;
   }
   .brand {
@@ -218,7 +218,7 @@
   }
   .feat-grid {
     display: grid;
-    grid-template-columns: repeat(4, 1fr);
+    grid-template-columns: repeat(3, 1fr);
   }
   .feat {
     padding: clamp(38px,6vh,64px) 30px;
@@ -273,12 +273,7 @@
   .foot-meta .dot { color: var(--line); }
 
   /* ============ RESPONSIVE ============ */
-  @media (max-width: 860px) {
-    .feat-grid { grid-template-columns: repeat(2, 1fr); }
-    .feat:nth-child(2) { border-right: none; }
-    .feat:nth-child(1), .feat:nth-child(2) { border-bottom: 1px solid var(--line); }
-  }
-  @media (max-width: 560px) {
+  @media (max-width: 760px) {
     .nav-links { gap: 16px; }
     .nav-links .hideable { display: none; }
     .feat-grid { grid-template-columns: 1fr; }
@@ -292,14 +287,10 @@
 
   <nav>
     <div class="wrap nav-inner">
-      <a class="brand" href="#top">
-        <span class="vinyl" aria-hidden="true"></span>
-        <span class="brand-name"><b>term</b>krush</span>
-      </a>
       <div class="nav-links">
         <a href="#features" class="hideable">features</a>
-        <a href="https://github.com/you/termkrush" class="gh" target="_blank" rel="noopener">github ↗</a>
-        <a href="https://github.com/you/termkrush/releases/latest" target="_blank" rel="noopener">download</a>
+        <a href="https://github.com/mreider/termkrush" class="gh" target="_blank" rel="noopener">github ↗</a>
+        <a href="https://github.com/mreider/termkrush/releases/latest" target="_blank" rel="noopener">download</a>
       </div>
     </div>
   </nav>
@@ -313,15 +304,15 @@
       </h1>
       <p class="tagline">
         Pull mp3s down to disk, beat-match and <b>fade</b> one track into the next,
-        <b>scratch</b> over any segment while the other rides, and drop in <b>fx</b> — minimal.
+        and <b>scratch</b> over any segment while the other rides.
         All from the command line.
       </p>
 
       <div class="cta-row">
-        <a class="btn" href="https://github.com/you/termkrush/releases/latest" target="_blank" rel="noopener">
+        <a class="btn" href="https://github.com/mreider/termkrush/releases/latest" target="_blank" rel="noopener">
           ▼ download latest release
         </a>
-        <a class="btn btn-ghost" href="https://github.com/you/termkrush" target="_blank" rel="noopener">
+        <a class="btn btn-ghost" href="https://github.com/mreider/termkrush" target="_blank" rel="noopener">
           view source ↗
         </a>
       </div>
@@ -350,20 +341,15 @@
           <div class="label">scratch</div>
           <p class="desc">Cut and scratch over any segment while the other plays.</p>
         </div>
-        <div class="feat">
-          <div class="num">04</div>
-          <div class="label">fx</div>
-          <p class="desc">Drop in sound effects, used sparingly and clean.</p>
-        </div>
       </div>
     </section>
   </main>
 
   <footer>
     <div class="wrap">
-      <div class="foot-mark">TermKrush</div>
+      <div class="foot-mark">termkrush</div>
       <div class="foot-meta">
-        <a href="https://github.com/you/termkrush" target="_blank" rel="noopener">github.com/you/termkrush</a>
+        <a href="https://github.com/mreider/termkrush" target="_blank" rel="noopener">github.com/mreider/termkrush</a>
         <span class="dot">●</span>
         <span>MIT license</span>
         <span class="dot">●</span>

@@ -90,7 +90,6 @@ enum Act {
     PlayPad(usize),
     SetKind(usize, PadKind),
     SetGain(usize, f32),
-    SetActive(usize, bool),
     ClearPad(usize),
     ExportPad(usize),
     EditClip(usize),
@@ -383,7 +382,6 @@ impl TermKrushApp {
             }
             Act::SetKind(i, k) => self.mixer.set_pad_kind(i, k),
             Act::SetGain(i, v) => self.mixer.set_pad_gain(i, v),
-            Act::SetActive(i, on) => self.mixer.set_pad_active(i, on, true),
             Act::ClearPad(i) => {
                 self.mixer.unload_pad(i);
                 self.pad_source[i] = None;
@@ -1163,27 +1161,26 @@ fn draw_pad_grid(
 ) {
     egui::CentralPanel::default().show(ctx, |ui| {
         ui.add_space(6.0);
-        ui.label(
-            egui::RichText::new("PADS  —  drag a track onto a pad to load")
-                .color(AMBER)
-                .strong(),
-        );
+        ui.horizontal(|ui| {
+            ui.label(bungee("pads", 14.0, AMBER));
+            ui.label(egui::RichText::new("drag a track onto a pad to load").color(DIM));
+        });
         ui.add_space(6.0);
-        let cols = 4;
-        let spacing = ui.spacing().item_spacing;
-        let cell_w =
-            ((ui.available_width() - spacing.x * (cols as f32 - 1.0)) / cols as f32).floor();
-        egui::Grid::new("pads")
-            .num_columns(cols)
-            .spacing([spacing.x, spacing.y])
-            .show(ui, |ui| {
-                for i in 0..PADS {
-                    draw_pad_cell(ui, mixer, pad_source, loading, i, cell_w, acts);
-                    if (i + 1) % cols == 0 {
-                        ui.end_row();
+        // `ui.columns` gives equal-width columns regardless of content, so the
+        // cells are uniform; names truncate to fit.
+        const COLS: usize = 4;
+        egui::ScrollArea::vertical().show(ui, |ui| {
+            for row in 0..PADS.div_ceil(COLS) {
+                ui.columns(COLS, |cols| {
+                    for (c, col) in cols.iter_mut().enumerate() {
+                        let i = row * COLS + c;
+                        if i < PADS {
+                            draw_pad_cell(col, mixer, pad_source, loading, i, acts);
+                        }
                     }
-                }
-            });
+                });
+            }
+        });
     });
 }
 
@@ -1306,32 +1303,27 @@ fn draw_pad_cell(
     pad_source: &[Option<PathBuf>; PADS],
     loading: &[bool; PADS],
     i: usize,
-    w: f32,
     acts: &mut Vec<Act>,
 ) {
     let loaded = mixer.pad_loaded(i);
-    let kind = match mixer.pad_kind(i) {
-        PadKind::OneShot => "1shot",
-        PadKind::Loop => "loop",
-        PadKind::Scratch => "scratch",
-    };
     let track = pad_source[i]
         .as_ref()
         .and_then(|p| p.file_stem())
         .and_then(|s| s.to_str())
-        .unwrap_or("");
+        .unwrap_or("")
+        .to_string();
     let frame = egui::Frame::group(ui.style())
         .fill(PANEL)
         .stroke(egui::Stroke::new(1.0, if loaded { AMBER } else { LINE }));
-    let _ = kind;
     let (inner, payload) = ui.dnd_drop_zone::<DragTrack, _>(frame, |ui| {
-        ui.set_width(w - 16.0);
-        ui.set_min_height(104.0);
+        ui.set_width(ui.available_width()); // fill the equal column → uniform cells
+        ui.set_min_height(96.0);
         ui.vertical(|ui| {
+            // Header: play/pause + the (truncated) track name. No pad number.
             ui.horizontal(|ui| {
                 if loaded {
                     let btn = if mixer.pad_is_sounding(i) {
-                        "⏸"
+                        "■"
                     } else {
                         "▶"
                     };
@@ -1339,12 +1331,10 @@ fn draw_pad_cell(
                         acts.push(Act::PlayPad(i));
                     }
                 }
-                let head = if track.is_empty() {
-                    format!("{}", i + 1)
-                } else {
-                    format!("{}  {track}", i + 1)
-                };
-                ui.label(egui::RichText::new(head).color(AMBER).strong());
+                let name = if track.is_empty() { "—" } else { &track };
+                ui.add(
+                    egui::Label::new(egui::RichText::new(name).color(AMBER).strong()).truncate(),
+                );
             });
 
             if loading[i] {
@@ -1359,7 +1349,7 @@ fn draw_pad_cell(
                 return;
             }
 
-            // Kind selector (click to set — clearer than a drag for a 3-way toggle).
+            // Kind selector (click to set).
             ui.horizontal(|ui| {
                 let k = mixer.pad_kind(i);
                 for (label, want) in [
@@ -1373,24 +1363,16 @@ fn draw_pad_cell(
                 }
             });
 
-            // Volume — custom control with a visible amber track.
+            // Volume — visible amber track.
             ui.horizontal(|ui| {
                 ui.label(egui::RichText::new("vol").color(DIM).small());
                 if let Some(v) = vol_slider(ui, mixer.pad_gain(i)) {
                     acts.push(Act::SetGain(i, v));
                 }
-                ui.label(
-                    egui::RichText::new(format!("{:.0}", mixer.pad_gain(i) * 100.0))
-                        .color(DIM)
-                        .small(),
-                );
             });
 
+            // Actions — no "on" toggle (a loaded pad is live; volume mutes).
             ui.horizontal(|ui| {
-                let mut on = mixer.pad_active(i);
-                if ui.checkbox(&mut on, "on").changed() {
-                    acts.push(Act::SetActive(i, on));
-                }
                 if ui.button("edit").on_hover_text("trim the clip").clicked() {
                     acts.push(Act::EditClip(i));
                 }

@@ -113,6 +113,30 @@ impl ScratchVoice {
     }
 }
 
+/// The live scratch platter: a clip read at a controllable position + velocity.
+/// Velocity is source frames per output frame — `1.0` ≈ normal forward (wiki),
+/// negative = reverse (whip), `0.0` = stopped (silent, like a held platter).
+/// The playhead persists across gestures, so a `<` then `>` continues from
+/// wherever it stopped — exactly like a record under your hand.
+#[derive(Debug)]
+struct JogVoice {
+    clip: Arc<Vec<f32>>,
+    len: usize, // frames
+    pos: f64,
+    vel: f32,
+}
+
+impl JogVoice {
+    fn next_frame(&mut self) -> (f32, f32) {
+        if self.len == 0 || self.vel == 0.0 {
+            return (0.0, 0.0);
+        }
+        let out = interp_frame(&self.clip, self.pos);
+        self.pos = (self.pos + self.vel as f64).clamp(0.0, (self.len.saturating_sub(1)) as f64);
+        out
+    }
+}
+
 /// Allowed master gain range: silence up to +3.5 dB of headroom.
 pub const MASTER_MIN: f32 = 0.0;
 pub const MASTER_MAX: f32 = 1.5;
@@ -173,6 +197,8 @@ pub struct Mixer {
     scratch_voices: Vec<ScratchVoice>,
     /// A one-shot library preview at unity gain (not tied to a pad).
     preview: Option<SampleVoice>,
+    /// The live scratch jog: a position-controlled platter over one clip.
+    jog: Option<JogVoice>,
     /// When armed, `fill_mix` appends each block of master output here so the
     /// live mix (active pads) can be resampled into a clip.
     recording: bool,
@@ -211,6 +237,7 @@ impl Mixer {
             voices: Vec::new(),
             scratch_voices: Vec::new(),
             preview: None,
+            jog: None,
             recording: false,
             record_buf: Vec::new(),
         }
@@ -341,6 +368,55 @@ impl Mixer {
     /// Whether a library preview is currently sounding.
     pub fn is_previewing(&self) -> bool {
         self.preview.is_some()
+    }
+
+    // ---- live scratch jog ---------------------------------------------------
+
+    /// Arm the scratch platter with `samples` (interleaved stereo). The playhead
+    /// starts at the front, stopped. Replaces any prior jog clip.
+    pub fn set_jog_source(&mut self, samples: Vec<f32>) {
+        let len = samples.len() / 2;
+        self.jog = Some(JogVoice {
+            clip: Arc::new(samples),
+            len,
+            pos: 0.0,
+            vel: 0.0,
+        });
+    }
+
+    /// Remove the scratch platter (stops any jog sound).
+    pub fn clear_jog(&mut self) {
+        self.jog = None;
+    }
+
+    /// Whether a scratch platter is armed.
+    pub fn has_jog(&self) -> bool {
+        self.jog.is_some()
+    }
+
+    /// Set the jog velocity in source frames per output frame (signed; `0`
+    /// stops/silences, negative reverses).
+    pub fn set_jog_velocity(&mut self, vel: f32) {
+        if let Some(j) = self.jog.as_mut() {
+            j.vel = vel;
+        }
+    }
+
+    /// Move the jog playhead to `frame` (clamped to the clip).
+    pub fn set_jog_position(&mut self, frame: f64) {
+        if let Some(j) = self.jog.as_mut() {
+            j.pos = frame.clamp(0.0, j.len.saturating_sub(1) as f64);
+        }
+    }
+
+    /// The jog playhead position in frames, if armed.
+    pub fn jog_position(&self) -> Option<f64> {
+        self.jog.as_ref().map(|j| j.pos)
+    }
+
+    /// The jog clip length in frames, if armed.
+    pub fn jog_len(&self) -> usize {
+        self.jog.as_ref().map(|j| j.len).unwrap_or(0)
     }
 
     /// Stop pad `i`'s voices (e.g. to toggle an audition off).
@@ -901,6 +977,15 @@ impl Mixer {
                 self.preview = None;
             }
         }
+        // The scratch platter sums on top at unity gain — it sounds only while
+        // the platter is moving (velocity != 0).
+        if let Some(j) = self.jog.as_mut() {
+            for i in 0..frames {
+                let (l, r) = j.next_frame();
+                out[i * 2] += l;
+                out[i * 2 + 1] += r;
+            }
+        }
     }
 
     /// Set the target master gain, clamped to `[MASTER_MIN, MASTER_MAX]`.
@@ -940,6 +1025,45 @@ impl Mixer {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn jog_moves_and_sounds_only_while_spinning() {
+        let mut m = Mixer::new();
+        // A 1000-frame ramp clip so interpolation has something to read.
+        let clip: Vec<f32> = (0..1000).flat_map(|i| [i as f32 / 1000.0, 0.0]).collect();
+        m.set_jog_source(clip);
+        assert!(m.has_jog());
+        assert_eq!(m.jog_len(), 1000);
+        assert_eq!(m.jog_position(), Some(0.0));
+
+        // Stopped: silent, playhead doesn't move.
+        let mut buf = vec![0.0f32; 128 * 2];
+        m.fill_mix(&mut buf);
+        assert!(buf.iter().all(|&s| s == 0.0), "still platter is silent");
+        assert_eq!(m.jog_position(), Some(0.0));
+
+        // Forward (wiki): advances ~1 frame per output frame and sounds.
+        m.set_jog_velocity(1.0);
+        let mut buf = vec![0.0f32; 64 * 2];
+        m.fill_mix(&mut buf);
+        assert!(buf.iter().any(|&s| s != 0.0), "spinning forward sounds");
+        let pos = m.jog_position().unwrap();
+        assert!((pos - 64.0).abs() < 1.0, "advanced ~64 frames, got {pos}");
+
+        // Reverse (whip): playhead goes back toward the start.
+        m.set_jog_velocity(-2.0);
+        m.fill_mix(&mut [0.0f32; 32]);
+        assert!(m.jog_position().unwrap() < pos, "reverse moves backward");
+
+        // Position clamps at the front.
+        m.set_jog_position(0.0);
+        m.set_jog_velocity(-5.0);
+        m.fill_mix(&mut [0.0f32; 64]);
+        assert_eq!(m.jog_position(), Some(0.0), "clamps at the front edge");
+
+        m.clear_jog();
+        assert!(!m.has_jog());
+    }
 
     #[test]
     fn master_clamps_to_range() {

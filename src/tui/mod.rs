@@ -458,13 +458,22 @@ impl App {
     /// that pad, `r`/Insert rename, Backspace/Delete delete, `→` move, Esc cancel.
     fn on_song_action_key(&mut self, key: KeyEvent) -> Action {
         self.song_action = false;
+        // Move direction follows the folder model: at root → `→` (into a
+        // folder); inside a folder → `←` (out toward root).
+        let in_folder = self.in_subfolder();
         match key.code {
             KeyCode::Char(c @ '1'..='8') => self.load_selected_onto(c as usize - '1' as usize),
             KeyCode::Char('r') | KeyCode::Char('R') | KeyCode::Insert => self.start_rename(),
             KeyCode::Backspace | KeyCode::Delete => self.arm_delete(),
-            KeyCode::Right => self.open_move_picker(),
+            KeyCode::Right if !in_folder => self.open_move_picker(),
+            KeyCode::Left if in_folder => self.open_move_picker(),
             _ => Action::Mark, // Esc / anything else cancels
         }
+    }
+
+    /// Whether the library is currently showing a subfolder (not the root).
+    fn in_subfolder(&self) -> bool {
+        self.crate_lib.cwd() != self.crate_lib.root()
     }
 
     /// Open the move-a-file modal for the highlighted song.
@@ -1500,19 +1509,25 @@ fn return_help(f: &mut Frame, app: &App) {
             .selected_path()
             .and_then(|p| p.file_name().and_then(|n| n.to_str()).map(String::from))
             .unwrap_or_default();
-        draw_song_action(f, f.area(), &name);
+        draw_song_action(f, f.area(), &name, app.in_subfolder());
     } else if let Some(menu) = &app.menu {
         draw_menu(f, f.area(), menu);
     }
 }
 
 /// The song-action prompt: one command per line, key then what it does.
-fn draw_song_action(f: &mut Frame, area: Rect, name: &str) {
+fn draw_song_action(f: &mut Frame, area: Rect, name: &str, in_folder: bool) {
+    // Move arrow follows the folder model: out (←) from a subfolder, in (→) at root.
+    let (move_key, move_what) = if in_folder {
+        ("←", "move out")
+    } else {
+        ("→", "move to folder")
+    };
     let rows = [
         ("1-8", "load to pad"),
         ("r", "rename"),
         ("⌫", "delete"),
-        ("→", "move"),
+        (move_key, move_what),
         ("esc", "cancel"),
     ];
     let w = (name.len() as u16 + 6).clamp(34, 72);
@@ -2169,6 +2184,29 @@ mod tests {
         // Esc at root opens quit.
         app.on_key(KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE));
         assert!(app.confirm_quit, "esc at root quits");
+        let _ = fs::remove_dir_all(&tmp);
+    }
+
+    #[test]
+    fn move_is_left_in_a_folder_right_at_root() {
+        use std::fs;
+        let tmp = std::env::temp_dir().join(format!("tk-mvdir-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&tmp);
+        fs::create_dir_all(tmp.join("box")).unwrap();
+        fs::write(tmp.join("box/inside.wav"), b"x").unwrap();
+        let mut app = App::new();
+        app.set_crate(Crate::scan(&tmp));
+        // Inside box/: Right does NOT open move; Left does.
+        app.crate_lib.enter(&tmp.join("box"));
+        app.on_key(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE)); // song prompt
+        app.on_key(KeyEvent::new(KeyCode::Right, KeyModifiers::NONE));
+        assert!(
+            app.move_picker.is_none(),
+            "right is not move inside a folder"
+        );
+        app.on_key(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE)); // prompt again
+        app.on_key(KeyEvent::new(KeyCode::Left, KeyModifiers::NONE));
+        assert!(app.move_picker.is_some(), "left moves when inside a folder");
         let _ = fs::remove_dir_all(&tmp);
     }
 

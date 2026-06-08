@@ -559,24 +559,32 @@ impl TermKrushApp {
                                 }
                             }
                         }
-                        // Drop a dragged library track OR a pad here → a block.
-                        let hovering = resp.dnd_hover_payload::<DragTrack>().is_some()
-                            || resp.dnd_hover_payload::<DragPad>().is_some();
-                        if hovering {
-                            p.rect_stroke(lane, 3.0, egui::Stroke::new(1.5, GREEN));
+                        // Drop a dragged clip OR library track here → a block.
+                        // Detect geometrically (pointer-in-rect + release + take
+                        // the global payload) rather than via dnd_release_payload,
+                        // whose hovered() check was missing the cross-panel drop.
+                        let _ = &resp;
+                        let dragging = egui::DragAndDrop::has_payload_of_type::<DragPad>(ui.ctx())
+                            || egui::DragAndDrop::has_payload_of_type::<DragTrack>(ui.ctx());
+                        let pointer = ui.input(|i| i.pointer.interact_pos());
+                        let over = matches!(pointer, Some(pp) if lane.contains(pp));
+                        if dragging {
+                            // Light every lane while dragging (and brighter when
+                            // the pointer is over this one) — clear drop targets.
+                            let (w, c) = if over { (2.0, GREEN) } else { (1.0, GREEN.gamma_multiply(0.4)) };
+                            p.rect_stroke(lane, 3.0, egui::Stroke::new(w, c));
                         }
-                        let drop_frame = || {
-                            let x = ui
-                                .input(|i| i.pointer.interact_pos())
-                                .map(|pp| pp.x)
-                                .unwrap_or(lane.left());
-                            snap((((x - lane.left()).max(0.0) / PXPS) * sr) as u64)
-                        };
-                        if let Some(d) = resp.dnd_release_payload::<DragTrack>() {
-                            drop = Some((t, drop_frame(), d.0.clone()));
-                        }
-                        if let Some(pd) = resp.dnd_release_payload::<DragPad>() {
-                            drop_pad = Some((t, drop_frame(), pd.0));
+                        if over && ui.input(|i| i.pointer.any_released()) {
+                            let pp = pointer.unwrap();
+                            let start =
+                                snap((((pp.x - lane.left()).max(0.0) / PXPS) * sr) as u64);
+                            if let Some(pd) = egui::DragAndDrop::take_payload::<DragPad>(ui.ctx()) {
+                                drop_pad = Some((t, start, pd.0));
+                            } else if let Some(d) =
+                                egui::DragAndDrop::take_payload::<DragTrack>(ui.ctx())
+                            {
+                                drop = Some((t, start, d.0.clone()));
+                            }
                         }
                         // playhead
                         if self.tl_playing || self.tl_playhead > 0 {

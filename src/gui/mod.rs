@@ -714,10 +714,9 @@ fn crt_visuals() -> egui::Visuals {
 fn apply_crt_theme(ctx: &egui::Context) {
     ctx.set_visuals(crt_visuals());
     let mut style = (*ctx.style()).clone();
-    for font in style.text_styles.values_mut() {
-        font.family = egui::FontFamily::Monospace;
-    }
-    // Labels aren't text fields — no I-beam cursor / selection on them.
+    // Body text stays in the Proportional family — Space Mono is its first font
+    // (so it reads monospace) AND the Phosphor icon font is registered there, so
+    // icons resolve. Forcing Monospace here hid the icons (tofu squares).
     style.interaction.selectable_labels = false;
     ctx.set_style(style);
 }

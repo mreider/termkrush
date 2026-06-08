@@ -25,7 +25,7 @@ they do *right now*.
       clip editor; `Enter` opens its menu (load / kind / on-off / save / export / unload).
 - [ ] Scratch pad (set kind=scratch via `M`): `Space` = wiki, `Enter` = whip;
       `Enter` menu → record phrase, tap `Space`/`Enter`, then `Space` replays it.
-- [ ] Clip editor: `←`/`→` move a mark, `Tab` switches in/out, `Space` auditions (again stops), `Enter` snips, `Esc` closes.
+- [ ] Clip editor: `←`/`→` move a mark (coarse), **`Shift+←/→` = fine (~1ms)**, `Tab` switches in/out, `Space` auditions (again stops), `Enter` snips. Snipping shortens the clip, so the same-width bar zooms in for finer work.
 - [ ] Timeline: `←`/`→` step, `↑`/`↓` lane, `Enter` toggles a hit, `Space`
       plays/pauses; `Enter` menu → place / cut / region / clear / render / tempo / master.
 - [ ] No help screen or M key — Enter opens the context menu everywhere; the hint line + menus explain everything.

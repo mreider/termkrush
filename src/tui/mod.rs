@@ -405,7 +405,7 @@ impl App {
             return "↑↓ choose · enter do · esc close";
         }
         if self.clip_edit.is_some() {
-            return "←→ move · tab in/out · space play · enter snip · esc done";
+            return "←→ move · shift = fine · tab in/out · space play · enter snip · esc done";
         }
         match self.focus {
             Focus::Crate => "↑↓ browse · enter menu · tab → pads",
@@ -805,8 +805,8 @@ impl App {
         let len = self.mixer.pad_clip_frames(i).max(1);
         let shift = key.modifiers.contains(KeyModifiers::SHIFT);
         // Default step ≈ one bar-column so the mark visibly moves on any song;
-        // shift = ~5 ms fine.
-        let step = (if shift { rate / 200 } else { len / 64 }).max(1) as i64;
+        // shift ≈ 1 ms for sample-close precision.
+        let step = (if shift { rate / 1000 } else { len / 64 }).max(1) as i64;
         let (inp, out) = self.mixer.pad_trim(i);
         let nudge = |v: usize, d: i64| (v as i64 + d).max(0) as usize;
         match key.code {
@@ -2141,6 +2141,23 @@ mod tests {
         app.set_focus(Focus::Timeline);
         app.toggle_transport();
         assert_eq!(app.mixer.active_voices(), 0, "timeline clears live voices");
+    }
+
+    #[test]
+    fn clip_editor_shift_arrow_is_fine() {
+        let mut app = App::new();
+        app.mixer.set_sample_rate(48_000);
+        app.mixer.assign_pad(0, vec![0.5; 48_000 * 2 * 60]); // a long (60s) clip
+        app.set_focus(Focus::Pad(0));
+        app.run_menu(MenuAction::EditClip);
+        // Coarse: one ←/→ moves a big chunk of a long song.
+        app.on_key(KeyEvent::new(KeyCode::Right, KeyModifiers::NONE));
+        let coarse = app.mixer.pad_trim(0).0;
+        assert!(coarse > 10_000, "default step is coarse on a long song");
+        // Shift: ~1 ms (48 frames) — fine enough to dial in the start.
+        app.mixer.set_pad_trim_in(0, 0); // back to the start
+        app.on_key(KeyEvent::new(KeyCode::Right, KeyModifiers::SHIFT));
+        assert_eq!(app.mixer.pad_trim(0).0, 48, "shift = ~1ms fine");
     }
 
     #[test]

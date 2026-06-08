@@ -440,6 +440,8 @@ impl App {
                 if self.playing {
                     self.playing = false;
                     self.mixer.clear_voices();
+                } else {
+                    self.mixer.stop_pad(i); // re-trigger restarts, never stacks
                 }
                 self.trigger(i)
             }
@@ -942,6 +944,7 @@ impl App {
         match key.code {
             KeyCode::Esc => {
                 self.clip_edit = None;
+                self.mixer.stop_pad(i); // stop the audition preview on close
                 Some(Action::Mark)
             }
             KeyCode::Tab | KeyCode::Up | KeyCode::Down => {
@@ -2711,6 +2714,24 @@ mod tests {
     }
 
     #[test]
+    fn audition_then_pad_play_does_not_stack_voices() {
+        let mut app = App::new();
+        app.mixer.assign_pad(0, vec![0.5; 40_000]);
+        app.set_focus(Focus::Pad(0));
+        // Audition in the clip editor.
+        app.run_menu(MenuAction::EditClip);
+        app.on_key(key(' '));
+        assert_eq!(app.mixer.active_voices(), 1);
+        // Esc out → the audition stops.
+        app.on_key(KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE));
+        assert_eq!(app.mixer.active_voices(), 0, "audition stops on close");
+        // Play the pad twice → still one voice (re-trigger restarts).
+        app.on_key(key(' '));
+        app.on_key(key(' '));
+        assert_eq!(app.mixer.active_voices(), 1, "re-trigger does not stack");
+    }
+
+    #[test]
     fn clip_editor_space_toggles_the_audition() {
         let mut app = App::new();
         app.mixer.assign_pad(0, vec![0.5; 4000]);
@@ -2827,10 +2848,10 @@ mod tests {
         assert_eq!(app.mixer.pad_phrase_len(0), 3);
         app.run_menu(MenuAction::PhraseRec); // stop recording
         assert_eq!(app.phrase_rec, None);
-        // Now space plays the stored phrase as one voice.
-        let before = app.mixer.active_voices();
+        // Now space plays the stored phrase — as exactly one voice (re-trigger
+        // clears any leftover tap voices first).
         app.on_key(key(' '));
-        assert_eq!(app.mixer.active_voices(), before + 1);
+        assert_eq!(app.mixer.active_voices(), 1);
     }
 
     #[test]

@@ -949,6 +949,7 @@ impl App {
     fn open_clip_edit(&mut self) -> Action {
         if let Focus::Pad(i) = self.focus {
             if self.mixer.pad_loaded(i) {
+                self.mixer.stop_pad(i); // silence live playback before editing
                 self.clip_edit = Some(i);
                 self.ce_out = false; // start on the in (left) mark
                 self.ce_zoom = 0; // whole clip
@@ -2875,7 +2876,13 @@ mod tests {
         let mut app = App::new();
         app.mixer.assign_pad(0, vec![0.5; 4000]);
         app.set_focus(Focus::Pad(0));
-        app.run_menu(MenuAction::EditClip); // open editor
+        app.on_key(key(' ')); // pad is playing live
+        assert!(app.mixer.pad_is_sounding(0));
+        app.run_menu(MenuAction::EditClip); // open editor → silences the pad
+        assert!(
+            !app.mixer.pad_is_sounding(0),
+            "opening edit stops live playback"
+        );
         app.on_key(key(' ')); // play the audition
         assert!(app.mixer.pad_is_sounding(0), "space plays");
         app.on_key(key(' ')); // space again restarts (still one voice)

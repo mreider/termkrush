@@ -11,7 +11,9 @@ use std::path::{Path, PathBuf};
 use std::sync::mpsc::{channel, Receiver, Sender};
 
 use eframe::egui;
-use termkrush_core::audio::{decode_file, detect_bpm, probe_playable, AudioOutput, DecodedAudio};
+use termkrush_core::audio::{
+    decode_file, detect_bpm, probe_playable, write_wav, AudioOutput, DecodedAudio,
+};
 use termkrush_core::config::Config;
 use termkrush_core::library::Crate;
 use termkrush_core::mix::{Mixer, PadKind, PADS};
@@ -73,6 +75,12 @@ enum Act {
     StartNewFolder,
     CommitNewFolder,
     CancelNewFolder,
+    PlayPad(usize),
+    SetKind(usize, PadKind),
+    SetGain(usize, f32),
+    SetActive(usize, bool),
+    ClearPad(usize),
+    ExportPad(usize),
 }
 
 /// The whole app: the engine, the audio sink, and the browsed library.
@@ -292,7 +300,51 @@ impl TermKrushApp {
                 }
             }
             Act::CancelNewFolder => self.new_folder = None,
+            Act::PlayPad(i) => {
+                if self.mixer.pad_is_sounding(i) {
+                    self.mixer.stop_pad(i);
+                } else {
+                    self.mixer.trigger_pad(i);
+                }
+            }
+            Act::SetKind(i, k) => self.mixer.set_pad_kind(i, k),
+            Act::SetGain(i, v) => self.mixer.set_pad_gain(i, v),
+            Act::SetActive(i, on) => self.mixer.set_pad_active(i, on, true),
+            Act::ClearPad(i) => {
+                self.mixer.unload_pad(i);
+                self.pad_source[i] = None;
+            }
+            Act::ExportPad(i) => self.export_pad(i),
         }
+    }
+
+    /// Write pad `i`'s trimmed clip to the current library folder as a WAV.
+    fn export_pad(&mut self, i: usize) {
+        let region = self.mixer.pad_clip_region(i);
+        if region.is_empty() {
+            return;
+        }
+        let stem = self.pad_source[i]
+            .as_ref()
+            .and_then(|p| p.file_stem())
+            .and_then(|s| s.to_str())
+            .unwrap_or("pad")
+            .to_string();
+        let dir = self.crate_lib.cwd().to_path_buf();
+        let mut n = 1;
+        let path = loop {
+            let p = dir.join(format!("{stem}-edit{n}.wav"));
+            if !p.exists() {
+                break p;
+            }
+            n += 1;
+        };
+        if let Err(e) = write_wav(&path, &region, self.mixer.sample_rate(), 2) {
+            tracing::error!(error = %e, "export failed");
+            return;
+        }
+        self.crate_lib.refresh();
+        self.probed_dir = None; // re-probe so the new file gets checked
     }
 }
 
@@ -598,23 +650,82 @@ fn draw_pad_cell(
                 GREEN.gamma_multiply(0.4)
             },
         ));
+    let _ = kind;
     let (inner, payload) = ui.dnd_drop_zone::<DragTrack, _>(frame, |ui| {
         ui.set_width(w - 16.0);
-        ui.set_min_height(80.0);
+        ui.set_min_height(104.0);
         ui.vertical(|ui| {
-            let head = if track.is_empty() {
-                format!("{}", i + 1)
-            } else {
-                format!("{}  {track}", i + 1)
-            };
-            ui.label(egui::RichText::new(head).color(AMBER).strong());
+            ui.horizontal(|ui| {
+                if loaded {
+                    let btn = if mixer.pad_is_sounding(i) {
+                        "⏸"
+                    } else {
+                        "▶"
+                    };
+                    if ui.button(btn).on_hover_text("play / pause").clicked() {
+                        acts.push(Act::PlayPad(i));
+                    }
+                }
+                let head = if track.is_empty() {
+                    format!("{}", i + 1)
+                } else {
+                    format!("{}  {track}", i + 1)
+                };
+                ui.label(egui::RichText::new(head).color(AMBER).strong());
+            });
+
             if loading[i] {
                 ui.label(egui::RichText::new("⏳ loading…").color(GREEN));
-            } else if loaded {
-                ui.label(format!("{kind} · {:.0}%", mixer.pad_gain(i) * 100.0));
-            } else {
-                ui.label(egui::RichText::new("empty").weak());
+                return;
             }
+            if !loaded {
+                ui.label(egui::RichText::new("drag a track here").weak());
+                return;
+            }
+
+            // Kind selector (click to set — clearer than a drag for a 3-way toggle).
+            ui.horizontal(|ui| {
+                let k = mixer.pad_kind(i);
+                for (label, want) in [
+                    ("1shot", PadKind::OneShot),
+                    ("loop", PadKind::Loop),
+                    ("scratch", PadKind::Scratch),
+                ] {
+                    if ui.selectable_label(k == want, label).clicked() {
+                        acts.push(Act::SetKind(i, want));
+                    }
+                }
+            });
+
+            // Volume.
+            let mut g = mixer.pad_gain(i);
+            if ui
+                .add(
+                    egui::Slider::new(&mut g, 0.0..=1.5)
+                        .text("vol")
+                        .show_value(false),
+                )
+                .changed()
+            {
+                acts.push(Act::SetGain(i, g));
+            }
+
+            ui.horizontal(|ui| {
+                let mut on = mixer.pad_active(i);
+                if ui.checkbox(&mut on, "on").changed() {
+                    acts.push(Act::SetActive(i, on));
+                }
+                if ui.button("clear").clicked() {
+                    acts.push(Act::ClearPad(i));
+                }
+                if ui
+                    .button("export")
+                    .on_hover_text("save trimmed clip to library (WAV)")
+                    .clicked()
+                {
+                    acts.push(Act::ExportPad(i));
+                }
+            });
         });
     });
     let _ = inner;

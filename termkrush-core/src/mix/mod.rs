@@ -471,6 +471,13 @@ impl Mixer {
         }
     }
 
+    /// Set pad `i`'s kind directly (the GUI picks a kind, not just cycles).
+    pub fn set_pad_kind(&mut self, i: usize, kind: PadKind) {
+        if i < PADS {
+            self.pad_kind[i] = kind;
+        }
+    }
+
     /// Pad `i`'s linear volume (1.0 = unity).
     pub fn pad_gain(&self, i: usize) -> f32 {
         self.pad_gain.get(i).copied().unwrap_or(1.0)
@@ -480,6 +487,13 @@ impl Mixer {
     pub fn nudge_pad_gain(&mut self, i: usize, delta: f32) {
         if i < PADS {
             self.pad_gain[i] = (self.pad_gain[i] + delta).clamp(0.0, 1.5);
+        }
+    }
+
+    /// Set pad `i`'s volume directly (for a slider), clamped to `[0.0, 1.5]`.
+    pub fn set_pad_gain(&mut self, i: usize, gain: f32) {
+        if i < PADS {
+            self.pad_gain[i] = gain.clamp(0.0, 1.5);
         }
     }
 

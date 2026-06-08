@@ -2,11 +2,12 @@
 title: 'GUI pad grid: drag-to-change-kind, volume, clear, click play'
 type: feature
 created: "2026-06-08T12:17:11Z"
-modified: "2026-06-08T12:28:32Z"
+modified: "2026-06-08T12:46:03Z"
 author: Matt Reider
-status: unstarted
+status: started
 estimate: "5"
 epic: gui
+started: "2026-06-08T12:46:03Z"
 ---
 
 ## Goal

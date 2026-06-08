@@ -26,7 +26,9 @@ use ratatui::crossterm::terminal::{
     disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen,
 };
 use ratatui::prelude::*;
-use ratatui::widgets::{Block, Borders, Clear, List, ListItem, ListState, Paragraph, Wrap};
+use ratatui::widgets::{
+    Block, Borders, Clear, HighlightSpacing, List, ListItem, ListState, Paragraph, Wrap,
+};
 
 use termkrush_core::audio::{AudioOutput, DecodedAudio};
 use termkrush_core::clip::Clip;
@@ -1829,6 +1831,9 @@ fn draw_crate(f: &mut Frame, area: Rect, app: &App) {
     }
     let list = List::new(items)
         .block(block)
+        // Reserve the select-arrow column always, so the text never shifts
+        // right when highlighting begins.
+        .highlight_spacing(HighlightSpacing::Always)
         .highlight_style(Style::default().fg(AMBER).add_modifier(Modifier::REVERSED))
         .highlight_symbol("▶ ");
     f.render_stateful_widget(list, area, &mut state);

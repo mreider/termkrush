@@ -464,7 +464,14 @@ impl TermKrushApp {
 }
 
 impl eframe::App for TermKrushApp {
+    // Never persist egui state to disk — a stale cache must not survive a
+    // rebuild and shadow the current theme/layout.
+    fn persist_egui_memory(&self) -> bool {
+        false
+    }
+
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
+        apply_crt_theme(ctx); // re-assert the palette every frame
         self.pump_audio();
         self.drain_loads();
         ctx.request_repaint(); // keep the audio ring fed in real time
@@ -512,11 +519,11 @@ impl eframe::App for TermKrushApp {
     }
 }
 
-/// Apply the landing-page palette + a monospace face. Body text is cream
-/// `INK` (set via the widget strokes, NOT `override_text_color` — overriding
-/// would flatten the amber/green accents into one low-contrast colour, which
-/// was the "barely visible" bug). Amber/green stay as per-widget accents.
-fn apply_crt_theme(ctx: &egui::Context) {
+/// Build the landing-page Visuals. Pure + testable so the palette can't silently
+/// regress and so we can confirm the binary carries the new theme. Body text is
+/// cream `INK` via the widget strokes (NOT `override_text_color` — overriding
+/// flattened every label to one low-contrast colour, the "barely visible" bug).
+fn crt_visuals() -> egui::Visuals {
     let mut v = egui::Visuals::dark();
     v.override_text_color = None;
 
@@ -547,8 +554,13 @@ fn apply_crt_theme(ctx: &egui::Context) {
 
     v.selection.bg_fill = AMBER.gamma_multiply(0.30);
     v.selection.stroke = egui::Stroke::new(1.0, AMBER);
-    ctx.set_visuals(v);
+    v
+}
 
+/// Apply the palette + monospace face. Cheap, and called every frame so no
+/// restored/default state can ever shadow the theme.
+fn apply_crt_theme(ctx: &egui::Context) {
+    ctx.set_visuals(crt_visuals());
     let mut style = (*ctx.style()).clone();
     for font in style.text_styles.values_mut() {
         font.family = egui::FontFamily::Monospace;
@@ -994,5 +1006,22 @@ fn draw_pad_cell(
             pad: i,
             path: p.0.clone(),
         });
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn crt_palette_is_readable_not_overridden() {
+        let v = crt_visuals();
+        assert!(v.override_text_color.is_none(), "no global green override");
+        assert_eq!(
+            v.widgets.noninteractive.fg_stroke.color, INK,
+            "body text is ink"
+        );
+        assert_eq!(v.widgets.inactive.fg_stroke.color, INK);
+        assert_eq!(v.panel_fill, GROUND);
     }
 }

@@ -1509,17 +1509,13 @@ fn draw_song_action(f: &mut Frame, area: Rect, name: &str) {
         ("esc", "cancel"),
     ];
     let w = (name.len() as u16 + 6).clamp(34, 72);
-    let popup = centered(w, rows.len() as u16 + 5, area);
+    let popup = centered(w, rows.len() as u16 + 2, area);
     f.render_widget(Clear, popup);
     let block = Block::default()
         .borders(Borders::ALL)
         .border_style(Style::default().fg(AMBER))
-        .title(" Song ");
-    let mut lines = vec![
-        Line::from(""),
-        Line::from(format!("  {name}")),
-        Line::from(""),
-    ];
+        .title(format!(" {name} ")); // the song name IS the title
+    let mut lines = Vec::new();
     for (k, what) in rows {
         lines.push(Line::from(format!("  {k:<5}{what}")));
     }
@@ -1801,10 +1797,21 @@ fn draw_pad_cell(f: &mut Frame, area: Rect, app: &App, pad: usize) {
             .unwrap_or_else(|| "-- bpm".into());
         format!("  {bpm}")
     };
+    // Title = select number + the loaded track, so the grid shows what's where.
+    let track = app.pad_source[pad]
+        .as_ref()
+        .and_then(|p| p.file_stem())
+        .and_then(|s| s.to_str())
+        .unwrap_or("");
+    let title = if track.is_empty() {
+        format!("{}", pad + 1)
+    } else {
+        format!("{} {track}", pad + 1)
+    };
     draw_cell(
         f,
         area,
-        &format!("Pad {}", pad + 1),
+        &title,
         vec![Line::from(line1), Line::from(line2)],
         focused,
     );
@@ -1818,18 +1825,16 @@ fn draw_quit_modal(f: &mut Frame, area: Rect) {
 
 /// A small centered yes/no modal. `y` confirms, anything else cancels.
 fn draw_confirm_modal(f: &mut Frame, area: Rect, prompt: &str) {
-    let popup = centered((prompt.len() as u16 + 10).max(24), 5, area);
+    // The question is the title; the body is just the choice.
+    let popup = centered((prompt.len() as u16 + 6).max(20), 3, area);
     f.render_widget(Clear, popup);
     let block = Block::default()
         .borders(Borders::ALL)
         .border_style(Style::default().fg(AMBER))
-        .title(" Confirm ");
-    let body = Paragraph::new(vec![
-        Line::from(""),
-        Line::from(format!("{prompt}  y / n")).centered(),
-    ])
-    .block(block)
-    .style(Style::default().fg(GREEN));
+        .title(format!(" {prompt} "));
+    let body = Paragraph::new(Line::from("y / n").centered())
+        .block(block)
+        .style(Style::default().fg(GREEN));
     f.render_widget(body, popup);
 }
 
@@ -2817,16 +2822,18 @@ mod tests {
     }
 
     #[test]
-    fn renders_timeline_strip_wordmark_and_eight_pads() {
-        let app = App::new();
+    fn renders_timeline_wordmark_and_pad_track_titles() {
+        let mut app = App::new();
+        app.mixer.assign_pad(0, vec![0.5; 64]);
+        app.pad_source[0] = Some("/m/break-stuff.mp3".into());
         let text = buffer_text(&render(&app, 96, 40));
         assert!(text.contains("TermKrush"));
         assert!(
             text.contains("TIMELINE"),
             "persistent timeline strip on top"
         );
-        assert!(text.contains("Pad 1"));
-        assert!(text.contains("Pad 8"), "eighth pad renders");
+        // The pad's title now carries its track name (no static "Pad N" label).
+        assert!(text.contains("break-stuff"), "pad shows its loaded track");
         assert!(!text.contains("=^.^="), "no DJ cat");
     }
 }

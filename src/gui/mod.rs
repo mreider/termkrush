@@ -574,10 +574,36 @@ impl TermKrushApp {
                         self.tl_scroll += step;
                     }
                     ui.add_space(8.0);
-                    let bpm = master_bpm
-                        .map(|b| format!("{b:.0} BPM"))
-                        .unwrap_or_else(|| "-- BPM".into());
-                    ui.label(egui::RichText::new(bpm).color(GREEN));
+                    // Master tempo — editable, because auto-detect is often
+                    // octave-off. ½/2× fix the common error; type for precision.
+                    if let Some(b) = master_bpm {
+                        if ui
+                            .button(egui::RichText::new("½").color(DIM))
+                            .on_hover_text("halve the master tempo")
+                            .clicked()
+                        {
+                            self.set_master_tempo((b * 0.5).max(20.0));
+                        }
+                        let mut bpm = b;
+                        let resp = ui.add(
+                            egui::DragValue::new(&mut bpm)
+                                .speed(0.2)
+                                .range(20.0..=300.0)
+                                .suffix(" BPM"),
+                        );
+                        if resp.changed() {
+                            self.set_master_tempo(bpm);
+                        }
+                        if ui
+                            .button(egui::RichText::new("2×").color(DIM))
+                            .on_hover_text("double the master tempo")
+                            .clicked()
+                        {
+                            self.set_master_tempo((b * 2.0).min(300.0));
+                        }
+                    } else {
+                        ui.label(egui::RichText::new("-- BPM").color(DIM));
+                    }
                     // Where the playhead is: bar.beat (if tempo) or m:ss.
                     let ph = self.tl_playhead;
                     let pos = match master_bpm {
@@ -600,25 +626,10 @@ impl TermKrushApp {
                             .tracks()
                             .get(t)
                             .and_then(|tr| tr.blocks.get(bi))
-                            .map(|b| (t, bi, b.phase, b.start, b.nudge, b.sync))
+                            .map(|b| (t, bi, b.phase, b.start, b.nudge))
                     });
-                    if let Some((t, bi, cur, start, ndg, synced)) = sel {
+                    if let Some((t, bi, cur, start, ndg)) = sel {
                         ui.add_space(12.0);
-                        // Tempo-lock toggle (beat-match this clip to the master).
-                        if ui
-                            .button(
-                                egui::RichText::new(if synced { "lock: on" } else { "lock: off" })
-                                    .color(if synced { GREEN } else { DIM }),
-                            )
-                            .on_hover_text(
-                                "beat-match this clip to the MASTER tempo (off = native pitch)",
-                            )
-                            .clicked()
-                        {
-                            if let Some(bm) = self.arrangement.block_mut(t, bi) {
-                                bm.sync = !bm.sync;
-                            }
-                        }
                         // Phase cycle.
                         if ui
                             .button(
@@ -1434,10 +1445,35 @@ impl TermKrushApp {
             .refresh_pad(pad, std::sync::Arc::new(samples));
     }
 
+    /// Set the master tempo (manual override of detection) and re-snap every
+    /// block to the corrected grid.
+    fn set_master_tempo(&mut self, bpm: f32) {
+        self.mixer.set_master_bpm(Some(bpm));
+        self.arrangement.set_target_bpm(Some(bpm));
+        self.resnap_all();
+    }
+
+    /// Re-snap every block's start to the current grid (after a tempo change).
+    fn resnap_all(&mut self) {
+        for t in 0..self.arrangement.track_count() {
+            let n = self.arrangement.tracks()[t].blocks.len();
+            for i in 0..n {
+                let (start, phase, nudge) = {
+                    let b = &self.arrangement.tracks()[t].blocks[i];
+                    (b.start as f64, b.phase, b.nudge)
+                };
+                let ns = self.snapped_start(start, phase, nudge);
+                if let Some(bm) = self.arrangement.block_mut(t, i) {
+                    bm.start = ns;
+                }
+            }
+        }
+    }
+
     /// Should a freshly-dropped block tempo-lock by default? Anything longer
     /// than ~2 beats has internal rhythm that would drift, so it locks; a short
     /// one-shot hit plays native. The MASTER track always plays native (it *is*
-    /// the tempo). Toggleable per block afterwards.
+    /// the tempo).
     fn default_sync(&self, track: usize, native_frames: usize) -> bool {
         if track == 0 {
             return false;

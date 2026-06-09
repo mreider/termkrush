@@ -12,13 +12,14 @@ use std::sync::mpsc::{channel, Receiver, Sender};
 
 use eframe::egui;
 use egui_phosphor::regular as ph;
-use termkrush_core::arrangement::{Arrangement, Block};
+use termkrush_core::arrangement::{Arrangement, Block, Phase};
 use termkrush_core::audio::{
     decode_file, detect_bpm, probe_playable, write_wav, AudioOutput, DecodedAudio,
 };
 use termkrush_core::config::Config;
 use termkrush_core::library::Crate;
 use termkrush_core::mix::{Mixer, PadKind, PADS};
+use termkrush_core::scratch::detect_pivot;
 
 // The landing-page palette (index.html CSS vars), so the app matches the site.
 // Body text is the cream `--ink`; amber/green are accents, not the text color.
@@ -87,6 +88,8 @@ struct LoadDone {
     target: Target,
     audio: Option<DecodedAudio>,
     bpm: Option<f32>,
+    /// First-onset frame (timeline drops) so the block can phase-snap the hit.
+    onset: u64,
     path: PathBuf,
 }
 
@@ -314,10 +317,16 @@ impl TermKrushApp {
                     let bpm = matches!(target, Target::Pad(_) | Target::Timeline { .. })
                         .then(|| detect_bpm(&audio.samples, audio.channels, audio.sample_rate))
                         .flatten();
+                    // Onset (the musical hit) for timeline drops — the calc behind
+                    // the loading spinner; the phase snap aligns this to the grid.
+                    let onset = matches!(target, Target::Timeline { .. })
+                        .then(|| detect_pivot(&audio.samples, audio.channels) as u64)
+                        .unwrap_or(0);
                     LoadDone {
                         target,
                         audio: Some(audio),
                         bpm,
+                        onset,
                         path,
                     }
                 }
@@ -327,6 +336,7 @@ impl TermKrushApp {
                         target,
                         audio: None,
                         bpm: None,
+                        onset: 0,
                         path,
                     }
                 }
@@ -358,30 +368,33 @@ impl TermKrushApp {
                     self.jog_wave = self.mixer.jog_peaks(WAVE_COLS);
                 }
                 Target::Timeline { track, start } => {
+                    let raw = start as f64; // un-snapped drop frame
                     let label = done
                         .path
                         .file_stem()
                         .and_then(|s| s.to_str())
                         .unwrap_or("clip")
                         .to_string();
-                    self.arrangement.add_block(
-                        track,
-                        Block {
-                            samples: std::sync::Arc::new(audio.samples),
-                            start,
-                            label,
-                            source_pad: None, // a library drop has no live clip
-                            bpm: done.bpm,
-                        },
-                    );
-                    // A clip on the MASTER track (track 0) sets the tempo every
-                    // other block varispeeds to.
+                    // MASTER track (track 0) sets the tempo FIRST, so the grid
+                    // exists before we phase-snap this block onto it.
                     if track == 0 {
                         if let Some(b) = done.bpm {
                             self.mixer.set_master_bpm(Some(b));
                             self.arrangement.set_target_bpm(Some(b));
                         }
                     }
+                    let mut block = Block {
+                        samples: std::sync::Arc::new(audio.samples),
+                        start: 0,
+                        label,
+                        source_pad: None, // a library drop has no live clip
+                        bpm: done.bpm,
+                        onset: done.onset,
+                        phase: Phase::OnBeat,
+                    };
+                    let oo = self.onset_out(&block);
+                    block.start = self.snapped_start(raw, oo, block.phase);
+                    self.arrangement.add_block(track, block);
                 }
             }
         }
@@ -511,15 +524,7 @@ impl TermKrushApp {
         const GUTTER: f32 = 10.0; // left margin so frame 0 isn't flush to the edge
         let sr = self.target_rate.max(1) as f32;
         let master_bpm = self.mixer.master_bpm();
-        let snap = |frame: u64| -> u64 {
-            match master_bpm {
-                Some(bpm) if bpm > 0.0 => {
-                    let fpb = (sr * 60.0 / bpm) as f64;
-                    ((frame as f64 / fpb).round() * fpb) as u64
-                }
-                _ => frame,
-            }
-        };
+        // Placement snapping now goes through `snapped_start` (onset + phase).
 
         egui::TopBottomPanel::top("timeline")
             .exact_height(220.0)
@@ -747,6 +752,7 @@ impl TermKrushApp {
                 let mut drop: Option<(usize, u64, PathBuf)> = None;
                 let mut drop_pad: Option<(usize, u64, usize)> = None;
                 let mut clicked: Option<(usize, usize)> = None;
+                let mut cycle_phase: Option<(usize, usize)> = None;
                 let mut moving: Option<(usize, usize, egui::Pos2)> = None;
                 let mut move_commit: Option<(usize, usize, egui::Pos2)> = None;
                 let mut lane_rects: Vec<egui::Rect> = Vec::new();
@@ -794,6 +800,13 @@ impl TermKrushApp {
                                     egui::pos2(x0, lane.top() + 2.0),
                                     egui::pos2(x1.max(x0 + 3.0), lane.bottom() - 2.0),
                                 );
+                                // Phase badge sits at the top-right (when there's room).
+                                let badge = (br.width() > 34.0).then(|| {
+                                    egui::Rect::from_min_size(
+                                        egui::pos2(br.right() - 15.0, br.top() + 1.0),
+                                        egui::vec2(14.0, 13.0),
+                                    )
+                                });
                                 // Hide the original while it's being moved (ghost shows).
                                 if moving_prev != Some((t, bi)) {
                                     let selected = self.tl_sel == Some((t, bi));
@@ -814,15 +827,41 @@ impl TermKrushApp {
                                         egui::FontId::proportional(11.0),
                                         INK,
                                     );
+                                    if let Some(bd) = badge {
+                                        p.rect_filled(bd, 2.0, GROUND);
+                                        p.rect_stroke(bd, 2.0, egui::Stroke::new(1.0, GREEN));
+                                        p.text(
+                                            bd.center(),
+                                            egui::Align2::CENTER_CENTER,
+                                            phase_tag(block.phase),
+                                            egui::FontId::proportional(9.0),
+                                            GREEN,
+                                        );
+                                    }
                                 }
-                                let bresp = ui.interact(
-                                    br,
-                                    egui::Id::new(("blk", t, bi)),
-                                    egui::Sense::click_and_drag(),
-                                );
-                                bresp.clone().on_hover_cursor(egui::CursorIcon::Grab);
+                                let bresp = ui
+                                    .interact(
+                                        br,
+                                        egui::Id::new(("blk", t, bi)),
+                                        egui::Sense::click_and_drag(),
+                                    )
+                                    .on_hover_cursor(egui::CursorIcon::Grab)
+                                    .on_hover_text(format!(
+                                        "{} · phase: {} (click the corner badge to cycle)",
+                                        block.label,
+                                        phase_name(block.phase)
+                                    ));
                                 if bresp.clicked() {
-                                    clicked = Some((t, bi));
+                                    // Clicking the badge cycles the phase; elsewhere selects.
+                                    let on_badge = badge
+                                        .zip(bresp.interact_pointer_pos())
+                                        .map(|(bd, pp)| bd.contains(pp))
+                                        .unwrap_or(false);
+                                    if on_badge {
+                                        cycle_phase = Some((t, bi));
+                                    } else {
+                                        clicked = Some((t, bi));
+                                    }
                                 }
                                 if bresp.drag_started() {
                                     if let Some(pp) = ui.input(|i| i.pointer.interact_pos()) {
@@ -854,9 +893,18 @@ impl TermKrushApp {
                                     // Prominent: fill + thick border on the target lane.
                                     p.rect_filled(lane, 3.0, GREEN.gamma_multiply(0.22));
                                     p.rect_stroke(lane, 3.0, egui::Stroke::new(2.5, GREEN));
-                                    // Preview the real block shape, snapped, where it'll land.
+                                    // Preview the real block shape, beat-snapped,
+                                    // near where it'll land (the exact onset snap
+                                    // happens on drop, once the onset is known).
                                     if let (Some(pp), Some(len)) = (pointer, drag_preview_len) {
-                                        let s = snap(frame_at(lane.left(), pp.x));
+                                        let raw = frame_at(lane.left(), pp.x);
+                                        let s = match master_bpm {
+                                            Some(b) if b > 0.0 => {
+                                                let fpb = (sr * 60.0 / b) as f64;
+                                                ((raw as f64 / fpb).round() * fpb) as u64
+                                            }
+                                            _ => raw,
+                                        };
                                         let x0 = x_of(lane.left(), s);
                                         let x1 = x_of(lane.left(), s + len);
                                         let pr = egui::Rect::from_min_max(
@@ -876,15 +924,17 @@ impl TermKrushApp {
                             }
                             if over && ui.input(|i| i.pointer.any_released()) {
                                 let pp = pointer.unwrap();
-                                let start = snap(frame_at(lane.left(), pp.x));
+                                // Pass the RAW drop frame; the onset/phase snap is
+                                // applied when the onset is known (drain / inline).
+                                let raw = frame_at(lane.left(), pp.x);
                                 if let Some(pd) =
                                     egui::DragAndDrop::take_payload::<DragPad>(ui.ctx())
                                 {
-                                    drop_pad = Some((t, start, pd.0));
+                                    drop_pad = Some((t, raw, pd.0));
                                 } else if let Some(d) =
                                     egui::DragAndDrop::take_payload::<DragTrack>(ui.ctx())
                                 {
-                                    drop = Some((t, start, d.0.clone()));
+                                    drop = Some((t, raw, d.0.clone()));
                                 }
                             }
                             // playhead
@@ -994,22 +1044,51 @@ impl TermKrushApp {
                 if let Some(s) = clicked {
                     self.tl_sel = Some(s);
                 }
+                if let Some((t, bi)) = cycle_phase {
+                    // Cycle the phase + re-snap, keeping the onset near where it is.
+                    if let Some(b) = self
+                        .arrangement
+                        .tracks()
+                        .get(t)
+                        .and_then(|tr| tr.blocks.get(bi))
+                    {
+                        let next = next_phase(b.phase);
+                        let oo = self.onset_out(b);
+                        let raw = b.start as f64;
+                        let ns = self.snapped_start(raw, oo, next);
+                        if let Some(bm) = self.arrangement.block_mut(t, bi) {
+                            bm.phase = next;
+                            bm.start = ns;
+                        }
+                    }
+                }
                 if let Some((ft, idx, pp)) = move_commit {
                     if let Some(nt) = lane_rects
                         .iter()
                         .position(|r| pp.y >= r.top() && pp.y <= r.bottom())
                     {
-                        // Drop at the grabbed point, snapped.
-                        let nstart = snap(frame_at(lane_rects[nt].left(), pp.x - grab_dx));
-                        self.arrangement.move_block(ft, idx, nt, nstart);
+                        // Re-snap by the block's own onset + phase (cached — no
+                        // recalc), anchored at the grabbed point.
+                        if let Some(b) = self.arrangement.tracks()[ft].blocks.get(idx) {
+                            let (oo, phase) = (self.onset_out(b), b.phase);
+                            let raw = frame_at(lane_rects[nt].left(), pp.x - grab_dx) as f64;
+                            let nstart = self.snapped_start(raw, oo, phase);
+                            self.arrangement.move_block(ft, idx, nt, nstart);
+                        }
                     }
                     self.tl_sel = None;
                     self.tl_moving = None;
                 }
-                if let Some((t, start, path)) = drop {
-                    self.spawn_load(Target::Timeline { track: t, start }, path);
+                if let Some((t, raw, path)) = drop {
+                    self.spawn_load(
+                        Target::Timeline {
+                            track: t,
+                            start: raw,
+                        },
+                        path,
+                    );
                 }
-                if let Some((t, start, pad)) = drop_pad {
+                if let Some((t, raw, pad)) = drop_pad {
                     let gain = self.mixer.pad_gain(pad);
                     let samples: Vec<f32> = self
                         .mixer
@@ -1019,28 +1098,33 @@ impl TermKrushApp {
                         .collect();
                     if !samples.is_empty() {
                         let bpm = self.mixer.pad_bpm(pad);
-                        let label = self.pad_source[pad]
-                            .as_ref()
-                            .and_then(|p| p.file_stem())
-                            .and_then(|s| s.to_str())
-                            .unwrap_or("clip")
-                            .to_string();
-                        self.arrangement.add_block(
-                            t,
-                            Block {
-                                samples: std::sync::Arc::new(samples),
-                                start,
-                                label,
-                                source_pad: Some(pad),
-                                bpm,
-                            },
-                        );
+                        // MASTER first, so the grid exists for the phase snap.
                         if t == 0 {
                             if let Some(b) = bpm {
                                 self.mixer.set_master_bpm(Some(b));
                                 self.arrangement.set_target_bpm(Some(b));
                             }
                         }
+                        let label = self.pad_source[pad]
+                            .as_ref()
+                            .and_then(|p| p.file_stem())
+                            .and_then(|s| s.to_str())
+                            .unwrap_or("clip")
+                            .to_string();
+                        // Onset detected inline (the clip's already decoded).
+                        let onset = detect_pivot(&samples, 2) as u64;
+                        let mut block = Block {
+                            samples: std::sync::Arc::new(samples),
+                            start: 0,
+                            label,
+                            source_pad: Some(pad),
+                            bpm,
+                            onset,
+                            phase: Phase::OnBeat,
+                        };
+                        let oo = self.onset_out(&block);
+                        block.start = self.snapped_start(raw as f64, oo, block.phase);
+                        self.arrangement.add_block(t, block);
                     }
                 }
             });
@@ -1239,6 +1323,37 @@ impl TermKrushApp {
             .collect();
         self.arrangement
             .refresh_pad(pad, std::sync::Arc::new(samples));
+    }
+
+    /// Place a block so its onset lands on the phase target nearest `raw_start`
+    /// (timeline frames). `onset_out` is the onset offset in *timeline* frames
+    /// (source onset ÷ varispeed). With no master tempo, returns `raw_start`.
+    fn snapped_start(&self, raw_start: f64, onset_out: f64, phase: Phase) -> u64 {
+        let sr = self.target_rate.max(1) as f64;
+        let fpb = match self.mixer.master_bpm() {
+            Some(b) if b > 0.0 => sr * 60.0 / b as f64,
+            _ => return raw_start.max(0.0) as u64,
+        };
+        match phase {
+            // No onset fix — the clip's file start sits on the beat.
+            Phase::Free => ((raw_start / fpb).round() * fpb).max(0.0) as u64,
+            _ => {
+                let onset_raw = raw_start + onset_out; // where the hit is now
+                let grid = if phase == Phase::Bar { fpb * 4.0 } else { fpb };
+                let off = if phase == Phase::OffBeat {
+                    fpb / 2.0
+                } else {
+                    0.0
+                };
+                let anchor = ((onset_raw - off) / grid).round() * grid + off;
+                (anchor - onset_out).max(0.0) as u64
+            }
+        }
+    }
+
+    /// The onset offset of a block in timeline frames (source onset ÷ varispeed).
+    fn onset_out(&self, b: &Block) -> f64 {
+        b.onset as f64 / b.speed(self.arrangement.target_bpm())
     }
 
     /// Render the whole timeline arrangement to a `mix-N.wav` in the library.
@@ -1499,6 +1614,36 @@ fn install_fonts(ctx: &egui::Context) {
     // Phosphor icon font, appended as a fallback so icon glyphs render.
     egui_phosphor::add_to_fonts(&mut fonts, egui_phosphor::Variant::Regular);
     ctx.set_fonts(fonts);
+}
+
+/// The next phase in the cycle (the per-block badge clicks through these).
+fn next_phase(p: Phase) -> Phase {
+    match p {
+        Phase::OnBeat => Phase::Bar,
+        Phase::Bar => Phase::OffBeat,
+        Phase::OffBeat => Phase::Free,
+        Phase::Free => Phase::OnBeat,
+    }
+}
+
+/// Short badge tag drawn on a block.
+fn phase_tag(p: Phase) -> &'static str {
+    match p {
+        Phase::OnBeat => "B",
+        Phase::Bar => "R",
+        Phase::OffBeat => "O",
+        Phase::Free => "F",
+    }
+}
+
+/// Full phase name (tooltips).
+fn phase_name(p: Phase) -> &'static str {
+    match p {
+        Phase::OnBeat => "on-beat",
+        Phase::Bar => "bar",
+        Phase::OffBeat => "off-beat",
+        Phase::Free => "free",
+    }
 }
 
 /// A clean icon-only button (no frame). Returns true on click.

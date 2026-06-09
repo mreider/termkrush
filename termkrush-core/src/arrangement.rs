@@ -9,6 +9,21 @@
 
 use std::sync::Arc;
 
+/// Where a block's first onset (its musical hit) is aligned on the master grid.
+/// Tempo is always synced; this is the *phase* — cycled by the per-block button.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum Phase {
+    /// Onset on the nearest beat (the snap-on-drop default).
+    #[default]
+    OnBeat,
+    /// Onset on the bar's downbeat (1 of 4).
+    Bar,
+    /// Onset on the off-beat (the "&", +½ beat).
+    OffBeat,
+    /// No onset correction — the clip's file start sits on the beat.
+    Free,
+}
+
 /// A placed clip on a track: its samples and where it starts on the timeline.
 #[derive(Debug, Clone)]
 pub struct Block {
@@ -23,6 +38,11 @@ pub struct Block {
     pub source_pad: Option<usize>,
     /// The source clip's detected tempo, if known (the MASTER track uses it).
     pub bpm: Option<f32>,
+    /// First-onset offset in *source* frames (cached on drop), so the grid snap
+    /// can land the hit, not the file head.
+    pub onset: u64,
+    /// How the onset is aligned to the grid.
+    pub phase: Phase,
 }
 
 impl Block {
@@ -191,6 +211,11 @@ impl Arrangement {
         }
     }
 
+    /// Mutable access to a block (e.g. to change its phase + start).
+    pub fn block_mut(&mut self, track: usize, idx: usize) -> Option<&mut Block> {
+        self.tracks.get_mut(track)?.blocks.get_mut(idx)
+    }
+
     /// Remove block `idx` from `track`, returning it (e.g. to copy/paste).
     pub fn remove_block(&mut self, track: usize, idx: usize) -> Option<Block> {
         let t = self.tracks.get_mut(track)?;
@@ -269,6 +294,8 @@ mod tests {
             label: "x".into(),
             source_pad: None,
             bpm: None,
+            onset: 0,
+            phase: Phase::default(),
         }
     }
 

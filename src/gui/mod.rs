@@ -131,6 +131,8 @@ enum Act {
     ClearBeats(usize),
     /// Toggle a beat mark at a clip-absolute frame (add, or remove if near one).
     ToggleBeat(usize, u64),
+    /// Tap: add a beat mark at the clip's current play position (add-only).
+    TapBeat(usize),
 }
 
 /// The whole app: the engine, the audio sink, and the browsed library.
@@ -561,6 +563,17 @@ impl TermKrushApp {
                 } else {
                     self.pad_beats[i].push(frame);
                     self.pad_beats[i].sort_unstable();
+                }
+            }
+            Act::TapBeat(i) => {
+                // Add a mark at the live play position (add-only, ~10ms dup guard).
+                if let Some(f) = self.mixer.pad_play_pos(i) {
+                    let f = f as u64;
+                    let dup = (self.target_rate as u64 * 10) / 1000;
+                    if !self.pad_beats[i].iter().any(|&b| b.abs_diff(f) <= dup) {
+                        self.pad_beats[i].push(f);
+                        self.pad_beats[i].sort_unstable();
+                    }
                 }
             }
         }
@@ -2272,7 +2285,7 @@ fn draw_clip_editor(
             }
             ui.label(
                 egui::RichText::new(format!(
-                    "{} beats · click the waveform to add / remove",
+                    "{} beats · ▶ play then tap ↓ on each beat (Enter stops) · or click the waveform",
                     beats.len()
                 ))
                 .color(DIM)
@@ -2360,6 +2373,31 @@ fn draw_clip_editor(
                     }
                 }
             }
+        }
+
+        // Moving playhead while auditioning — so you can see (and tap) the beat.
+        let playing = mixer.pad_is_sounding(i);
+        if playing {
+            if let Some(pos) = mixer.pad_play_pos(i) {
+                let px = x_of(pos.min(len));
+                painter.line_segment(
+                    [egui::pos2(px, rect.top()), egui::pos2(px, rect.bottom())],
+                    egui::Stroke::new(1.5, GREEN),
+                );
+            }
+        }
+        // Keys: ↓ taps a beat at the playhead; Enter stops playback.
+        let (tap, stop) = ctx.input(|i| {
+            (
+                i.key_pressed(egui::Key::ArrowDown),
+                i.key_pressed(egui::Key::Enter),
+            )
+        });
+        if playing && tap {
+            acts.push(Act::TapBeat(i));
+        }
+        if playing && stop {
+            acts.push(Act::AuditionSel(i)); // toggles → stops
         }
     });
 }

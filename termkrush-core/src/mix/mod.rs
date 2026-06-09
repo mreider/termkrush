@@ -470,6 +470,15 @@ impl Mixer {
         self.voices.iter().any(|v| v.pad == i) || self.scratch_voices.iter().any(|v| v.pad == i)
     }
 
+    /// Current clip-absolute play frame of pad `i`'s sounding sampler voice, if
+    /// any — for the clip-editor playhead + tap-to-mark.
+    pub fn pad_play_pos(&self, i: usize) -> Option<usize> {
+        self.voices
+            .iter()
+            .find(|v| v.pad == i)
+            .map(|v| (v.in_f as f64 + v.pos) as usize)
+    }
+
     /// Audition an explicit `[from, to)` region of pad `i` once, at native
     /// rate — stops any prior preview first. Used to hear right at a handle.
     pub fn audition_region(&mut self, i: usize, from: usize, to: usize) {

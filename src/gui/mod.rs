@@ -326,11 +326,9 @@ impl TermKrushApp {
                 Target::Pad(i) => {
                     self.mixer.assign_pad(i, audio.samples);
                     if let Some(b) = done.bpm {
+                        // Remember the clip's tempo, but the MASTER timeline track
+                        // (not the first clip loaded) sets the master BPM.
                         self.mixer.set_pad_bpm(i, Some(b));
-                        // Auto-BPM: the first track to carry a tempo sets the master.
-                        if self.mixer.master_bpm().is_none() {
-                            self.mixer.set_master_bpm(Some(b));
-                        }
                     }
                     self.pad_source[i] = Some(done.path);
                 }
@@ -352,8 +350,16 @@ impl TermKrushApp {
                             samples: std::sync::Arc::new(audio.samples),
                             start,
                             label,
+                            source_pad: None, // a library drop has no live clip
+                            bpm: done.bpm,
                         },
                     );
+                    // A clip on the MASTER track (track 0) sets the tempo.
+                    if track == 0 {
+                        if let Some(b) = done.bpm {
+                            self.mixer.set_master_bpm(Some(b));
+                        }
+                    }
                 }
             }
         }
@@ -432,10 +438,15 @@ impl TermKrushApp {
                 }
             }
             Act::SetKind(i, k) => self.mixer.set_pad_kind(i, k),
-            Act::SetGain(i, v) => self.mixer.set_pad_gain(i, v),
+            Act::SetGain(i, v) => {
+                self.mixer.set_pad_gain(i, v);
+                self.refresh_pad_blocks(i);
+            }
             Act::ClearPad(i) => {
                 self.mixer.unload_pad(i);
                 self.pad_source[i] = None;
+                // Keep any placed blocks but cut their link to this pad.
+                self.arrangement.unlink_pad(i);
             }
             Act::ExportPad(i) => self.export_pad(i),
             Act::EditClip(i) => {
@@ -450,8 +461,14 @@ impl TermKrushApp {
                 }
                 self.clip_wave = None;
             }
-            Act::SetTrimIn(i, f) => self.mixer.set_pad_trim_in(i, f),
-            Act::SetTrimOut(i, f) => self.mixer.set_pad_trim_out(i, f),
+            Act::SetTrimIn(i, f) => {
+                self.mixer.set_pad_trim_in(i, f);
+                self.refresh_pad_blocks(i);
+            }
+            Act::SetTrimOut(i, f) => {
+                self.mixer.set_pad_trim_out(i, f);
+                self.refresh_pad_blocks(i);
+            }
             Act::AuditionSel(i) => {
                 if self.mixer.pad_is_sounding(i) {
                     self.mixer.stop_pad(i);
@@ -769,9 +786,13 @@ impl TermKrushApp {
                     self.spawn_load(Target::Timeline { track: t, start }, path);
                 }
                 if let Some((t, start, pad)) = drop_pad {
-                    // A pad's clip is already decoded — place it directly.
-                    let samples = self.mixer.pad_clip_region(pad);
+                    // A pad's clip is already decoded — place it directly, gain
+                    // baked in, linked back to the pad so edits re-flow.
+                    let gain = self.mixer.pad_gain(pad);
+                    let samples: Vec<f32> =
+                        self.mixer.pad_clip_region(pad).iter().map(|s| s * gain).collect();
                     if !samples.is_empty() {
+                        let bpm = self.mixer.pad_bpm(pad);
                         let label = self.pad_source[pad]
                             .as_ref()
                             .and_then(|p| p.file_stem())
@@ -784,8 +805,16 @@ impl TermKrushApp {
                                 samples: std::sync::Arc::new(samples),
                                 start,
                                 label,
+                                source_pad: Some(pad),
+                                bpm,
                             },
                         );
+                        // A clip on the MASTER track (track 0) sets the tempo.
+                        if t == 0 {
+                            if let Some(b) = bpm {
+                                self.mixer.set_master_bpm(Some(b));
+                            }
+                        }
                     }
                 }
             });
@@ -969,6 +998,21 @@ impl TermKrushApp {
         }
         self.crate_lib.refresh();
         self.probed_dir = None; // re-probe so the new file gets checked
+    }
+
+    /// Re-flow a clip's current trimmed region (× its gain) into every timeline
+    /// block placed from that pad — keeps placed blocks in sync after a trim or
+    /// volume edit on the clip.
+    fn refresh_pad_blocks(&mut self, pad: usize) {
+        let gain = self.mixer.pad_gain(pad);
+        let samples: Vec<f32> = self
+            .mixer
+            .pad_clip_region(pad)
+            .iter()
+            .map(|s| s * gain)
+            .collect();
+        self.arrangement
+            .refresh_pad(pad, std::sync::Arc::new(samples));
     }
 
     /// Render the whole timeline arrangement to a `mix-N.wav` in the library.

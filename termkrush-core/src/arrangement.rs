@@ -18,6 +18,11 @@ pub struct Block {
     pub start: u64,
     /// Display label (the source track name).
     pub label: String,
+    /// The clip/pad this block was placed from, if any — so edits to that clip
+    /// (trim / volume) can re-flow into the block. `None` for library drops.
+    pub source_pad: Option<usize>,
+    /// The source clip's detected tempo, if known (the MASTER track uses it).
+    pub bpm: Option<f32>,
 }
 
 impl Block {
@@ -102,6 +107,32 @@ impl Arrangement {
         Some(dst.len() - 1)
     }
 
+    /// Replace the samples of every block sourced from `pad` — called after the
+    /// clip on that pad is re-trimmed or its volume changes, so the placed blocks
+    /// stay in sync with the clip.
+    pub fn refresh_pad(&mut self, pad: usize, samples: Arc<Vec<f32>>) {
+        for track in &mut self.tracks {
+            for block in &mut track.blocks {
+                if block.source_pad == Some(pad) {
+                    block.samples = samples.clone();
+                }
+            }
+        }
+    }
+
+    /// Sever the clip link on every block sourced from `pad` (keeping their
+    /// samples) — used when the pad is cleared, so a later clip loaded there
+    /// can't hijack these already-placed blocks.
+    pub fn unlink_pad(&mut self, pad: usize) {
+        for track in &mut self.tracks {
+            for block in &mut track.blocks {
+                if block.source_pad == Some(pad) {
+                    block.source_pad = None;
+                }
+            }
+        }
+    }
+
     /// Remove block `idx` from `track`, returning it (e.g. to copy/paste).
     pub fn remove_block(&mut self, track: usize, idx: usize) -> Option<Block> {
         let t = self.tracks.get_mut(track)?;
@@ -176,7 +207,30 @@ mod tests {
             samples: Arc::new(vec![fill; frames * 2]),
             start,
             label: "x".into(),
+            source_pad: None,
+            bpm: None,
         }
+    }
+
+    #[test]
+    fn refresh_pad_reflows_sourced_blocks_only() {
+        let mut a = Arrangement::new(1000, 2);
+        let mut b = block(0, 4, 0.2);
+        b.source_pad = Some(3);
+        a.add_block(0, b);
+        a.add_block(1, block(0, 4, 0.2)); // source_pad None — untouched
+
+        a.refresh_pad(3, Arc::new(vec![0.9; 8]));
+        assert_eq!(
+            a.tracks()[0].blocks[0].samples[0],
+            0.9,
+            "sourced block reflowed"
+        );
+        assert_eq!(
+            a.tracks()[1].blocks[0].samples[0],
+            0.2,
+            "library block untouched"
+        );
     }
 
     #[test]

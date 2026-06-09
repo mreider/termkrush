@@ -522,16 +522,37 @@ impl TermKrushApp {
                 let mut drop: Option<(usize, u64, PathBuf)> = None;
                 let mut drop_pad: Option<(usize, u64, usize)> = None;
                 let mut clicked: Option<(usize, usize)> = None;
+                let mut moving: Option<(usize, usize, egui::Pos2)> = None;
+                let mut move_commit: Option<(usize, usize, egui::Pos2)> = None;
+                let mut lane_rects: Vec<egui::Rect> = Vec::new();
                 egui::ScrollArea::vertical().max_height(150.0).show(ui, |ui| {
                     let tracks = self.arrangement.track_count();
                     for t in 0..tracks {
-                        let (lane, resp) = ui.allocate_exact_size(
+                        let (lane, _resp) = ui.allocate_exact_size(
                             egui::vec2(ui.available_width(), LANE_H),
-                            egui::Sense::click(),
+                            egui::Sense::hover(),
                         );
+                        lane_rects.push(lane);
                         let p = ui.painter_at(lane);
-                        p.rect_filled(lane, 3.0, PANEL);
-                        p.rect_stroke(lane, 3.0, egui::Stroke::new(1.0, LINE));
+                        // Track 0 is the MASTER track — tinted + labelled; a clip
+                        // landing here sets the master tempo.
+                        let is_master = t == 0;
+                        let fill = if is_master { AMBER.gamma_multiply(0.08) } else { PANEL };
+                        p.rect_filled(lane, 3.0, fill);
+                        p.rect_stroke(
+                            lane,
+                            3.0,
+                            egui::Stroke::new(1.0, if is_master { AMBER } else { LINE }),
+                        );
+                        if is_master {
+                            p.text(
+                                lane.right_top() + egui::vec2(-6.0, 2.0),
+                                egui::Align2::RIGHT_TOP,
+                                "MASTER",
+                                egui::FontId::proportional(9.0),
+                                AMBER.gamma_multiply(0.8),
+                            );
+                        }
                         // blocks
                         for (bi, block) in self.arrangement.tracks()[t].blocks.iter().enumerate() {
                             let x0 = x_of(lane.left(), block.start);
@@ -541,7 +562,7 @@ impl TermKrushApp {
                                 egui::pos2(x1.max(x0 + 3.0), lane.bottom() - 2.0),
                             );
                             let selected = self.tl_sel == Some((t, bi));
-                            p.rect_filled(br, 2.0, AMBER.gamma_multiply(if selected { 0.5 } else { 0.3 }));
+                            p.rect_filled(br, 2.0, AMBER.gamma_multiply(if selected { 0.55 } else { 0.3 }));
                             p.rect_stroke(br, 2.0, egui::Stroke::new(if selected { 2.0 } else { 1.0 }, AMBER));
                             p.text(
                                 br.left_top() + egui::vec2(4.0, 3.0),
@@ -550,12 +571,25 @@ impl TermKrushApp {
                                 egui::FontId::proportional(11.0),
                                 INK,
                             );
-                            // click a block to select it
-                            if resp.clicked() {
-                                if let Some(pos) = resp.interact_pointer_pos() {
-                                    if br.contains(pos) {
-                                        clicked = Some((t, bi));
-                                    }
+                            // Each block: click to select, drag to move (snaps).
+                            let bresp = ui.interact(
+                                br,
+                                egui::Id::new(("blk", t, bi)),
+                                egui::Sense::click_and_drag(),
+                            );
+                            bresp.clone().on_hover_cursor(egui::CursorIcon::Grab);
+                            if bresp.clicked() {
+                                clicked = Some((t, bi));
+                            }
+                            if bresp.dragged() {
+                                if let Some(pp) = ui.input(|i| i.pointer.interact_pos()) {
+                                    moving = Some((t, bi, pp));
+                                    clicked = Some((t, bi)); // stay selected while moving
+                                }
+                            }
+                            if bresp.drag_stopped() {
+                                if let Some(pp) = ui.input(|i| i.pointer.interact_pos()) {
+                                    move_commit = Some((t, bi, pp));
                                 }
                             }
                         }
@@ -563,7 +597,6 @@ impl TermKrushApp {
                         // Detect geometrically (pointer-in-rect + release + take
                         // the global payload) rather than via dnd_release_payload,
                         // whose hovered() check was missing the cross-panel drop.
-                        let _ = &resp;
                         let dragging = egui::DragAndDrop::has_payload_of_type::<DragPad>(ui.ctx())
                             || egui::DragAndDrop::has_payload_of_type::<DragTrack>(ui.ctx());
                         let pointer = ui.input(|i| i.pointer.interact_pos());
@@ -600,14 +633,77 @@ impl TermKrushApp {
                     }
                 });
                 ui.label(
-                    egui::RichText::new("drag a track onto a lane · click a block, Delete to remove · Cmd-C/V copy/paste")
+                    egui::RichText::new("drag onto a lane · drag a block to move (snaps) · click + Delete to remove · Cmd-C/V")
                         .color(DIM)
                         .small(),
                 );
 
+                // A ghost following the cursor while dragging a CLIP from the grid.
+                if let Some(pd) = egui::DragAndDrop::payload::<DragPad>(ui.ctx()) {
+                    if let Some(pp) = ui.input(|i| i.pointer.interact_pos()) {
+                        let name = self
+                            .pad_source
+                            .get(pd.0)
+                            .and_then(|o| o.as_ref())
+                            .and_then(|p| p.file_stem())
+                            .and_then(|s| s.to_str())
+                            .unwrap_or("clip")
+                            .to_string();
+                        let g = egui::Rect::from_min_size(
+                            pp + egui::vec2(10.0, 6.0),
+                            egui::vec2(130.0, 20.0),
+                        );
+                        let gp = ui.ctx().layer_painter(egui::LayerId::new(
+                            egui::Order::Tooltip,
+                            egui::Id::new("tl-ghost"),
+                        ));
+                        gp.rect_filled(g, 3.0, AMBER.gamma_multiply(0.9));
+                        gp.text(
+                            g.left_center() + egui::vec2(6.0, 0.0),
+                            egui::Align2::LEFT_CENTER,
+                            name,
+                            egui::FontId::proportional(11.0),
+                            GROUND,
+                        );
+                    }
+                }
+                // A ghost while moving an existing block.
+                if let Some((ft, idx, pp)) = moving {
+                    if let Some(b) = self
+                        .arrangement
+                        .tracks()
+                        .get(ft)
+                        .and_then(|tr| tr.blocks.get(idx))
+                    {
+                        let w = ((b.len_frames() as f32 / sr) * PXPS).max(8.0);
+                        let g = egui::Rect::from_min_size(
+                            egui::pos2(pp.x - 6.0, pp.y - 12.0),
+                            egui::vec2(w, 24.0),
+                        );
+                        let gp = ui.ctx().layer_painter(egui::LayerId::new(
+                            egui::Order::Tooltip,
+                            egui::Id::new("tl-move"),
+                        ));
+                        gp.rect_filled(g, 2.0, AMBER.gamma_multiply(0.5));
+                        gp.rect_stroke(g, 2.0, egui::Stroke::new(1.5, AMBER));
+                    }
+                }
+
                 // Apply the gathered actions now that the arrangement isn't borrowed.
                 if let Some(s) = clicked {
                     self.tl_sel = Some(s);
+                }
+                if let Some((ft, idx, pp)) = move_commit {
+                    // Target track = the lane the pointer is over; start snaps.
+                    if let Some(nt) = lane_rects
+                        .iter()
+                        .position(|r| pp.y >= r.top() && pp.y <= r.bottom())
+                    {
+                        let nstart =
+                            snap((((pp.x - lane_rects[nt].left()).max(0.0) / PXPS) * sr) as u64);
+                        self.arrangement.move_block(ft, idx, nt, nstart);
+                    }
+                    self.tl_sel = None; // index/track changed by the move
                 }
                 if let Some((t, start, path)) = drop {
                     self.spawn_load(Target::Timeline { track: t, start }, path);

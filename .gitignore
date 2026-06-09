@@ -19,3 +19,6 @@ agilemarkdown_bash_autocomplete
 # Local dev song library: keep the folder, ignore its audio contents
 /songs/*
 !/songs/.gitkeep
+
+# macOS
+.DS_Store

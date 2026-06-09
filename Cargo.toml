@@ -3,14 +3,14 @@ name = "termkrush"
 version = "0.1.0"
 edition = "2021"
 rust-version = "1.75"
-description = "A keyboard-first terminal scratch/loop mixer: pads, auto-synced loops, old-school scratching, and a tracker timeline — from your shell."
+description = "A mouse-first desktop scratch/loop mixer for non-DJs: clips, auto-synced loops on a free-track timeline, and old-school scratching."
 authors = ["Matt Reider <mreider@gmail.com>"]
 license = "MIT"
 repository = "https://github.com/mreider/termkrush"
 homepage = "https://github.com/mreider/termkrush"
 readme = "README.md"
-keywords = ["dj", "audio", "tui", "music", "terminal"]
-categories = ["command-line-utilities", "multimedia::audio"]
+keywords = ["dj", "audio", "music", "mixer", "scratch"]
+categories = ["multimedia::audio", "gui"]
 
 [[bin]]
 name = "termkrush"

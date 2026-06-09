@@ -1,10 +1,11 @@
-//! The egui/eframe desktop front-end — the mouse-first replacement for the
-//! TUI (see the 2026-06-08 GUI pivot in `.am/inception.md`). The engine
-//! (`termkrush-core`) is unchanged; this is all view + input.
+//! The egui/eframe desktop front-end — the sole UI (see the 2026-06-08 GUI
+//! pivot in `.am/inception.md`). The engine (`termkrush-core`) is unchanged;
+//! this is all view + input.
 //!
-//! Mouse model: drag a track onto a pad to load it; drag a track into a folder
-//! to move it; double-click to rename; select + a delete button to delete;
-//! click a track's ▶ to preview. No modal dialogs — inline fields and buttons.
+//! Mouse model: drag a library track onto a clip to load it, into a folder to
+//! move it, or onto a timeline lane to place it; drag a clip by its name to the
+//! timeline; double-click to rename; click ▶ to preview. No modal dialogs —
+//! inline fields and buttons.
 
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};

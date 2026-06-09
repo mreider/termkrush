@@ -470,13 +470,6 @@ impl Mixer {
         self.voices.iter().any(|v| v.pad == i) || self.scratch_voices.iter().any(|v| v.pad == i)
     }
 
-    /// Audition pad `i`'s current trimmed selection `[in, out)` once, at
-    /// native rate — stops any prior preview on that pad first.
-    pub fn audition_pad(&mut self, i: usize) {
-        let (inp, out) = self.pad_trim.get(i).copied().unwrap_or((0, 0));
-        self.audition_region(i, inp, out);
-    }
-
     /// Audition an explicit `[from, to)` region of pad `i` once, at native
     /// rate — stops any prior preview first. Used to hear right at a handle.
     pub fn audition_region(&mut self, i: usize, from: usize, to: usize) {
@@ -500,33 +493,6 @@ impl Mixer {
             });
             self.pad_env[i] = 1.0;
             self.pad_env_target[i] = 1.0;
-        }
-    }
-
-    /// **Destructively** snip pad `i` to its trimmed region `[in, out)` —
-    /// drop both the head before `in` and the tail after `out`.
-    pub fn snip_pad(&mut self, i: usize) {
-        if i >= PADS {
-            return;
-        }
-        let (inp, out) = self.pad_trim(i);
-        if let Some(clip) = self.pads.get(i).and_then(|p| p.as_ref()) {
-            let total = clip.len() / 2;
-            let (a, b) = ((inp.min(total)) * 2, (out.min(total)) * 2);
-            if b > a {
-                let kept = clip[a..b].to_vec();
-                let len = kept.len() / 2;
-                self.pads[i] = Some(Arc::new(kept));
-                self.pad_trim[i] = (0, len);
-            }
-        }
-    }
-
-    /// Manually nudge pad `i`'s BPM by `delta` (from 120 if unset), clamped.
-    pub fn nudge_pad_bpm(&mut self, i: usize, delta: f32) {
-        if i < PADS {
-            let next = (self.pad_bpm[i].unwrap_or(120.0) + delta).clamp(40.0, 240.0);
-            self.pad_bpm[i] = Some(next);
         }
     }
 

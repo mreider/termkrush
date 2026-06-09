@@ -373,7 +373,9 @@ impl TermKrushApp {
                     self.previewing = None;
                     self.preview_was_on = false;
                 } else {
-                    // Switch the preview to this track.
+                    // Switch the preview to this track (and stop the timeline —
+                    // preview and timeline playback are mutually exclusive).
+                    self.tl_playing = false;
                     self.mixer.stop_preview();
                     self.spawn_load(Target::Preview, p.clone());
                     self.previewing = Some(p);
@@ -454,6 +456,7 @@ impl TermKrushApp {
                 if self.mixer.pad_is_sounding(i) {
                     self.mixer.stop_pad(i);
                 } else {
+                    self.tl_playing = false; // auditioning a clip stops the timeline
                     let (inp, out) = self.mixer.pad_trim(i);
                     self.mixer.audition_region(i, inp, out);
                 }
@@ -496,6 +499,15 @@ impl TermKrushApp {
                     ui.add_space(12.0);
                     if icon_btn(ui, if self.tl_playing { ph::PAUSE } else { ph::PLAY }, "play / pause the timeline") {
                         self.tl_playing = !self.tl_playing;
+                        if self.tl_playing {
+                            // The timeline owns playback — silence any library
+                            // preview / clip audition so they don't pile on.
+                            self.mixer.stop_preview();
+                            self.previewing = None;
+                            for pad in 0..PADS {
+                                self.mixer.stop_pad(pad);
+                            }
+                        }
                     }
                     if icon_btn(ui, ph::STOP, "stop (rewind to start)") {
                         self.tl_playing = false;
@@ -516,6 +528,54 @@ impl TermKrushApp {
                     ui.label(egui::RichText::new(bpm).color(GREEN));
                 });
                 ui.add_space(4.0);
+
+                // --- ruler: scrub the playhead with the mouse ---
+                let (ruler, rresp) = ui.allocate_exact_size(
+                    egui::vec2(ui.available_width(), 16.0),
+                    egui::Sense::click_and_drag(),
+                );
+                let rp = ui.painter_at(ruler);
+                rp.rect_filled(ruler, 0.0, GROUND);
+                rp.line_segment(
+                    [ruler.left_bottom(), ruler.right_bottom()],
+                    egui::Stroke::new(1.0, LINE),
+                );
+                // Bar ticks when a tempo is known, for orientation.
+                if let Some(b) = master_bpm {
+                    if b > 0.0 {
+                        let fpbar = sr * 60.0 / b * 4.0; // 4 beats / bar
+                        let mut bar = 0u32;
+                        loop {
+                            let x = x_of(ruler.left(), (bar as f32 * fpbar) as u64);
+                            if x > ruler.right() {
+                                break;
+                            }
+                            rp.line_segment(
+                                [egui::pos2(x, ruler.bottom() - 5.0), egui::pos2(x, ruler.bottom())],
+                                egui::Stroke::new(1.0, DIM),
+                            );
+                            bar += 1;
+                            if bar > 256 {
+                                break;
+                            }
+                        }
+                    }
+                }
+                if rresp.clicked() || rresp.dragged() {
+                    if let Some(pp) = rresp.interact_pointer_pos() {
+                        self.tl_playhead =
+                            (((pp.x - ruler.left()).max(0.0) / PXPS) * sr) as u64;
+                    }
+                }
+                // Playhead marker on the ruler.
+                let phx = x_of(ruler.left(), self.tl_playhead).min(ruler.right());
+                rp.text(
+                    egui::pos2(phx, ruler.top()),
+                    egui::Align2::CENTER_TOP,
+                    "▼",
+                    egui::FontId::proportional(11.0),
+                    GREEN,
+                );
 
                 // --- track lanes --- (collect into locals; apply after, so we
                 // never mutate self while the arrangement is borrowed)

@@ -374,6 +374,8 @@ impl TermKrushApp {
                             self.arrangement.set_target_bpm(Some(b));
                         }
                     }
+                    // Auto-lock anything with internal rhythm (length-based).
+                    let sync = self.default_sync(track, audio.samples.len() / 2);
                     let mut block = Block {
                         samples: std::sync::Arc::new(audio.samples),
                         start: 0,
@@ -381,7 +383,7 @@ impl TermKrushApp {
                         source_pad: None, // a library drop has no live clip
                         bpm: done.bpm,
                         phase: Phase::OnBeat,
-                        sync: false, // library drop: native + start-snapped (set a loop clip to tempo-lock)
+                        sync,
                         nudge: 0,
                     };
                     block.start = self.snapped_start(raw, block.phase, block.nudge);
@@ -598,10 +600,25 @@ impl TermKrushApp {
                             .tracks()
                             .get(t)
                             .and_then(|tr| tr.blocks.get(bi))
-                            .map(|b| (t, bi, b.phase, b.start, b.nudge))
+                            .map(|b| (t, bi, b.phase, b.start, b.nudge, b.sync))
                     });
-                    if let Some((t, bi, cur, start, ndg)) = sel {
+                    if let Some((t, bi, cur, start, ndg, synced)) = sel {
                         ui.add_space(12.0);
+                        // Tempo-lock toggle (beat-match this clip to the master).
+                        if ui
+                            .button(
+                                egui::RichText::new(if synced { "lock: on" } else { "lock: off" })
+                                    .color(if synced { GREEN } else { DIM }),
+                            )
+                            .on_hover_text(
+                                "beat-match this clip to the MASTER tempo (off = native pitch)",
+                            )
+                            .clicked()
+                        {
+                            if let Some(bm) = self.arrangement.block_mut(t, bi) {
+                                bm.sync = !bm.sync;
+                            }
+                        }
                         // Phase cycle.
                         if ui
                             .button(
@@ -1202,8 +1219,9 @@ impl TermKrushApp {
                             .and_then(|s| s.to_str())
                             .unwrap_or("clip")
                             .to_string();
-                        // Only loops tempo-lock; one-shots/scratch play native.
-                        let sync = matches!(self.mixer.pad_kind(pad), PadKind::Loop);
+                        // Auto-lock anything with internal rhythm (length-based),
+                        // not the clip's kind.
+                        let sync = self.default_sync(t, samples.len() / 2);
                         let mut block = Block {
                             samples: std::sync::Arc::new(samples),
                             start: 0,
@@ -1414,6 +1432,23 @@ impl TermKrushApp {
             .collect();
         self.arrangement
             .refresh_pad(pad, std::sync::Arc::new(samples));
+    }
+
+    /// Should a freshly-dropped block tempo-lock by default? Anything longer
+    /// than ~2 beats has internal rhythm that would drift, so it locks; a short
+    /// one-shot hit plays native. The MASTER track always plays native (it *is*
+    /// the tempo). Toggleable per block afterwards.
+    fn default_sync(&self, track: usize, native_frames: usize) -> bool {
+        if track == 0 {
+            return false;
+        }
+        match self.mixer.master_bpm() {
+            Some(b) if b > 0.0 => {
+                let fpb = self.target_rate as f64 * 60.0 / b as f64;
+                native_frames as f64 / fpb > 2.0
+            }
+            _ => false,
+        }
     }
 
     /// Timeline frame the beat grid is anchored to — the MASTER track's first

@@ -609,6 +609,15 @@ impl TermKrushApp {
                     self.tl_scroll = self.tl_playhead;
                 }
 
+                // Bound the scroll to the content + half a screen of headroom (so
+                // you can drop just past the end). Auto-extends as blocks land
+                // further out (total_frames grows).
+                let extent = (self.arrangement.total_frames() + view_frames / 2)
+                    .max(view_frames)
+                    .max(1);
+                let max_scroll = extent.saturating_sub(view_frames);
+                self.tl_scroll = self.tl_scroll.min(max_scroll);
+
                 let scroll = self.tl_scroll as f64;
                 let x_of = |left: f32, frame: u64| {
                     left + GUTTER + ((frame as f64 - scroll) as f32 / sr * pxps)
@@ -868,13 +877,9 @@ impl TermKrushApp {
                             ui.add_space(4.0);
                         }
                     });
-                // --- horizontal scrollbar ---
-                let total = self
-                    .arrangement
-                    .total_frames()
-                    .max(self.tl_scroll + view_frames)
-                    .max(view_frames)
-                    .max(1);
+                // --- horizontal scrollbar --- (extent = content + headroom, so
+                // the thumb actually reaches the end — no infinite scroll).
+                let total = extent;
                 let (bar, bresp) =
                     ui.allocate_exact_size(egui::vec2(width, 12.0), egui::Sense::click_and_drag());
                 let bp = ui.painter_at(bar);
@@ -892,7 +897,7 @@ impl TermKrushApp {
                     if let Some(pp) = bresp.interact_pointer_pos() {
                         // Center the thumb on the pointer.
                         let rel = ((pp.x - bar.left() - thumb_w / 2.0) / track_w).clamp(0.0, 1.0);
-                        self.tl_scroll = (rel * total as f32) as u64;
+                        self.tl_scroll = ((rel * total as f32) as u64).min(max_scroll);
                     }
                 }
 

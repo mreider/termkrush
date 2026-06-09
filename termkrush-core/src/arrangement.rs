@@ -1,5 +1,5 @@
 //! The free-track arrangement: the DAW-style timeline model (2026-06-08 GUI
-//! pivot). Unlike the retired step-grid [`timeline`](crate::timeline), tracks
+//! pivot). Unlike the retired step-grid tracker it replaced, tracks
 //! are not bound to pads — each track holds **blocks**, a placed clip (its own
 //! samples) at an arbitrary start frame. You drag clips onto tracks, move them,
 //! copy/paste them, and render the whole thing to one buffer.

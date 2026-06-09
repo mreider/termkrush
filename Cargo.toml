@@ -20,7 +20,6 @@ path = "src/main.rs"
 # `termkrush-core` crate, which carries no UI dependency.
 [dependencies]
 termkrush-core = { path = "termkrush-core" }
-ratatui = "0.29"
 eframe = "0.29"
 rtrb = "0.3"
 tracing = "0.1"

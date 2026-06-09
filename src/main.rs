@@ -1,13 +1,11 @@
-//! TermKrush — a keyboard-first terminal scratch/loop mixer.
+//! TermKrush — a mouse-first desktop scratch/loop mixer.
 //!
 //! This is the binary entry point: a thin shell over the headless
 //! `termkrush-core` engine. `main` wires up logging, handles a couple of
-//! smoke-test flags (`--test-tone`, `--panic-test`), and otherwise hands off
-//! to the egui desktop UI (`--tui` still launches the legacy terminal UI
-//! during the GUI migration; both live here in the binary).
+//! smoke-test flags (`--test-tone`, `--panic-test`), and otherwise launches
+//! the egui desktop UI.
 
 mod gui;
-mod tui;
 
 use termkrush_core::{audio, logging};
 
@@ -92,21 +90,11 @@ fn main() {
         std::process::exit(run_test_tone(secs));
     }
 
-    // Legacy terminal UI, kept during the GUI migration.
-    if args.iter().any(|a| a == "--tui") {
-        if let Err(e) = tui::run() {
-            tracing::error!(error = %e, "tui exited with error");
-            eprintln!("termkrush: {e}");
-            std::process::exit(1);
-        }
-        return;
-    }
-
-    // When stdout is piped (tests, CI, `termkrush | cat`) or `--no-tui` is set,
-    // there is no interactive session to open — print the version banner and
-    // exit, which keeps the binary scriptable.
+    // When stdout is piped (tests, CI, `termkrush | cat`) there is no session
+    // to open — print the version banner and exit, which keeps the binary
+    // scriptable and CI-safe (the GUI needs a display).
     use std::io::IsTerminal;
-    if !std::io::stdout().is_terminal() || args.iter().any(|a| a == "--no-tui") {
+    if !std::io::stdout().is_terminal() {
         // The version banner is program output (stdout), not a diagnostic.
         println!("{}", version_banner());
         return;

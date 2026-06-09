@@ -10,7 +10,6 @@
 # Usage:
 #   scripts/dev-run.sh build            # compile the debug binary once
 #   scripts/dev-run.sh                  # run prebuilt binary -> TUI (default)
-#   scripts/dev-run.sh tui              # same as default
 #   scripts/dev-run.sh tone [secs]      # --test-tone [secs]   (default 2s)
 #   scripts/dev-run.sh panic            # --panic-test         (crash-hook path)
 #   scripts/dev-run.sh list             # print available recipes
@@ -95,7 +94,6 @@ case "${RECIPE}" in
 Recipes (run the prebuilt binary; no recompile):
   dev            build, THEN launch the GUI (use while developing)
   gui            launch the egui desktop app               [default]
-  tui            launch the legacy terminal UI             (--tui)
   tone [secs]    play a test tone for [secs] seconds       (--test-tone)
   panic          trigger the panic/crash-hook path         (--panic-test)
 
@@ -107,7 +105,7 @@ Flags:
   --release      use the release binary instead of debug
 
 Append `-- <args>` to forward extra flags to termkrush, e.g.
-  scripts/dev-run.sh tui -- --log
+  scripts/dev-run.sh gui -- --log
 RECIPES
     ;;
 
@@ -136,11 +134,6 @@ RECIPES
     exec "${BIN}" "${EXTRA[@]+"${EXTRA[@]}"}"
     ;;
 
-  tui)
-    ensure_built
-    collect_extra "$@"
-    exec "${BIN}" --tui "${EXTRA[@]+"${EXTRA[@]}"}"
-    ;;
 
   tone)
     ensure_built

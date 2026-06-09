@@ -26,14 +26,58 @@ pub struct Block {
 }
 
 impl Block {
-    /// Length in stereo frames.
+    /// Length in stereo frames at the clip's native tempo.
     pub fn len_frames(&self) -> usize {
         self.samples.len() / 2
     }
 
-    /// One past the last frame this block occupies on the timeline.
+    /// Native end (one past the last source frame), ignoring varispeed.
     pub fn end(&self) -> u64 {
         self.start + self.len_frames() as u64
+    }
+
+    /// Source read speed to play this block at `target` tempo (turntable
+    /// varispeed: a 120-BPM clip under a 240 master reads at 2×). 1.0 when
+    /// either tempo is unknown — the block plays at its native rate.
+    pub fn speed(&self, target: Option<f32>) -> f64 {
+        match (self.bpm, target) {
+            (Some(b), Some(t)) if b > 0.0 && t > 0.0 => (t / b) as f64,
+            _ => 1.0,
+        }
+    }
+
+    /// Output length in timeline frames when played at `target` (varispeed:
+    /// faster → fewer output frames).
+    pub fn out_frames(&self, target: Option<f32>) -> u64 {
+        let s = self.speed(target);
+        if s <= 0.0 {
+            return self.len_frames() as u64;
+        }
+        (self.len_frames() as f64 / s).round() as u64
+    }
+
+    /// One past the last timeline frame this block occupies at `target`.
+    pub fn end_at(&self, target: Option<f32>) -> u64 {
+        self.start + self.out_frames(target)
+    }
+
+    /// Sample (linear-interpolated) at output offset `o` and channel `ch`,
+    /// reading the source at the varispeed rate for `target`.
+    fn sample_at(&self, target: Option<f32>, o: u64, ch: usize) -> f32 {
+        let src = o as f64 * self.speed(target);
+        let i = src.floor() as usize;
+        let n = self.len_frames();
+        if i >= n {
+            return 0.0;
+        }
+        let a = self.samples[i * 2 + ch];
+        let b = if i + 1 < n {
+            self.samples[(i + 1) * 2 + ch]
+        } else {
+            a
+        };
+        let frac = (src - i as f64) as f32;
+        a + (b - a) * frac
     }
 }
 
@@ -48,6 +92,9 @@ pub struct Track {
 pub struct Arrangement {
     tracks: Vec<Track>,
     sample_rate: u32,
+    /// Master tempo every block varispeeds to (set by the MASTER track). `None`
+    /// → blocks play at their native rate.
+    target_bpm: Option<f32>,
 }
 
 impl Arrangement {
@@ -56,11 +103,22 @@ impl Arrangement {
         Self {
             tracks: vec![Track::default(); tracks.max(1)],
             sample_rate: sample_rate.max(1),
+            target_bpm: None,
         }
     }
 
     pub fn sample_rate(&self) -> u32 {
         self.sample_rate
+    }
+
+    /// The master tempo all blocks lock to.
+    pub fn target_bpm(&self) -> Option<f32> {
+        self.target_bpm
+    }
+
+    /// Set the master tempo (every block varispeeds to it).
+    pub fn set_target_bpm(&mut self, bpm: Option<f32>) {
+        self.target_bpm = bpm;
     }
 
     pub fn track_count(&self) -> usize {
@@ -143,54 +201,56 @@ impl Arrangement {
         }
     }
 
-    /// Total length in frames — one past the last block end, or 0 if empty.
+    /// Total length in frames — one past the last (varispeed) block end, or 0.
     pub fn total_frames(&self) -> u64 {
+        let target = self.target_bpm;
         self.tracks
             .iter()
             .flat_map(|t| t.blocks.iter())
-            .map(|b| b.end())
+            .map(|b| b.end_at(target))
             .max()
             .unwrap_or(0)
     }
 
     /// Sum the arrangement into `out` (interleaved stereo) starting at frame
-    /// `playhead` — for live transport playback. `out.len()/2` frames are mixed;
-    /// blocks overlapping the window contribute their samples.
+    /// `playhead` — for live transport playback. Each block is varispeed-read to
+    /// the master tempo, so different-tempo clips lock together.
     pub fn mix_into(&self, playhead: u64, out: &mut [f32]) {
         let frames = out.len() / 2;
+        let win_end = playhead + frames as u64;
+        let target = self.target_bpm;
         for track in &self.tracks {
             for block in &track.blocks {
-                let (bs, be) = (block.start, block.end());
-                // Window of global frames covered by this call: [playhead, end).
-                let win_end = playhead + frames as u64;
+                let (bs, be) = (block.start, block.end_at(target));
                 if be <= playhead || bs >= win_end {
-                    continue; // block not in this window
+                    continue; // not in this window
                 }
-                let from = bs.max(playhead);
-                let to = be.min(win_end);
-                for gf in from..to {
+                for gf in bs.max(playhead)..be.min(win_end) {
                     let oi = (gf - playhead) as usize * 2;
-                    let bi = (gf - bs) as usize * 2;
-                    out[oi] += block.samples[bi];
-                    out[oi + 1] += block.samples[bi + 1];
+                    let o = gf - bs; // output offset within the stretched block
+                    out[oi] += block.sample_at(target, o, 0);
+                    out[oi + 1] += block.sample_at(target, o, 1);
                 }
             }
         }
     }
 
-    /// Render the whole arrangement to one interleaved-stereo buffer, summing
-    /// every block at its start position. Empty if there are no blocks.
+    /// Render the whole arrangement to one interleaved-stereo buffer, every block
+    /// varispeed-locked to the master tempo. Empty if there are no blocks.
     pub fn render(&self) -> Vec<f32> {
         let total = self.total_frames() as usize;
         if total == 0 {
             return Vec::new();
         }
+        let target = self.target_bpm;
         let mut out = vec![0.0f32; total * 2];
         for track in &self.tracks {
             for block in &track.blocks {
-                let base = block.start as usize * 2;
-                for (k, s) in block.samples.iter().enumerate() {
-                    out[base + k] += s;
+                let n = block.out_frames(target);
+                for o in 0..n {
+                    let base = (block.start + o) as usize * 2;
+                    out[base] += block.sample_at(target, o, 0);
+                    out[base + 1] += block.sample_at(target, o, 1);
                 }
             }
         }
@@ -290,6 +350,22 @@ mod tests {
         assert_eq!(out[5 * 2], 0.5, "block start (global frame 10) at offset 5");
         assert_eq!(out[14 * 2 + 1], 0.5, "last block frame, right channel");
         assert_eq!(out[15 * 2], 0.0, "after the block (global frame 20)");
+    }
+
+    #[test]
+    fn varispeed_locks_blocks_to_the_master_tempo() {
+        let mut a = Arrangement::new(1000, 1);
+        a.set_target_bpm(Some(240.0));
+        let mut b = block(0, 8, 0.5); // 8 native frames @ 120 BPM
+        b.bpm = Some(120.0); // half the master → reads 2× → 4 output frames
+        a.add_block(0, b);
+        let blk = &a.tracks()[0].blocks[0];
+        assert!((blk.speed(Some(240.0)) - 2.0).abs() < 1e-6);
+        assert_eq!(blk.out_frames(Some(240.0)), 4, "plays in half the time");
+        assert_eq!(a.total_frames(), 4);
+        // With no target, it plays natively (8 frames).
+        a.set_target_bpm(None);
+        assert_eq!(a.total_frames(), 8);
     }
 
     #[test]

@@ -374,10 +374,12 @@ impl TermKrushApp {
                             bpm: done.bpm,
                         },
                     );
-                    // A clip on the MASTER track (track 0) sets the tempo.
+                    // A clip on the MASTER track (track 0) sets the tempo every
+                    // other block varispeeds to.
                     if track == 0 {
                         if let Some(b) = done.bpm {
                             self.mixer.set_master_bpm(Some(b));
+                            self.arrangement.set_target_bpm(Some(b));
                         }
                     }
                 }
@@ -727,13 +729,20 @@ impl TermKrushApp {
 
                 // --- track lanes --- (collect into locals; apply after)
                 let moving_prev = self.tl_moving;
+                let target_bpm = self.arrangement.target_bpm(); // for synced block widths
                 let mut grab_dx = self.tl_grab_dx;
                 // Length (frames) of a clip being dragged from the grid, so we
                 // can preview the real block shape on the lane it's over.
                 let drag_preview_len: Option<u64> = egui::DragAndDrop::payload::<DragPad>(ui.ctx())
                     .map(|pd| {
                         let (a, b) = self.mixer.pad_trim(pd.0);
-                        b.saturating_sub(a) as u64
+                        let native = b.saturating_sub(a) as f64;
+                        // Show the varispeed (synced) length, matching where it lands.
+                        let speed = match (self.mixer.pad_bpm(pd.0), target_bpm) {
+                            (Some(bp), Some(t)) if bp > 0.0 && t > 0.0 => (t / bp) as f64,
+                            _ => 1.0,
+                        };
+                        (native / speed).round() as u64
                     });
                 let mut drop: Option<(usize, u64, PathBuf)> = None;
                 let mut drop_pad: Option<(usize, u64, usize)> = None;
@@ -780,7 +789,7 @@ impl TermKrushApp {
                                 self.arrangement.tracks()[t].blocks.iter().enumerate()
                             {
                                 let x0 = x_of(lane.left(), block.start);
-                                let x1 = x_of(lane.left(), block.end());
+                                let x1 = x_of(lane.left(), block.end_at(target_bpm));
                                 let br = egui::Rect::from_min_max(
                                     egui::pos2(x0, lane.top() + 2.0),
                                     egui::pos2(x1.max(x0 + 3.0), lane.bottom() - 2.0),
@@ -956,7 +965,7 @@ impl TermKrushApp {
                         .get(ft)
                         .and_then(|tr| tr.blocks.get(idx))
                     {
-                        let w = ((b.len_frames() as f32 / sr) * pxps).max(8.0);
+                        let w = ((b.out_frames(target_bpm) as f32 / sr) * pxps).max(8.0);
                         let g = egui::Rect::from_min_size(
                             egui::pos2(pp.x - grab_dx, pp.y - 12.0),
                             egui::vec2(w, 24.0),
@@ -1029,6 +1038,7 @@ impl TermKrushApp {
                         if t == 0 {
                             if let Some(b) = bpm {
                                 self.mixer.set_master_bpm(Some(b));
+                                self.arrangement.set_target_bpm(Some(b));
                             }
                         }
                     }

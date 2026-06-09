@@ -601,6 +601,36 @@ impl TermKrushApp {
                         }
                     };
                     ui.label(egui::RichText::new(pos).color(DIM));
+
+                    // Phase control for the SELECTED block — always reachable
+                    // here regardless of zoom/scroll (mirrors the block's badge).
+                    let sel = self.tl_sel.and_then(|(t, bi)| {
+                        self.arrangement
+                            .tracks()
+                            .get(t)
+                            .and_then(|tr| tr.blocks.get(bi))
+                            .map(|b| (t, bi, b.phase, self.onset_out(b), b.start))
+                    });
+                    if let Some((t, bi, cur, oo, start)) = sel {
+                        ui.add_space(12.0);
+                        if ui
+                            .button(
+                                egui::RichText::new(format!("phase: {}", phase_name(cur)))
+                                    .color(GREEN),
+                            )
+                            .on_hover_text(
+                                "nudge the selected block (on-beat → bar → off-beat → free)",
+                            )
+                            .clicked()
+                        {
+                            let next = next_phase(cur);
+                            let ns = self.snapped_start(start as f64, oo, next);
+                            if let Some(bm) = self.arrangement.block_mut(t, bi) {
+                                bm.phase = next;
+                                bm.start = ns;
+                            }
+                        }
+                    }
                 });
                 ui.add_space(4.0);
 
@@ -802,13 +832,17 @@ impl TermKrushApp {
                                     egui::pos2(x0, lane.top() + 2.0),
                                     egui::pos2(x1.max(x0 + 3.0), lane.bottom() - 2.0),
                                 );
-                                // Phase badge sits at the top-right (when there's room).
-                                let badge = (br.width() > 34.0).then(|| {
-                                    egui::Rect::from_min_size(
-                                        egui::pos2(br.right() - 15.0, br.top() + 1.0),
-                                        egui::vec2(14.0, 13.0),
-                                    )
-                                });
+                                // Phase badge pinned to the block's START (left),
+                                // clamped to the visible area so it's reachable at
+                                // any zoom/scroll — not off at the far right.
+                                let badge_x = br.left().max(lane.left()) + 2.0;
+                                let badge =
+                                    (br.right().min(lane.right()) - badge_x > 18.0).then(|| {
+                                        egui::Rect::from_min_size(
+                                            egui::pos2(badge_x, br.top() + 1.0),
+                                            egui::vec2(14.0, 13.0),
+                                        )
+                                    });
                                 // Hide the original while it's being moved (ghost shows).
                                 if moving_prev != Some((t, bi)) {
                                     let selected = self.tl_sel == Some((t, bi));
@@ -822,13 +856,6 @@ impl TermKrushApp {
                                         2.0,
                                         egui::Stroke::new(if selected { 2.0 } else { 1.0 }, AMBER),
                                     );
-                                    p.text(
-                                        br.left_top() + egui::vec2(4.0, 3.0),
-                                        egui::Align2::LEFT_TOP,
-                                        &block.label,
-                                        egui::FontId::proportional(11.0),
-                                        INK,
-                                    );
                                     if let Some(bd) = badge {
                                         p.rect_filled(bd, 2.0, GROUND);
                                         p.rect_stroke(bd, 2.0, egui::Stroke::new(1.0, GREEN));
@@ -840,6 +867,15 @@ impl TermKrushApp {
                                             GREEN,
                                         );
                                     }
+                                    // Name follows the badge (or the visible left).
+                                    let name_x = badge.map(|b| b.right() + 3.0).unwrap_or(badge_x);
+                                    p.text(
+                                        egui::pos2(name_x, br.top() + 3.0),
+                                        egui::Align2::LEFT_TOP,
+                                        &block.label,
+                                        egui::FontId::proportional(11.0),
+                                        INK,
+                                    );
                                 }
                                 let bresp = ui
                                     .interact(

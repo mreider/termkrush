@@ -104,8 +104,14 @@ enum Act {
     CommitRename,
     CancelRename,
     Delete(PathBuf),
-    MoveTo { track: PathBuf, folder: PathBuf },
-    LoadToPad { pad: usize, path: PathBuf },
+    MoveTo {
+        track: PathBuf,
+        folder: PathBuf,
+    },
+    LoadToPad {
+        pad: usize,
+        path: PathBuf,
+    },
     StartNewFolder,
     CommitNewFolder,
     CancelNewFolder,
@@ -119,6 +125,12 @@ enum Act {
     SetTrimIn(usize, usize),
     SetTrimOut(usize, usize),
     AuditionSel(usize),
+    /// Auto-detect beats into the clip (seed for hand-correction).
+    FindBeats(usize),
+    /// Clear all beat marks on the clip.
+    ClearBeats(usize),
+    /// Toggle a beat mark at a clip-absolute frame (add, or remove if near one).
+    ToggleBeat(usize, u64),
 }
 
 /// The whole app: the engine, the audio sink, and the browsed library.
@@ -127,6 +139,9 @@ pub struct TermKrushApp {
     crate_lib: Crate,
     /// Source path loaded on each pad (for the cell's track name).
     pad_source: [Option<PathBuf>; PADS],
+    /// Beat marks per clip, in clip-absolute frames (set in the clip editor;
+    /// carried onto timeline blocks for exact sync).
+    pad_beats: [Vec<u64>; PADS],
     /// The selected library track (delete / preview act on it).
     lib_sel: Option<PathBuf>,
     /// Inline rename in progress: `(target, buffer)`.
@@ -215,6 +230,7 @@ impl TermKrushApp {
             mixer,
             crate_lib,
             pad_source: Default::default(),
+            pad_beats: Default::default(),
             lib_sel: None,
             renaming: None,
             new_folder: None,
@@ -488,6 +504,7 @@ impl TermKrushApp {
             Act::ClearPad(i) => {
                 self.mixer.unload_pad(i);
                 self.pad_source[i] = None;
+                self.pad_beats[i].clear();
                 // Keep any placed blocks but cut their link to this pad.
                 self.arrangement.unlink_pad(i);
             }
@@ -519,6 +536,31 @@ impl TermKrushApp {
                     self.tl_playing = false; // auditioning a clip stops the timeline
                     let (inp, out) = self.mixer.pad_trim(i);
                     self.mixer.audition_region(i, inp, out);
+                }
+            }
+            Act::FindBeats(i) => {
+                // Auto-detect over the trimmed region; store clip-absolute.
+                let (inp, _out) = self.mixer.pad_trim(i);
+                let region = self.mixer.pad_clip_region(i);
+                let mut beats: Vec<u64> = detect_onsets(&region, 2, self.target_rate)
+                    .into_iter()
+                    .map(|f| (f + inp) as u64)
+                    .collect();
+                beats.sort_unstable();
+                self.pad_beats[i] = beats;
+            }
+            Act::ClearBeats(i) => self.pad_beats[i].clear(),
+            Act::ToggleBeat(i, frame) => {
+                // Remove a nearby mark (within ~30ms), else add one.
+                let tol = (self.target_rate as u64 * 30) / 1000;
+                if let Some(pos) = self.pad_beats[i]
+                    .iter()
+                    .position(|&b| b.abs_diff(frame) <= tol)
+                {
+                    self.pad_beats[i].remove(pos);
+                } else {
+                    self.pad_beats[i].push(frame);
+                    self.pad_beats[i].sort_unstable();
                 }
             }
         }
@@ -1268,10 +1310,21 @@ impl TermKrushApp {
                         // Auto-lock anything with internal rhythm (length-based),
                         // not the clip's kind.
                         let sync = self.default_sync(t, samples.len() / 2);
-                        let beats = detect_onsets(&samples, 2, self.target_rate)
-                            .into_iter()
-                            .map(|f| f as u64)
-                            .collect();
+                        // Prefer the clip's hand-marked beats (relative to the
+                        // trim region); fall back to auto-detect if unmarked.
+                        let (inp, out) = self.mixer.pad_trim(pad);
+                        let beats: Vec<u64> = if !self.pad_beats[pad].is_empty() {
+                            self.pad_beats[pad]
+                                .iter()
+                                .filter(|&&b| b >= inp as u64 && (b as usize) < out)
+                                .map(|&b| b - inp as u64)
+                                .collect()
+                        } else {
+                            detect_onsets(&samples, 2, self.target_rate)
+                                .into_iter()
+                                .map(|f| f as u64)
+                                .collect()
+                        };
                         let mut block = Block {
                             samples: std::sync::Arc::new(samples),
                             start: 0,
@@ -1627,6 +1680,7 @@ impl eframe::App for TermKrushApp {
                 mixer,
                 crate_lib,
                 pad_source,
+                pad_beats,
                 lib_sel,
                 renaming,
                 new_folder,
@@ -1654,7 +1708,7 @@ impl eframe::App for TermKrushApp {
                     .filter(|(p, _)| *p == i)
                     .map(|(_, w)| w.as_slice())
                     .unwrap_or(&[]);
-                draw_clip_editor(ctx, mixer, pad_source, i, wave, &mut acts);
+                draw_clip_editor(ctx, mixer, pad_source, i, wave, &pad_beats[i], &mut acts);
             } else {
                 draw_pad_grid(ctx, mixer, pad_source, &mut acts);
             }
@@ -2153,12 +2207,14 @@ fn draw_pad_grid(
 
 /// The clip editor: a full-clip waveform with draggable in/out handles. With a
 /// mouse the handles are precise enough that no zoom window is needed.
+#[allow(clippy::too_many_arguments)]
 fn draw_clip_editor(
     ctx: &egui::Context,
     mixer: &Mixer,
     pad_source: &[Option<PathBuf>; PADS],
     i: usize,
     wave: &[(f32, f32)],
+    beats: &[u64],
     acts: &mut Vec<Act>,
 ) {
     egui::CentralPanel::default().show(ctx, |ui| {
@@ -2202,12 +2258,33 @@ fn draw_clip_editor(
             ))
             .weak(),
         );
+        // Beat tools: auto-find, clear, and a count + how-to.
+        ui.horizontal(|ui| {
+            if ui
+                .button("find beats")
+                .on_hover_text("auto-detect beat marks, then click the waveform to correct")
+                .clicked()
+            {
+                acts.push(Act::FindBeats(i));
+            }
+            if ui.button("clear beats").clicked() {
+                acts.push(Act::ClearBeats(i));
+            }
+            ui.label(
+                egui::RichText::new(format!(
+                    "{} beats · click the waveform to add / remove",
+                    beats.len()
+                ))
+                .color(DIM)
+                .small(),
+            );
+        });
         ui.add_space(8.0);
 
-        // The waveform canvas.
+        // The waveform canvas (click to toggle a beat mark).
         let width = ui.available_width();
         let height = (ui.available_height() - 16.0).clamp(80.0, 360.0);
-        let (rect, _resp) = ui.allocate_exact_size(egui::vec2(width, height), egui::Sense::hover());
+        let (rect, resp) = ui.allocate_exact_size(egui::vec2(width, height), egui::Sense::click());
         let painter = ui.painter_at(rect);
         painter.rect_filled(rect, 4.0, GROUND);
         let mid = rect.center().y;
@@ -2225,6 +2302,24 @@ fn draw_clip_editor(
                 [egui::pos2(x, mid - hi * amp), egui::pos2(x, mid - lo * amp)],
                 egui::Stroke::new(1.0, color),
             );
+        }
+
+        // Beat marks (green verticals).
+        for &b in beats {
+            if (b as usize) < len {
+                let x = x_of(b as usize);
+                painter.line_segment(
+                    [egui::pos2(x, rect.top()), egui::pos2(x, rect.bottom())],
+                    egui::Stroke::new(1.5, GREEN),
+                );
+            }
+        }
+        // Click the canvas (not a handle) to add/remove a beat at that frame.
+        if resp.clicked() {
+            if let Some(p) = resp.interact_pointer_pos() {
+                let f = (((p.x - rect.left()) / rect.width()).clamp(0.0, 1.0) * len as f32) as u64;
+                acts.push(Act::ToggleBeat(i, f));
+            }
         }
 
         // Draggable handles. A thin grab rect around each in/out line.

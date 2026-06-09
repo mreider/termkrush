@@ -645,9 +645,10 @@ impl TermKrushApp {
                             egui::Stroke::new(1.0, DIM),
                         );
                         if let Some(s) = label {
+                            // Centered over the tick so the number lines up with it.
                             rp.text(
-                                egui::pos2(x + 2.0, ruler.top() + 1.0),
-                                egui::Align2::LEFT_TOP,
+                                egui::pos2(x, ruler.top() + 1.0),
+                                egui::Align2::CENTER_TOP,
                                 s,
                                 egui::FontId::proportional(9.0),
                                 DIM,

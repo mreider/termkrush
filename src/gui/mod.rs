@@ -20,6 +20,7 @@ use termkrush_core::audio::{
 use termkrush_core::config::Config;
 use termkrush_core::library::Crate;
 use termkrush_core::mix::{Mixer, PadKind, PADS};
+use termkrush_core::scratch::detect_onsets;
 
 // The landing-page palette (index.html CSS vars), so the app matches the site.
 // Body text is the cream `--ink`; amber/green are accents, not the text color.
@@ -88,6 +89,8 @@ struct LoadDone {
     target: Target,
     audio: Option<DecodedAudio>,
     bpm: Option<f32>,
+    /// Detected percussion onsets (timeline drops) for the on-block beat markers.
+    beats: Vec<u64>,
     path: PathBuf,
 }
 
@@ -315,10 +318,20 @@ impl TermKrushApp {
                     let bpm = matches!(target, Target::Pad(_) | Target::Timeline { .. })
                         .then(|| detect_bpm(&audio.samples, audio.channels, audio.sample_rate))
                         .flatten();
+                    // Percussion-onset markers for timeline drops (visual aid).
+                    let beats = matches!(target, Target::Timeline { .. })
+                        .then(|| {
+                            detect_onsets(&audio.samples, audio.channels, audio.sample_rate)
+                                .into_iter()
+                                .map(|f| f as u64)
+                                .collect()
+                        })
+                        .unwrap_or_default();
                     LoadDone {
                         target,
                         audio: Some(audio),
                         bpm,
+                        beats,
                         path,
                     }
                 }
@@ -328,6 +341,7 @@ impl TermKrushApp {
                         target,
                         audio: None,
                         bpm: None,
+                        beats: Vec::new(),
                         path,
                     }
                 }
@@ -385,6 +399,7 @@ impl TermKrushApp {
                         phase: Phase::OnBeat,
                         sync,
                         nudge: 0,
+                        beats: done.beats,
                     };
                     block.start = self.snapped_start(raw, block.phase, block.nudge);
                     self.arrangement.add_block(track, block);
@@ -949,6 +964,26 @@ impl TermKrushApp {
                                         egui::FontId::proportional(11.0),
                                         INK,
                                     );
+                                    // Detected percussion-beat markers (faint),
+                                    // mapped through varispeed — line these up
+                                    // with the gridlines by setting the BPM.
+                                    let bspeed = block.speed(target_bpm);
+                                    for &on in &block.beats {
+                                        let f = block.start + (on as f64 / bspeed) as u64;
+                                        let mx = x_of(lane.left(), f);
+                                        if mx > br.right() {
+                                            break; // onsets are sorted
+                                        }
+                                        if mx >= br.left().max(lane.left()) && mx <= lane.right() {
+                                            p.line_segment(
+                                                [
+                                                    egui::pos2(mx, br.top() + 3.0),
+                                                    egui::pos2(mx, br.bottom() - 3.0),
+                                                ],
+                                                egui::Stroke::new(1.0, INK.gamma_multiply(0.35)),
+                                            );
+                                        }
+                                    }
                                     // Start marker: a bright tick at the block's
                                     // start (= the hit). On a gridline → on the beat.
                                     let hx = x_of(lane.left(), block.start);
@@ -1233,6 +1268,10 @@ impl TermKrushApp {
                         // Auto-lock anything with internal rhythm (length-based),
                         // not the clip's kind.
                         let sync = self.default_sync(t, samples.len() / 2);
+                        let beats = detect_onsets(&samples, 2, self.target_rate)
+                            .into_iter()
+                            .map(|f| f as u64)
+                            .collect();
                         let mut block = Block {
                             samples: std::sync::Arc::new(samples),
                             start: 0,
@@ -1242,6 +1281,7 @@ impl TermKrushApp {
                             phase: Phase::OnBeat,
                             sync,
                             nudge: 0,
+                            beats,
                         };
                         block.start = self.snapped_start(raw as f64, block.phase, block.nudge);
                         self.arrangement.add_block(t, block);

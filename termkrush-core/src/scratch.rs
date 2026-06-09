@@ -43,6 +43,53 @@ pub fn detect_pivot(samples: &[f32], channels: u16) -> usize {
     best_w * win
 }
 
+/// Find percussive onsets (energy-rise peaks) across an interleaved clip, in
+/// frames — used to draw "where the beat is" markers. Peaks above an adaptive
+/// threshold, spaced at least ~80 ms apart so a single hit isn't double-counted.
+pub fn detect_onsets(samples: &[f32], channels: u16, sample_rate: u32) -> Vec<usize> {
+    let ch = channels.max(1) as usize;
+    let frames = samples.len() / ch;
+    let win = (sample_rate as usize / 100).max(64); // ~10 ms windows
+    let n = frames / win;
+    if n < 4 {
+        return Vec::new();
+    }
+    // Per-window energy (channel 0 is representative), then positive flux.
+    let energy: Vec<f64> = (0..n)
+        .map(|w| {
+            (w * win..(w + 1) * win)
+                .map(|f| {
+                    let s = samples[f * ch] as f64;
+                    s * s
+                })
+                .sum()
+        })
+        .collect();
+    let flux: Vec<f64> = (0..n)
+        .map(|w| {
+            if w == 0 {
+                0.0
+            } else {
+                (energy[w] - energy[w - 1]).max(0.0)
+            }
+        })
+        .collect();
+    let mean = flux.iter().sum::<f64>() / n as f64;
+    let var = flux.iter().map(|x| (x - mean) * (x - mean)).sum::<f64>() / n as f64;
+    let thresh = mean + 1.5 * var.sqrt();
+    let min_gap = ((sample_rate as usize * 80 / 1000) / win).max(1); // ~80 ms
+    let mut onsets = Vec::new();
+    let mut last: Option<usize> = None;
+    for w in 1..n - 1 {
+        let peak = flux[w] > thresh && flux[w] >= flux[w - 1] && flux[w] >= flux[w + 1];
+        if peak && last.map_or(true, |l| w - l >= min_gap) {
+            onsets.push(w * win);
+            last = Some(w);
+        }
+    }
+    onsets
+}
+
 /// One linear move of the read head across the record, gated by `gain`
 /// (the crossfader): `0.0` = muted (silent), `1.0` = audible.
 #[derive(Debug, Clone, Copy)]
@@ -121,6 +168,31 @@ pub fn phrase_strokes(units: &[ScratchUnit], pivot: usize, slice: usize) -> Vec<
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn detect_onsets_finds_spaced_hits() {
+        // 4 clicks at interior frames in a 2s stereo clip @ 8 kHz (none at 0,
+        // which falls in the skipped first window).
+        let sr = 8000u32;
+        let want = [800usize, 4000, 8000, 12000];
+        let mut samples = vec![0.0f32; (sr as usize * 2) * 2];
+        for &f in &want {
+            for j in 0..32 {
+                let idx = (f + j) * 2;
+                if idx < samples.len() {
+                    samples[idx] = 0.9; // a short loud burst (channel 0)
+                }
+            }
+        }
+        let onsets = detect_onsets(&samples, 2, sr);
+        assert_eq!(onsets.len(), 4, "one per click, got {onsets:?}");
+        for (got, w) in onsets.iter().zip(want) {
+            assert!(
+                (*got as i64 - w as i64).abs() <= sr as i64 / 100 + 1,
+                "{got} vs {w}"
+            );
+        }
+    }
 
     #[test]
     fn phrase_expands_to_concatenated_strokes() {

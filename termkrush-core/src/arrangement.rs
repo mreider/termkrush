@@ -46,6 +46,9 @@ pub struct Block {
     /// the user can hand-dial a hit when onset detection isn't perfect. Survives
     /// re-snaps (move / phase cycle).
     pub nudge: i64,
+    /// Detected percussion onsets in *source* frames (for the on-block beat
+    /// markers — purely visual, helps set the BPM to match).
+    pub beats: Vec<u64>,
 }
 
 impl Block {
@@ -315,6 +318,7 @@ mod tests {
             phase: Phase::default(),
             sync: false,
             nudge: 0,
+            beats: Vec::new(),
         }
     }
 

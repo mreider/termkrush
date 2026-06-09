@@ -631,13 +631,16 @@ impl TermKrushApp {
                 }
                 let phx = x_of(ruler.left(), self.tl_playhead);
                 if phx >= ruler.left() && phx <= ruler.right() {
-                    rp.text(
-                        egui::pos2(phx, ruler.top()),
-                        egui::Align2::CENTER_TOP,
-                        "▼",
-                        egui::FontId::proportional(11.0),
+                    // Painted downward triangle (a glyph would be tofu in our fonts).
+                    rp.add(egui::Shape::convex_polygon(
+                        vec![
+                            egui::pos2(phx - 5.0, ruler.top()),
+                            egui::pos2(phx + 5.0, ruler.top()),
+                            egui::pos2(phx, ruler.top() + 9.0),
+                        ],
                         GREEN,
-                    );
+                        egui::Stroke::NONE,
+                    ));
                 }
 
                 // --- track lanes --- (collect into locals; apply after)

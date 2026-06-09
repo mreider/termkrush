@@ -609,12 +609,16 @@ impl TermKrushApp {
                     self.tl_scroll = self.tl_playhead;
                 }
 
-                // Bound the scroll to the content + half a screen of headroom (so
-                // you can drop just past the end). Auto-extends as blocks land
-                // further out (total_frames grows).
-                let extent = (self.arrangement.total_frames() + view_frames / 2)
-                    .max(view_frames)
-                    .max(1);
+                // Only scrollable when the content is longer than the view. When
+                // it is, the extent adds half a screen of headroom (so you can
+                // drop just past the end); otherwise there's nothing to scroll.
+                let content = self.arrangement.total_frames();
+                let scrollable = content > view_frames;
+                let extent = if scrollable {
+                    content + view_frames / 2
+                } else {
+                    view_frames.max(1)
+                };
                 let max_scroll = extent.saturating_sub(view_frames);
                 self.tl_scroll = self.tl_scroll.min(max_scroll);
 
@@ -878,27 +882,33 @@ impl TermKrushApp {
                             ui.add_space(4.0);
                         }
                     });
-                // --- horizontal scrollbar --- (extent = content + headroom, so
-                // the thumb actually reaches the end — no infinite scroll).
-                let total = extent;
-                let (bar, bresp) =
-                    ui.allocate_exact_size(egui::vec2(width, 12.0), egui::Sense::click_and_drag());
-                let bp = ui.painter_at(bar);
-                bp.rect_filled(bar, 3.0, PANEL);
-                bp.rect_stroke(bar, 3.0, egui::Stroke::new(1.0, LINE));
-                let track_w = bar.width();
-                let thumb_x = bar.left() + (self.tl_scroll as f32 / total as f32) * track_w;
-                let thumb_w = ((view_frames as f32 / total as f32) * track_w).clamp(24.0, track_w);
-                let thumb = egui::Rect::from_min_size(
-                    egui::pos2(thumb_x.min(bar.right() - thumb_w), bar.top() + 1.0),
-                    egui::vec2(thumb_w, bar.height() - 2.0),
-                );
-                bp.rect_filled(thumb, 3.0, AMBER.gamma_multiply(0.7));
-                if bresp.clicked() || bresp.dragged() {
-                    if let Some(pp) = bresp.interact_pointer_pos() {
-                        // Center the thumb on the pointer.
-                        let rel = ((pp.x - bar.left() - thumb_w / 2.0) / track_w).clamp(0.0, 1.0);
-                        self.tl_scroll = ((rel * total as f32) as u64).min(max_scroll);
+                // --- horizontal scrollbar --- only when the content exceeds the
+                // view (extent includes the headroom, so the thumb reaches the end).
+                if scrollable {
+                    let total = extent;
+                    let (bar, bresp) = ui.allocate_exact_size(
+                        egui::vec2(width, 12.0),
+                        egui::Sense::click_and_drag(),
+                    );
+                    let bp = ui.painter_at(bar);
+                    bp.rect_filled(bar, 3.0, PANEL);
+                    bp.rect_stroke(bar, 3.0, egui::Stroke::new(1.0, LINE));
+                    let track_w = bar.width();
+                    let thumb_x = bar.left() + (self.tl_scroll as f32 / total as f32) * track_w;
+                    let thumb_w =
+                        ((view_frames as f32 / total as f32) * track_w).clamp(24.0, track_w);
+                    let thumb = egui::Rect::from_min_size(
+                        egui::pos2(thumb_x.min(bar.right() - thumb_w), bar.top() + 1.0),
+                        egui::vec2(thumb_w, bar.height() - 2.0),
+                    );
+                    bp.rect_filled(thumb, 3.0, AMBER.gamma_multiply(0.7));
+                    if bresp.clicked() || bresp.dragged() {
+                        if let Some(pp) = bresp.interact_pointer_pos() {
+                            // Center the thumb on the pointer.
+                            let rel =
+                                ((pp.x - bar.left() - thumb_w / 2.0) / track_w).clamp(0.0, 1.0);
+                            self.tl_scroll = ((rel * total as f32) as u64).min(max_scroll);
+                        }
                     }
                 }
 

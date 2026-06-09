@@ -571,6 +571,20 @@ impl TermKrushApp {
                         .map(|b| format!("{b:.0} BPM"))
                         .unwrap_or_else(|| "-- BPM".into());
                     ui.label(egui::RichText::new(bpm).color(GREEN));
+                    // Where the playhead is: bar.beat (if tempo) or m:ss.
+                    let ph = self.tl_playhead;
+                    let pos = match master_bpm {
+                        Some(b) if b > 0.0 => {
+                            let fpb = (sr * 60.0 / b) as u64; // frames / beat
+                            let beat = if fpb > 0 { ph / fpb } else { 0 };
+                            format!("{}.{}", beat / 4 + 1, beat % 4 + 1)
+                        }
+                        _ => {
+                            let s = (ph as f32 / sr) as u64;
+                            format!("{}:{:02}", s / 60, s % 60)
+                        }
+                    };
+                    ui.label(egui::RichText::new(pos).color(DIM));
                 });
                 ui.add_space(4.0);
 
@@ -585,10 +599,12 @@ impl TermKrushApp {
                     }
                 }
                 // Page the view when the playhead crosses the right edge, so it
-                // restarts from the left rather than scrolling continuously.
+                // restarts from the left rather than scrolling continuously. Only
+                // while PLAYING — otherwise it yanks back any manual scroll.
                 let view_frames = (((width - GUTTER).max(1.0)) / pxps * sr) as u64;
-                if self.tl_playhead >= self.tl_scroll + view_frames
-                    || self.tl_playhead < self.tl_scroll
+                if self.tl_playing
+                    && (self.tl_playhead >= self.tl_scroll + view_frames
+                        || self.tl_playhead < self.tl_scroll)
                 {
                     self.tl_scroll = self.tl_playhead;
                 }
@@ -601,35 +617,69 @@ impl TermKrushApp {
                     (scroll + ((x - left - GUTTER) / pxps * sr) as f64).max(0.0) as u64
                 };
 
-                // --- ruler: scrub the playhead with the mouse ---
+                // --- ruler: scrub the playhead + read where you are ---
                 let (ruler, rresp) =
-                    ui.allocate_exact_size(egui::vec2(width, 16.0), egui::Sense::click_and_drag());
+                    ui.allocate_exact_size(egui::vec2(width, 22.0), egui::Sense::click_and_drag());
                 let rp = ui.painter_at(ruler);
                 rp.rect_filled(ruler, 0.0, GROUND);
                 rp.line_segment(
                     [ruler.left_bottom(), ruler.right_bottom()],
                     egui::Stroke::new(1.0, LINE),
                 );
-                if let Some(b) = master_bpm {
-                    if b > 0.0 {
-                        let fpbar = sr * 60.0 / b * 4.0; // 4 beats / bar
+                let mut tick = |x: f32, label: Option<String>| {
+                    if x >= ruler.left() && x <= ruler.right() {
+                        rp.line_segment(
+                            [
+                                egui::pos2(x, ruler.bottom() - 5.0),
+                                egui::pos2(x, ruler.bottom()),
+                            ],
+                            egui::Stroke::new(1.0, DIM),
+                        );
+                        if let Some(s) = label {
+                            rp.text(
+                                egui::pos2(x + 2.0, ruler.top() + 1.0),
+                                egui::Align2::LEFT_TOP,
+                                s,
+                                egui::FontId::proportional(9.0),
+                                DIM,
+                            );
+                        }
+                    }
+                };
+                match master_bpm {
+                    // Bars (4/4) when a tempo is known; label every Nth so they
+                    // don't crowd at low zoom.
+                    Some(b) if b > 0.0 => {
+                        let fpbar = sr * 60.0 / b * 4.0;
+                        let step = ((40.0 / (fpbar / sr * pxps)).ceil() as u32).max(1);
                         let mut bar = 0u32;
                         loop {
-                            let x = x_of(ruler.left(), (bar as f32 * fpbar) as u64);
+                            let x = x_of(ruler.left(), (bar as f64 * fpbar as f64) as u64);
                             if x > ruler.right() {
                                 break;
                             }
-                            if x >= ruler.left() {
-                                rp.line_segment(
-                                    [
-                                        egui::pos2(x, ruler.bottom() - 5.0),
-                                        egui::pos2(x, ruler.bottom()),
-                                    ],
-                                    egui::Stroke::new(1.0, DIM),
-                                );
-                            }
+                            tick(x, (bar % step == 0).then(|| format!("{}", bar + 1)));
                             bar += 1;
-                            if bar > 4096 {
+                            if bar > 8192 {
+                                break;
+                            }
+                        }
+                    }
+                    // Otherwise seconds (m:ss).
+                    _ => {
+                        let step = ((48.0 / pxps).ceil() as u32).max(1);
+                        let mut s = 0u32;
+                        loop {
+                            let x = x_of(ruler.left(), (s as f64 * sr as f64) as u64);
+                            if x > ruler.right() {
+                                break;
+                            }
+                            tick(
+                                x,
+                                (s % step == 0).then(|| format!("{}:{:02}", s / 60, s % 60)),
+                            );
+                            s += 1;
+                            if s > 100_000 {
                                 break;
                             }
                         }

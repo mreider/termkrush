@@ -47,6 +47,10 @@ pub struct Block {
     /// one-shot is a single hit with no tempo, so it plays at its native pitch
     /// and is merely phase-placed (varispeeding it would chipmunk it).
     pub sync: bool,
+    /// Manual fine offset (timeline frames, ±) applied after the grid snap, so
+    /// the user can hand-dial a hit when onset detection isn't perfect. Survives
+    /// re-snaps (move / phase cycle).
+    pub nudge: i64,
 }
 
 impl Block {
@@ -304,6 +308,7 @@ mod tests {
             onset: 0,
             phase: Phase::default(),
             sync: false,
+            nudge: 0,
         }
     }
 

@@ -393,9 +393,10 @@ impl TermKrushApp {
                         onset: done.onset,
                         phase: Phase::OnBeat,
                         sync: false, // library drop: native + phase-placed (set a loop clip to tempo-lock)
+                        nudge: 0,
                     };
                     let oo = self.onset_out(&block);
-                    block.start = self.snapped_start(raw, oo, block.phase);
+                    block.start = self.snapped_start(raw, oo, block.phase, block.nudge);
                     self.arrangement.add_block(track, block);
                 }
             }
@@ -609,25 +610,41 @@ impl TermKrushApp {
                             .tracks()
                             .get(t)
                             .and_then(|tr| tr.blocks.get(bi))
-                            .map(|b| (t, bi, b.phase, self.onset_out(b), b.start))
+                            .map(|b| (t, bi, b.phase, self.onset_out(b), b.start, b.nudge))
                     });
-                    if let Some((t, bi, cur, oo, start)) = sel {
+                    if let Some((t, bi, cur, oo, start, ndg)) = sel {
                         ui.add_space(12.0);
+                        // Phase cycle.
                         if ui
                             .button(
                                 egui::RichText::new(format!("phase: {}", phase_name(cur)))
                                     .color(GREEN),
                             )
-                            .on_hover_text(
-                                "nudge the selected block (on-beat → bar → off-beat → free)",
-                            )
+                            .on_hover_text("on-beat → bar → off-beat → free")
                             .clicked()
                         {
                             let next = next_phase(cur);
-                            let ns = self.snapped_start(start as f64, oo, next);
+                            let ns = self.snapped_start(start as f64, oo, next, ndg);
                             if let Some(bm) = self.arrangement.block_mut(t, bi) {
                                 bm.phase = next;
                                 bm.start = ns;
+                            }
+                        }
+                        // Fine micro-nudge: ±1/16 of a beat per tap (hand-dialing).
+                        let sixteenth = self
+                            .mixer
+                            .master_bpm()
+                            .map(|b| (self.target_rate as f64 * 60.0 / b as f64 / 4.0) as i64);
+                        if let Some(step) = sixteenth {
+                            for (lbl, dir) in [(ph::CARET_LEFT, -1i64), (ph::CARET_RIGHT, 1i64)] {
+                                if icon_btn(ui, lbl, "nudge ±1/16 beat") {
+                                    let nn = ndg + dir * step;
+                                    let ns = self.snapped_start(start as f64, oo, cur, nn);
+                                    if let Some(bm) = self.arrangement.block_mut(t, bi) {
+                                        bm.nudge = nn;
+                                        bm.start = ns;
+                                    }
+                                }
                             }
                         }
                     }
@@ -675,6 +692,12 @@ impl TermKrushApp {
                 let frame_at = |left: f32, x: f32| -> u64 {
                     (scroll + ((x - left - GUTTER) / pxps * sr) as f64).max(0.0) as u64
                 };
+                // Beat grid anchored to the MASTER downbeat — the ruler ticks and
+                // the lane gridlines both hang off this, so they line up.
+                let g_origin = self.grid_origin();
+                let fpb_opt = master_bpm
+                    .filter(|b| *b > 0.0)
+                    .map(|b| sr as f64 * 60.0 / b as f64);
 
                 // --- ruler: scrub the playhead + read where you are ---
                 let (ruler, rresp) =
@@ -710,17 +733,21 @@ impl TermKrushApp {
                     // Bars (4/4) when a tempo is known; label every Nth so they
                     // don't crowd at low zoom.
                     Some(b) if b > 0.0 => {
-                        let fpbar = sr * 60.0 / b * 4.0;
-                        let step = ((40.0 / (fpbar / sr * pxps)).ceil() as u32).max(1);
-                        let mut bar = 0u32;
+                        let fpbar = sr as f64 * 60.0 / b as f64 * 4.0; // frames/bar
+                        let step = ((40.0 / (fpbar as f32 / sr * pxps)).ceil() as i64).max(1);
+                        let m0 = ((scroll - g_origin) / fpbar).floor() as i64;
+                        let mut m = m0;
                         loop {
-                            let x = x_of(ruler.left(), (bar as f64 * fpbar as f64) as u64);
+                            let f = g_origin + m as f64 * fpbar;
+                            let x = x_of(ruler.left(), f.max(0.0) as u64);
                             if x > ruler.right() {
                                 break;
                             }
-                            tick(x, (bar % step == 0).then(|| format!("{}", bar + 1)));
-                            bar += 1;
-                            if bar > 8192 {
+                            if f >= 0.0 {
+                                tick(x, (m.rem_euclid(step) == 0).then(|| format!("{}", m + 1)));
+                            }
+                            m += 1;
+                            if m - m0 > 8192 {
                                 break;
                             }
                         }
@@ -823,6 +850,36 @@ impl TermKrushApp {
                                     AMBER.gamma_multiply(0.8),
                                 );
                             }
+                            // Beat gridlines (anchored to the MASTER downbeat),
+                            // brighter on the bar — so you can SEE where beats are.
+                            if let Some(fpb) = fpb_opt {
+                                let k0 = ((scroll - g_origin) / fpb).floor() as i64;
+                                let mut k = k0;
+                                loop {
+                                    let f = g_origin + k as f64 * fpb;
+                                    let x = x_of(lane.left(), f.max(0.0) as u64);
+                                    if x > lane.right() {
+                                        break;
+                                    }
+                                    if f >= 0.0 && x >= lane.left() {
+                                        let bar = k.rem_euclid(4) == 0;
+                                        p.line_segment(
+                                            [
+                                                egui::pos2(x, lane.top()),
+                                                egui::pos2(x, lane.bottom()),
+                                            ],
+                                            egui::Stroke::new(
+                                                1.0,
+                                                DIM.gamma_multiply(if bar { 0.55 } else { 0.22 }),
+                                            ),
+                                        );
+                                    }
+                                    k += 1;
+                                    if k - k0 > 4096 {
+                                        break;
+                                    }
+                                }
+                            }
                             for (bi, block) in
                                 self.arrangement.tracks()[t].blocks.iter().enumerate()
                             {
@@ -876,6 +933,17 @@ impl TermKrushApp {
                                         egui::FontId::proportional(11.0),
                                         INK,
                                     );
+                                    // Hit marker: a bright tick at the block's onset
+                                    // (the actual sound). When it sits on a gridline,
+                                    // the hit is on the beat.
+                                    let hit = block.start as f64 + self.onset_out(block);
+                                    let hx = x_of(lane.left(), hit as u64);
+                                    if hx >= lane.left() && hx <= lane.right() {
+                                        p.line_segment(
+                                            [egui::pos2(hx, br.top()), egui::pos2(hx, br.bottom())],
+                                            egui::Stroke::new(2.0, GREEN),
+                                        );
+                                    }
                                 }
                                 let bresp = ui
                                     .interact(
@@ -1093,7 +1161,7 @@ impl TermKrushApp {
                         let next = next_phase(b.phase);
                         let oo = self.onset_out(b);
                         let raw = b.start as f64;
-                        let ns = self.snapped_start(raw, oo, next);
+                        let ns = self.snapped_start(raw, oo, next, b.nudge);
                         if let Some(bm) = self.arrangement.block_mut(t, bi) {
                             bm.phase = next;
                             bm.start = ns;
@@ -1108,9 +1176,9 @@ impl TermKrushApp {
                         // Re-snap by the block's own onset + phase (cached — no
                         // recalc), anchored at the grabbed point.
                         if let Some(b) = self.arrangement.tracks()[ft].blocks.get(idx) {
-                            let (oo, phase) = (self.onset_out(b), b.phase);
+                            let (oo, phase, ndg) = (self.onset_out(b), b.phase, b.nudge);
                             let raw = frame_at(lane_rects[nt].left(), pp.x - grab_dx) as f64;
-                            let nstart = self.snapped_start(raw, oo, phase);
+                            let nstart = self.snapped_start(raw, oo, phase, ndg);
                             self.arrangement.move_block(ft, idx, nt, nstart);
                         }
                     }
@@ -1162,9 +1230,10 @@ impl TermKrushApp {
                             onset,
                             phase: Phase::OnBeat,
                             sync,
+                            nudge: 0,
                         };
                         let oo = self.onset_out(&block);
-                        block.start = self.snapped_start(raw as f64, oo, block.phase);
+                        block.start = self.snapped_start(raw as f64, oo, block.phase, block.nudge);
                         self.arrangement.add_block(t, block);
                     }
                 }
@@ -1366,18 +1435,34 @@ impl TermKrushApp {
             .refresh_pad(pad, std::sync::Arc::new(samples));
     }
 
-    /// Place a block so its onset lands on the phase target nearest `raw_start`
-    /// (timeline frames). `onset_out` is the onset offset in *timeline* frames
-    /// (source onset ÷ varispeed). With no master tempo, returns `raw_start`.
-    fn snapped_start(&self, raw_start: f64, onset_out: f64, phase: Phase) -> u64 {
+    /// Timeline frame of the MASTER track's downbeat (its first block's hit).
+    /// The grid is anchored HERE, not frame 0, so other clips snap to where the
+    /// MASTER's beats actually fall. 0 if the MASTER track has no blocks yet.
+    fn grid_origin(&self) -> f64 {
+        self.arrangement
+            .tracks()
+            .first()
+            .and_then(|t| t.blocks.first())
+            .map(|b| b.start as f64 + self.onset_out(b))
+            .unwrap_or(0.0)
+    }
+
+    /// Place a block so its onset lands on the phase target nearest `raw_start`,
+    /// on the MASTER-anchored grid, plus the manual `nudge` (frames). With no
+    /// master tempo, returns `raw_start + nudge`.
+    fn snapped_start(&self, raw_start: f64, onset_out: f64, phase: Phase, nudge: i64) -> u64 {
         let sr = self.target_rate.max(1) as f64;
+        let n = nudge as f64;
         let fpb = match self.mixer.master_bpm() {
             Some(b) if b > 0.0 => sr * 60.0 / b as f64,
-            _ => return raw_start.max(0.0) as u64,
+            _ => return (raw_start + n).max(0.0) as u64,
         };
+        let origin = self.grid_origin();
         match phase {
-            // No onset fix — the clip's file start sits on the beat.
-            Phase::Free => ((raw_start / fpb).round() * fpb).max(0.0) as u64,
+            // No onset fix — the clip's file start sits on a grid beat.
+            Phase::Free => {
+                (origin + ((raw_start - origin) / fpb).round() * fpb + n).max(0.0) as u64
+            }
             _ => {
                 let onset_raw = raw_start + onset_out; // where the hit is now
                 let grid = if phase == Phase::Bar { fpb * 4.0 } else { fpb };
@@ -1386,8 +1471,8 @@ impl TermKrushApp {
                 } else {
                     0.0
                 };
-                let anchor = ((onset_raw - off) / grid).round() * grid + off;
-                (anchor - onset_out).max(0.0) as u64
+                let anchor = origin + off + ((onset_raw - origin - off) / grid).round() * grid;
+                (anchor - onset_out + n).max(0.0) as u64
             }
         }
     }

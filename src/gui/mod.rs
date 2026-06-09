@@ -1941,16 +1941,31 @@ fn draw_pad_cell(
                         acts.push(Act::PlayPad(i));
                     }
                 }
+                // Drag handle: only the grip + name strip is the drag source, so
+                // the kind/volume/edit/clear/export controls below keep their clicks.
+                let handle = ui
+                    .horizontal(|ui| {
+                        if loaded {
+                            ui.label(egui::RichText::new(ph::DOTS_SIX_VERTICAL).color(DIM));
+                        }
+                        let name = if track.is_empty() { "—" } else { &track };
+                        ui.add(
+                            egui::Label::new(egui::RichText::new(name).color(AMBER).strong())
+                                .truncate(),
+                        );
+                    })
+                    .response;
                 if loaded {
-                    // Visual cue that the clip is draggable (the whole cell is
-                    // the drag source — see the cell interact below).
-                    ui.label(egui::RichText::new(ph::DOTS_SIX_VERTICAL).color(DIM))
+                    let handle = handle
+                        .interact(egui::Sense::click_and_drag())
                         .on_hover_text("drag the clip onto the timeline");
+                    handle.dnd_set_drag_payload(DragPad(i));
+                    if handle.dragged() {
+                        ui.ctx().set_cursor_icon(egui::CursorIcon::Grabbing);
+                    } else {
+                        handle.on_hover_cursor(egui::CursorIcon::Grab);
+                    }
                 }
-                let name = if track.is_empty() { "—" } else { &track };
-                ui.add(
-                    egui::Label::new(egui::RichText::new(name).color(AMBER).strong()).truncate(),
-                );
             });
 
             if !loaded {
@@ -1994,24 +2009,14 @@ fn draw_pad_cell(
             });
         });
     });
-    // The whole cell is the drag source (Sense::drag doesn't steal the inner
-    // buttons' clicks — clicks have click-sense, this has drag-sense), and the
-    // same response receives a dragged library track (load).
+    // Cell-level HOVER interact (not drag/click — so it never eats the inner
+    // buttons' clicks): just receives a dragged library track + the highlight.
+    // The drag source is the header handle above.
     let cell = ui.interact(
         inner.response.rect,
         egui::Id::new(("clipcell", i)),
-        egui::Sense::drag(),
+        egui::Sense::hover(),
     );
-    if loaded {
-        cell.dnd_set_drag_payload(DragPad(i)); // drag the clip anywhere → timeline
-                                               // Arrow on hover, grabbing hand only while dragging. (Over an inner
-                                               // button/slider the cell isn't `hovered`, so those keep their cursors.)
-        if cell.dragged() {
-            ui.ctx().set_cursor_icon(egui::CursorIcon::Grabbing);
-        } else if cell.hovered() {
-            ui.ctx().set_cursor_icon(egui::CursorIcon::Default);
-        }
-    }
     if cell.dnd_hover_payload::<DragTrack>().is_some() {
         let r = inner.response.rect;
         ui.painter().rect_filled(r, 4.0, AMBER.gamma_multiply(0.15));

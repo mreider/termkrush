@@ -37,12 +37,19 @@ const WAVE_COLS: usize = 1600;
 
 /// Launch the desktop app. Blocks until the window closes.
 pub fn run() -> eframe::Result<()> {
+    let mut viewport = egui::ViewportBuilder::default()
+        // Blank titlebar text — the in-app wordmark is the brand.
+        .with_title("")
+        .with_inner_size([1100.0, 720.0])
+        .with_min_inner_size([720.0, 480.0]);
+    // Window / dock / taskbar icon (the turntable mark).
+    if let Ok(icon) =
+        eframe::icon_data::from_png_bytes(include_bytes!("../../assets/icons/termkrush-256.png"))
+    {
+        viewport = viewport.with_icon(std::sync::Arc::new(icon));
+    }
     let options = eframe::NativeOptions {
-        viewport: egui::ViewportBuilder::default()
-            // Blank titlebar text — the in-app wordmark is the brand.
-            .with_title("")
-            .with_inner_size([1100.0, 720.0])
-            .with_min_inner_size([720.0, 480.0]),
+        viewport,
         ..Default::default()
     };
     eframe::run_native(

@@ -9,19 +9,17 @@
 
 use std::sync::Arc;
 
-/// Where a block's first onset (its musical hit) is aligned on the master grid.
-/// Tempo is always synced; this is the *phase* — cycled by the per-block button.
+/// Where a block's START is aligned on the master grid — the *phase*, cycled by
+/// the per-block button. (The clip is trimmed so its hit is at the start.)
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum Phase {
-    /// Onset on the nearest beat (the snap-on-drop default).
+    /// Start on the nearest beat (the snap-on-drop default).
     #[default]
     OnBeat,
-    /// Onset on the bar's downbeat (1 of 4).
+    /// Start on the bar's downbeat (1 of 4).
     Bar,
-    /// Onset on the off-beat (the "&", +½ beat).
+    /// Start on the off-beat (the "&", +½ beat).
     OffBeat,
-    /// No onset correction — the clip's file start sits on the beat.
-    Free,
 }
 
 /// A placed clip on a track: its samples and where it starts on the timeline.
@@ -38,10 +36,7 @@ pub struct Block {
     pub source_pad: Option<usize>,
     /// The source clip's detected tempo, if known (the MASTER track uses it).
     pub bpm: Option<f32>,
-    /// First-onset offset in *source* frames (cached on drop), so the grid snap
-    /// can land the hit, not the file head.
-    pub onset: u64,
-    /// How the onset is aligned to the grid.
+    /// How the block's start is aligned to the grid.
     pub phase: Phase,
     /// Tempo-lock this block to the master (varispeed). Only loops want this; a
     /// one-shot is a single hit with no tempo, so it plays at its native pitch
@@ -72,7 +67,19 @@ impl Block {
             return 1.0;
         }
         match (self.bpm, target) {
-            (Some(b), Some(t)) if b > 0.0 && t > 0.0 => (t / b) as f64,
+            (Some(b), Some(t)) if b > 0.0 && t > 0.0 => {
+                // Octave-fold to the *least* pitch change that still locks to the
+                // beat: a 90-BPM loop under a 178 master plays near 89 (half-time)
+                // instead of +98%. Result lands in [1/√2, √2).
+                let mut s = (t / b) as f64;
+                while s >= std::f64::consts::SQRT_2 {
+                    s *= 0.5;
+                }
+                while s < std::f64::consts::FRAC_1_SQRT_2 {
+                    s *= 2.0;
+                }
+                s
+            }
             _ => 1.0,
         }
     }
@@ -305,7 +312,6 @@ mod tests {
             label: "x".into(),
             source_pad: None,
             bpm: None,
-            onset: 0,
             phase: Phase::default(),
             sync: false,
             nudge: 0,
@@ -393,20 +399,29 @@ mod tests {
     }
 
     #[test]
-    fn varispeed_locks_blocks_to_the_master_tempo() {
+    fn loop_varispeed_octave_folds_to_least_pitch_change() {
         let mut a = Arrangement::new(1000, 1);
         a.set_target_bpm(Some(240.0));
-        let mut b = block(0, 8, 0.5); // 8 native frames @ 120 BPM
-        b.bpm = Some(120.0); // half the master → reads 2× → 4 output frames
-        b.sync = true; // a loop: tempo-locks
+        let mut b = block(0, 8, 0.5);
+        b.bpm = Some(120.0); // exactly half → octave-folds to native (locks at the octave)
+        b.sync = true;
         a.add_block(0, b);
         let blk = &a.tracks()[0].blocks[0];
-        assert!((blk.speed(Some(240.0)) - 2.0).abs() < 1e-6);
-        assert_eq!(blk.out_frames(Some(240.0)), 4, "plays in half the time");
-        assert_eq!(a.total_frames(), 4);
-        // With no target, it plays natively (8 frames).
+        assert!(
+            (blk.speed(Some(240.0)) - 1.0).abs() < 1e-6,
+            "120 under 240 plays native (half-time lock), not 2× chipmunk"
+        );
+        // A near-tempo loop varispeeds the small amount needed (no fold).
+        let mut c = block(0, 8, 0.5);
+        c.bpm = Some(120.0);
+        c.sync = true;
+        a.add_block(0, c);
+        // target 132 / 120 = 1.1 (inside [1/√2, √2)) → not folded.
+        a.set_target_bpm(Some(132.0));
+        assert!((a.tracks()[0].blocks[0].speed(Some(132.0)) - 1.1).abs() < 1e-3);
+        // With no target it plays native.
         a.set_target_bpm(None);
-        assert_eq!(a.total_frames(), 8);
+        assert_eq!(a.tracks()[0].blocks[0].speed(None), 1.0);
     }
 
     #[test]

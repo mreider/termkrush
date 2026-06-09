@@ -392,6 +392,7 @@ impl TermKrushApp {
                         bpm: done.bpm,
                         onset: done.onset,
                         phase: Phase::OnBeat,
+                        sync: false, // library drop: native + phase-placed (set a loop clip to tempo-lock)
                     };
                     let oo = self.onset_out(&block);
                     block.start = self.snapped_start(raw, oo, block.phase);
@@ -1114,6 +1115,8 @@ impl TermKrushApp {
                             .to_string();
                         // Onset detected inline (the clip's already decoded).
                         let onset = detect_pivot(&samples, 2) as u64;
+                        // Only loops tempo-lock; one-shots/scratch play native.
+                        let sync = matches!(self.mixer.pad_kind(pad), PadKind::Loop);
                         let mut block = Block {
                             samples: std::sync::Arc::new(samples),
                             start: 0,
@@ -1122,6 +1125,7 @@ impl TermKrushApp {
                             bpm,
                             onset,
                             phase: Phase::OnBeat,
+                            sync,
                         };
                         let oo = self.onset_out(&block);
                         block.start = self.snapped_start(raw as f64, oo, block.phase);

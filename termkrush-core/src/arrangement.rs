@@ -43,6 +43,10 @@ pub struct Block {
     pub onset: u64,
     /// How the onset is aligned to the grid.
     pub phase: Phase,
+    /// Tempo-lock this block to the master (varispeed). Only loops want this; a
+    /// one-shot is a single hit with no tempo, so it plays at its native pitch
+    /// and is merely phase-placed (varispeeding it would chipmunk it).
+    pub sync: bool,
 }
 
 impl Block {
@@ -56,10 +60,13 @@ impl Block {
         self.start + self.len_frames() as u64
     }
 
-    /// Source read speed to play this block at `target` tempo (turntable
-    /// varispeed: a 120-BPM clip under a 240 master reads at 2×). 1.0 when
-    /// either tempo is unknown — the block plays at its native rate.
+    /// Source read speed to play this block at `target` tempo. Only `sync`
+    /// (loop) blocks varispeed (a 120-BPM loop under a 240 master reads at 2×);
+    /// one-shots and scratch play at native rate (1.0), so they never chipmunk.
     pub fn speed(&self, target: Option<f32>) -> f64 {
+        if !self.sync {
+            return 1.0;
+        }
         match (self.bpm, target) {
             (Some(b), Some(t)) if b > 0.0 && t > 0.0 => (t / b) as f64,
             _ => 1.0,
@@ -296,6 +303,7 @@ mod tests {
             bpm: None,
             onset: 0,
             phase: Phase::default(),
+            sync: false,
         }
     }
 
@@ -385,6 +393,7 @@ mod tests {
         a.set_target_bpm(Some(240.0));
         let mut b = block(0, 8, 0.5); // 8 native frames @ 120 BPM
         b.bpm = Some(120.0); // half the master → reads 2× → 4 output frames
+        b.sync = true; // a loop: tempo-locks
         a.add_block(0, b);
         let blk = &a.tracks()[0].blocks[0];
         assert!((blk.speed(Some(240.0)) - 2.0).abs() < 1e-6);
@@ -393,6 +402,19 @@ mod tests {
         // With no target, it plays natively (8 frames).
         a.set_target_bpm(None);
         assert_eq!(a.total_frames(), 8);
+    }
+
+    #[test]
+    fn one_shots_never_varispeed() {
+        let mut a = Arrangement::new(1000, 1);
+        a.set_target_bpm(Some(240.0));
+        let mut b = block(0, 8, 0.5);
+        b.bpm = Some(120.0); // would be 2× IF it synced…
+        b.sync = false; // …but a one-shot plays native
+        a.add_block(0, b);
+        let blk = &a.tracks()[0].blocks[0];
+        assert!((blk.speed(Some(240.0)) - 1.0).abs() < 1e-6, "no varispeed");
+        assert_eq!(blk.out_frames(Some(240.0)), 8, "native length, no chipmunk");
     }
 
     #[test]

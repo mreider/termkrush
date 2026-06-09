@@ -302,7 +302,9 @@ impl TermKrushApp {
         std::thread::spawn(move || {
             let done = match decode_file(&path, rate) {
                 Ok(audio) => {
-                    let bpm = matches!(target, Target::Pad(_))
+                    // Detect tempo for pads AND timeline drops (so a library
+                    // track dropped on the MASTER track can set the BPM).
+                    let bpm = matches!(target, Target::Pad(_) | Target::Timeline { .. })
                         .then(|| detect_bpm(&audio.samples, audio.channels, audio.sample_rate))
                         .flatten();
                     LoadDone {

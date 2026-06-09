@@ -518,14 +518,19 @@ impl TermKrushApp {
                 ui.add_space(6.0);
                 // --- brand + transport ---
                 ui.horizontal(|ui| {
-                    let (r, _) = ui.allocate_exact_size(egui::vec2(22.0, 22.0), egui::Sense::hover());
+                    let (r, _) =
+                        ui.allocate_exact_size(egui::vec2(22.0, 22.0), egui::Sense::hover());
                     let p = ui.painter_at(r);
                     p.circle_filled(r.center(), 10.0, PANEL);
                     p.circle_stroke(r.center(), 10.0, egui::Stroke::new(1.0, LINE));
                     p.circle_filled(r.center(), 3.0, AMBER);
                     ui.label(bungee("termkrush", 18.0, AMBER));
                     ui.add_space(12.0);
-                    if icon_btn(ui, if self.tl_playing { ph::PAUSE } else { ph::PLAY }, "play / pause the timeline") {
+                    if icon_btn(
+                        ui,
+                        if self.tl_playing { ph::PAUSE } else { ph::PLAY },
+                        "play / pause the timeline",
+                    ) {
                         self.tl_playing = !self.tl_playing;
                         if self.tl_playing {
                             self.mixer.stop_preview();
@@ -589,8 +594,9 @@ impl TermKrushApp {
                 }
 
                 let scroll = self.tl_scroll as f64;
-                let x_of =
-                    |left: f32, frame: u64| left + GUTTER + ((frame as f64 - scroll) as f32 / sr * pxps);
+                let x_of = |left: f32, frame: u64| {
+                    left + GUTTER + ((frame as f64 - scroll) as f32 / sr * pxps)
+                };
                 let frame_at = |left: f32, x: f32| -> u64 {
                     (scroll + ((x - left - GUTTER) / pxps * sr) as f64).max(0.0) as u64
                 };
@@ -615,7 +621,10 @@ impl TermKrushApp {
                             }
                             if x >= ruler.left() {
                                 rp.line_segment(
-                                    [egui::pos2(x, ruler.bottom() - 5.0), egui::pos2(x, ruler.bottom())],
+                                    [
+                                        egui::pos2(x, ruler.bottom() - 5.0),
+                                        egui::pos2(x, ruler.bottom()),
+                                    ],
                                     egui::Stroke::new(1.0, DIM),
                                 );
                             }
@@ -648,113 +657,194 @@ impl TermKrushApp {
                 // --- track lanes --- (collect into locals; apply after)
                 let moving_prev = self.tl_moving;
                 let mut grab_dx = self.tl_grab_dx;
+                // Length (frames) of a clip being dragged from the grid, so we
+                // can preview the real block shape on the lane it's over.
+                let drag_preview_len: Option<u64> = egui::DragAndDrop::payload::<DragPad>(ui.ctx())
+                    .map(|pd| {
+                        let (a, b) = self.mixer.pad_trim(pd.0);
+                        b.saturating_sub(a) as u64
+                    });
                 let mut drop: Option<(usize, u64, PathBuf)> = None;
                 let mut drop_pad: Option<(usize, u64, usize)> = None;
                 let mut clicked: Option<(usize, usize)> = None;
                 let mut moving: Option<(usize, usize, egui::Pos2)> = None;
                 let mut move_commit: Option<(usize, usize, egui::Pos2)> = None;
                 let mut lane_rects: Vec<egui::Rect> = Vec::new();
-                egui::ScrollArea::vertical().max_height(150.0).show(ui, |ui| {
-                    let tracks = self.arrangement.track_count();
-                    for t in 0..tracks {
-                        let (lane, _resp) = ui.allocate_exact_size(
-                            egui::vec2(ui.available_width(), LANE_H),
-                            egui::Sense::hover(),
-                        );
-                        lane_rects.push(lane);
-                        let p = ui.painter_at(lane); // clips drawing to this lane
-                        let is_master = t == 0;
-                        p.rect_filled(lane, 3.0, if is_master { AMBER.gamma_multiply(0.08) } else { PANEL });
-                        p.rect_stroke(lane, 3.0, egui::Stroke::new(1.0, if is_master { AMBER } else { LINE }));
-                        if is_master {
-                            p.text(
-                                lane.right_top() + egui::vec2(-6.0, 2.0),
-                                egui::Align2::RIGHT_TOP,
-                                "MASTER",
-                                egui::FontId::proportional(9.0),
-                                AMBER.gamma_multiply(0.8),
+                egui::ScrollArea::vertical()
+                    .max_height(138.0)
+                    .show(ui, |ui| {
+                        let tracks = self.arrangement.track_count();
+                        for t in 0..tracks {
+                            let (lane, _resp) = ui.allocate_exact_size(
+                                egui::vec2(ui.available_width(), LANE_H),
+                                egui::Sense::hover(),
                             );
-                        }
-                        for (bi, block) in self.arrangement.tracks()[t].blocks.iter().enumerate() {
-                            let x0 = x_of(lane.left(), block.start);
-                            let x1 = x_of(lane.left(), block.end());
-                            let br = egui::Rect::from_min_max(
-                                egui::pos2(x0, lane.top() + 2.0),
-                                egui::pos2(x1.max(x0 + 3.0), lane.bottom() - 2.0),
+                            lane_rects.push(lane);
+                            let p = ui.painter_at(lane); // clips drawing to this lane
+                            let is_master = t == 0;
+                            p.rect_filled(
+                                lane,
+                                3.0,
+                                if is_master {
+                                    AMBER.gamma_multiply(0.08)
+                                } else {
+                                    PANEL
+                                },
                             );
-                            // Hide the original while it's being moved (ghost shows).
-                            if moving_prev != Some((t, bi)) {
-                                let selected = self.tl_sel == Some((t, bi));
-                                p.rect_filled(br, 2.0, AMBER.gamma_multiply(if selected { 0.55 } else { 0.3 }));
-                                p.rect_stroke(br, 2.0, egui::Stroke::new(if selected { 2.0 } else { 1.0 }, AMBER));
+                            p.rect_stroke(
+                                lane,
+                                3.0,
+                                egui::Stroke::new(1.0, if is_master { AMBER } else { LINE }),
+                            );
+                            if is_master {
                                 p.text(
-                                    br.left_top() + egui::vec2(4.0, 3.0),
-                                    egui::Align2::LEFT_TOP,
-                                    &block.label,
-                                    egui::FontId::proportional(11.0),
-                                    INK,
+                                    lane.right_top() + egui::vec2(-6.0, 2.0),
+                                    egui::Align2::RIGHT_TOP,
+                                    "MASTER",
+                                    egui::FontId::proportional(9.0),
+                                    AMBER.gamma_multiply(0.8),
                                 );
                             }
-                            let bresp = ui.interact(
-                                br,
-                                egui::Id::new(("blk", t, bi)),
-                                egui::Sense::click_and_drag(),
-                            );
-                            bresp.clone().on_hover_cursor(egui::CursorIcon::Grab);
-                            if bresp.clicked() {
-                                clicked = Some((t, bi));
-                            }
-                            if bresp.drag_started() {
-                                if let Some(pp) = ui.input(|i| i.pointer.interact_pos()) {
-                                    grab_dx = pp.x - br.left(); // keep the grab point
+                            for (bi, block) in
+                                self.arrangement.tracks()[t].blocks.iter().enumerate()
+                            {
+                                let x0 = x_of(lane.left(), block.start);
+                                let x1 = x_of(lane.left(), block.end());
+                                let br = egui::Rect::from_min_max(
+                                    egui::pos2(x0, lane.top() + 2.0),
+                                    egui::pos2(x1.max(x0 + 3.0), lane.bottom() - 2.0),
+                                );
+                                // Hide the original while it's being moved (ghost shows).
+                                if moving_prev != Some((t, bi)) {
+                                    let selected = self.tl_sel == Some((t, bi));
+                                    p.rect_filled(
+                                        br,
+                                        2.0,
+                                        AMBER.gamma_multiply(if selected { 0.55 } else { 0.3 }),
+                                    );
+                                    p.rect_stroke(
+                                        br,
+                                        2.0,
+                                        egui::Stroke::new(if selected { 2.0 } else { 1.0 }, AMBER),
+                                    );
+                                    p.text(
+                                        br.left_top() + egui::vec2(4.0, 3.0),
+                                        egui::Align2::LEFT_TOP,
+                                        &block.label,
+                                        egui::FontId::proportional(11.0),
+                                        INK,
+                                    );
                                 }
-                            }
-                            if bresp.dragged() {
-                                if let Some(pp) = ui.input(|i| i.pointer.interact_pos()) {
-                                    moving = Some((t, bi, pp));
+                                let bresp = ui.interact(
+                                    br,
+                                    egui::Id::new(("blk", t, bi)),
+                                    egui::Sense::click_and_drag(),
+                                );
+                                bresp.clone().on_hover_cursor(egui::CursorIcon::Grab);
+                                if bresp.clicked() {
                                     clicked = Some((t, bi));
                                 }
-                            }
-                            if bresp.drag_stopped() {
-                                if let Some(pp) = ui.input(|i| i.pointer.interact_pos()) {
-                                    move_commit = Some((t, bi, pp));
+                                if bresp.drag_started() {
+                                    if let Some(pp) = ui.input(|i| i.pointer.interact_pos()) {
+                                        grab_dx = pp.x - br.left(); // keep the grab point
+                                    }
+                                }
+                                if bresp.dragged() {
+                                    if let Some(pp) = ui.input(|i| i.pointer.interact_pos()) {
+                                        moving = Some((t, bi, pp));
+                                        clicked = Some((t, bi));
+                                    }
+                                }
+                                if bresp.drag_stopped() {
+                                    if let Some(pp) = ui.input(|i| i.pointer.interact_pos()) {
+                                        move_commit = Some((t, bi, pp));
+                                    }
                                 }
                             }
-                        }
-                        // Geometric NEW-block drop (a block-move sets no payload).
-                        let dragging = egui::DragAndDrop::has_payload_of_type::<DragPad>(ui.ctx())
-                            || egui::DragAndDrop::has_payload_of_type::<DragTrack>(ui.ctx());
-                        let pointer = ui.input(|i| i.pointer.interact_pos());
-                        let over = matches!(pointer, Some(pp) if lane.contains(pp));
-                        if dragging {
-                            let (w, c) = if over { (2.0, GREEN) } else { (1.0, GREEN.gamma_multiply(0.4)) };
-                            p.rect_stroke(lane, 3.0, egui::Stroke::new(w, c));
-                        }
-                        if over && ui.input(|i| i.pointer.any_released()) {
-                            let pp = pointer.unwrap();
-                            let start = snap(frame_at(lane.left(), pp.x));
-                            if let Some(pd) = egui::DragAndDrop::take_payload::<DragPad>(ui.ctx()) {
-                                drop_pad = Some((t, start, pd.0));
-                            } else if let Some(d) = egui::DragAndDrop::take_payload::<DragTrack>(ui.ctx()) {
-                                drop = Some((t, start, d.0.clone()));
+                            // Geometric NEW-block drop (a block-move sets no payload).
+                            let dragging =
+                                egui::DragAndDrop::has_payload_of_type::<DragPad>(ui.ctx())
+                                    || egui::DragAndDrop::has_payload_of_type::<DragTrack>(
+                                        ui.ctx(),
+                                    );
+                            let pointer = ui.input(|i| i.pointer.interact_pos());
+                            let over = matches!(pointer, Some(pp) if lane.contains(pp));
+                            if dragging {
+                                if over {
+                                    // Prominent: fill + thick border on the target lane.
+                                    p.rect_filled(lane, 3.0, GREEN.gamma_multiply(0.22));
+                                    p.rect_stroke(lane, 3.0, egui::Stroke::new(2.5, GREEN));
+                                    // Preview the real block shape, snapped, where it'll land.
+                                    if let (Some(pp), Some(len)) = (pointer, drag_preview_len) {
+                                        let s = snap(frame_at(lane.left(), pp.x));
+                                        let x0 = x_of(lane.left(), s);
+                                        let x1 = x_of(lane.left(), s + len);
+                                        let pr = egui::Rect::from_min_max(
+                                            egui::pos2(x0, lane.top() + 2.0),
+                                            egui::pos2(x1.max(x0 + 3.0), lane.bottom() - 2.0),
+                                        );
+                                        p.rect_filled(pr, 2.0, GREEN.gamma_multiply(0.5));
+                                        p.rect_stroke(pr, 2.0, egui::Stroke::new(1.5, GREEN));
+                                    }
+                                } else {
+                                    p.rect_stroke(
+                                        lane,
+                                        3.0,
+                                        egui::Stroke::new(1.0, GREEN.gamma_multiply(0.45)),
+                                    );
+                                }
                             }
+                            if over && ui.input(|i| i.pointer.any_released()) {
+                                let pp = pointer.unwrap();
+                                let start = snap(frame_at(lane.left(), pp.x));
+                                if let Some(pd) =
+                                    egui::DragAndDrop::take_payload::<DragPad>(ui.ctx())
+                                {
+                                    drop_pad = Some((t, start, pd.0));
+                                } else if let Some(d) =
+                                    egui::DragAndDrop::take_payload::<DragTrack>(ui.ctx())
+                                {
+                                    drop = Some((t, start, d.0.clone()));
+                                }
+                            }
+                            // playhead
+                            let px = x_of(lane.left(), self.tl_playhead);
+                            if px >= lane.left() && px <= lane.right() {
+                                p.line_segment(
+                                    [egui::pos2(px, lane.top()), egui::pos2(px, lane.bottom())],
+                                    egui::Stroke::new(1.5, GREEN),
+                                );
+                            }
+                            ui.add_space(4.0);
                         }
-                        // playhead
-                        let px = x_of(lane.left(), self.tl_playhead);
-                        if px >= lane.left() && px <= lane.right() {
-                            p.line_segment(
-                                [egui::pos2(px, lane.top()), egui::pos2(px, lane.bottom())],
-                                egui::Stroke::new(1.5, GREEN),
-                            );
-                        }
-                        ui.add_space(4.0);
-                    }
-                });
-                ui.label(
-                    egui::RichText::new("drag onto a lane · drag a block to move (snaps) · click + Delete · Cmd-C/V · zoom/scroll top-right")
-                        .color(DIM)
-                        .small(),
+                    });
+                // --- horizontal scrollbar ---
+                let total = self
+                    .arrangement
+                    .total_frames()
+                    .max(self.tl_scroll + view_frames)
+                    .max(view_frames)
+                    .max(1);
+                let (bar, bresp) =
+                    ui.allocate_exact_size(egui::vec2(width, 12.0), egui::Sense::click_and_drag());
+                let bp = ui.painter_at(bar);
+                bp.rect_filled(bar, 3.0, PANEL);
+                bp.rect_stroke(bar, 3.0, egui::Stroke::new(1.0, LINE));
+                let track_w = bar.width();
+                let thumb_x = bar.left() + (self.tl_scroll as f32 / total as f32) * track_w;
+                let thumb_w = ((view_frames as f32 / total as f32) * track_w).clamp(24.0, track_w);
+                let thumb = egui::Rect::from_min_size(
+                    egui::pos2(thumb_x.min(bar.right() - thumb_w), bar.top() + 1.0),
+                    egui::vec2(thumb_w, bar.height() - 2.0),
                 );
+                bp.rect_filled(thumb, 3.0, AMBER.gamma_multiply(0.7));
+                if bresp.clicked() || bresp.dragged() {
+                    if let Some(pp) = bresp.interact_pointer_pos() {
+                        // Center the thumb on the pointer.
+                        let rel = ((pp.x - bar.left() - thumb_w / 2.0) / track_w).clamp(0.0, 1.0);
+                        self.tl_scroll = (rel * total as f32) as u64;
+                    }
+                }
 
                 // Ghost following the cursor while dragging a CLIP from the grid.
                 if let Some(pd) = egui::DragAndDrop::payload::<DragPad>(ui.ctx()) {
@@ -767,21 +857,50 @@ impl TermKrushApp {
                             .and_then(|s| s.to_str())
                             .unwrap_or("clip")
                             .to_string();
-                        let g = egui::Rect::from_min_size(pp + egui::vec2(10.0, 6.0), egui::vec2(130.0, 20.0));
-                        let gp = ui.ctx().layer_painter(egui::LayerId::new(egui::Order::Tooltip, egui::Id::new("tl-ghost")));
+                        let g = egui::Rect::from_min_size(
+                            pp + egui::vec2(10.0, 6.0),
+                            egui::vec2(130.0, 20.0),
+                        );
+                        let gp = ui.ctx().layer_painter(egui::LayerId::new(
+                            egui::Order::Tooltip,
+                            egui::Id::new("tl-ghost"),
+                        ));
                         gp.rect_filled(g, 3.0, AMBER.gamma_multiply(0.9));
-                        gp.text(g.left_center() + egui::vec2(6.0, 0.0), egui::Align2::LEFT_CENTER, name, egui::FontId::proportional(11.0), GROUND);
+                        gp.text(
+                            g.left_center() + egui::vec2(6.0, 0.0),
+                            egui::Align2::LEFT_CENTER,
+                            name,
+                            egui::FontId::proportional(11.0),
+                            GROUND,
+                        );
                     }
                 }
                 // Ghost while moving an existing block — anchored at the grab point.
                 if let Some((ft, idx, pp)) = moving {
-                    if let Some(b) = self.arrangement.tracks().get(ft).and_then(|tr| tr.blocks.get(idx)) {
+                    if let Some(b) = self
+                        .arrangement
+                        .tracks()
+                        .get(ft)
+                        .and_then(|tr| tr.blocks.get(idx))
+                    {
                         let w = ((b.len_frames() as f32 / sr) * pxps).max(8.0);
-                        let g = egui::Rect::from_min_size(egui::pos2(pp.x - grab_dx, pp.y - 12.0), egui::vec2(w, 24.0));
-                        let gp = ui.ctx().layer_painter(egui::LayerId::new(egui::Order::Tooltip, egui::Id::new("tl-move")));
+                        let g = egui::Rect::from_min_size(
+                            egui::pos2(pp.x - grab_dx, pp.y - 12.0),
+                            egui::vec2(w, 24.0),
+                        );
+                        let gp = ui.ctx().layer_painter(egui::LayerId::new(
+                            egui::Order::Tooltip,
+                            egui::Id::new("tl-move"),
+                        ));
                         gp.rect_filled(g, 2.0, AMBER.gamma_multiply(0.55));
                         gp.rect_stroke(g, 2.0, egui::Stroke::new(1.5, AMBER));
-                        gp.text(g.left_top() + egui::vec2(4.0, 3.0), egui::Align2::LEFT_TOP, &b.label, egui::FontId::proportional(11.0), GROUND);
+                        gp.text(
+                            g.left_top() + egui::vec2(4.0, 3.0),
+                            egui::Align2::LEFT_TOP,
+                            &b.label,
+                            egui::FontId::proportional(11.0),
+                            GROUND,
+                        );
                     }
                 }
 
@@ -794,7 +913,10 @@ impl TermKrushApp {
                     self.tl_sel = Some(s);
                 }
                 if let Some((ft, idx, pp)) = move_commit {
-                    if let Some(nt) = lane_rects.iter().position(|r| pp.y >= r.top() && pp.y <= r.bottom()) {
+                    if let Some(nt) = lane_rects
+                        .iter()
+                        .position(|r| pp.y >= r.top() && pp.y <= r.bottom())
+                    {
                         // Drop at the grabbed point, snapped.
                         let nstart = snap(frame_at(lane_rects[nt].left(), pp.x - grab_dx));
                         self.arrangement.move_block(ft, idx, nt, nstart);
@@ -807,8 +929,12 @@ impl TermKrushApp {
                 }
                 if let Some((t, start, pad)) = drop_pad {
                     let gain = self.mixer.pad_gain(pad);
-                    let samples: Vec<f32> =
-                        self.mixer.pad_clip_region(pad).iter().map(|s| s * gain).collect();
+                    let samples: Vec<f32> = self
+                        .mixer
+                        .pad_clip_region(pad)
+                        .iter()
+                        .map(|s| s * gain)
+                        .collect();
                     if !samples.is_empty() {
                         let bpm = self.mixer.pad_bpm(pad);
                         let label = self.pad_source[pad]

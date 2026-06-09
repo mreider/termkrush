@@ -576,7 +576,7 @@ impl TermKrushApp {
                     let pos = match master_bpm {
                         Some(b) if b > 0.0 => {
                             let fpb = (sr * 60.0 / b) as u64; // frames / beat
-                            let beat = if fpb > 0 { ph / fpb } else { 0 };
+                            let beat = ph.checked_div(fpb).unwrap_or(0);
                             format!("{}.{}", beat / 4 + 1, beat % 4 + 1)
                         }
                         _ => {
@@ -626,7 +626,7 @@ impl TermKrushApp {
                     [ruler.left_bottom(), ruler.right_bottom()],
                     egui::Stroke::new(1.0, LINE),
                 );
-                let mut tick = |x: f32, label: Option<String>| {
+                let tick = |x: f32, label: Option<String>| {
                     if x >= ruler.left() && x <= ruler.right() {
                         rp.line_segment(
                             [

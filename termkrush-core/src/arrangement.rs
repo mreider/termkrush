@@ -70,19 +70,9 @@ impl Block {
             return 1.0;
         }
         match (self.bpm, target) {
-            (Some(b), Some(t)) if b > 0.0 && t > 0.0 => {
-                // Octave-fold to the *least* pitch change that still locks to the
-                // beat: a 90-BPM loop under a 178 master plays near 89 (half-time)
-                // instead of +98%. Result lands in [1/√2, √2).
-                let mut s = (t / b) as f64;
-                while s >= std::f64::consts::SQRT_2 {
-                    s *= 0.5;
-                }
-                while s < std::f64::consts::FRAC_1_SQRT_2 {
-                    s *= 2.0;
-                }
-                s
-            }
+            // Exact tempo match so EVERY beat lines up (sped up or slowed),
+            // however far apart the tempos are — no octave folding.
+            (Some(b), Some(t)) if b > 0.0 && t > 0.0 => (t / b) as f64,
             _ => 1.0,
         }
     }
@@ -403,24 +393,15 @@ mod tests {
     }
 
     #[test]
-    fn loop_varispeed_octave_folds_to_least_pitch_change() {
+    fn loop_varispeed_matches_tempo_exactly() {
         let mut a = Arrangement::new(1000, 1);
         a.set_target_bpm(Some(240.0));
         let mut b = block(0, 8, 0.5);
-        b.bpm = Some(120.0); // exactly half → octave-folds to native (locks at the octave)
+        b.bpm = Some(120.0);
         b.sync = true;
         a.add_block(0, b);
-        let blk = &a.tracks()[0].blocks[0];
-        assert!(
-            (blk.speed(Some(240.0)) - 1.0).abs() < 1e-6,
-            "120 under 240 plays native (half-time lock), not 2× chipmunk"
-        );
-        // A near-tempo loop varispeeds the small amount needed (no fold).
-        let mut c = block(0, 8, 0.5);
-        c.bpm = Some(120.0);
-        c.sync = true;
-        a.add_block(0, c);
-        // target 132 / 120 = 1.1 (inside [1/√2, √2)) → not folded.
+        // Exact match: 240/120 = 2× so every beat lands (no octave fold).
+        assert!((a.tracks()[0].blocks[0].speed(Some(240.0)) - 2.0).abs() < 1e-6);
         a.set_target_bpm(Some(132.0));
         assert!((a.tracks()[0].blocks[0].speed(Some(132.0)) - 1.1).abs() < 1e-3);
         // With no target it plays native.

@@ -1604,12 +1604,12 @@ impl TermKrushApp {
             .unwrap_or(0.0)
     }
 
-    /// A block's first marked beat in *timeline* frames (source beat ÷ varispeed).
-    /// 0 if it has no marks. The grid + phase align on this, so the block's first
-    /// tapped beat lands on a master beat — not its raw start.
+    /// A block's first beat (the FITTED beat-0, so jittery taps average out) in
+    /// *timeline* frames (source beat ÷ varispeed). 0 if no marks. The grid +
+    /// phase align on this, so the block's first beat lands on a master beat.
     fn first_beat_out(&self, b: &Block) -> f64 {
-        match b.beats.first() {
-            Some(&fb) => fb as f64 / b.speed(self.arrangement.target_bpm()),
+        match fit_beats(&b.beats) {
+            Some((phase, _interval)) => phase / b.speed(self.arrangement.target_bpm()),
             None => 0.0,
         }
     }
@@ -1637,16 +1637,11 @@ impl TermKrushApp {
         (anchor - first_beat_out + n).max(0.0) as u64
     }
 
-    /// Tempo (BPM) implied by a clip's marked beats — median inter-beat interval.
-    /// `None` with fewer than 2 marks.
+    /// Tempo (BPM) from a clip's tapped beats — uses the FITTED interval (the
+    /// least-squares regular spacing), so imperfect taps average out. `None`
+    /// with fewer than 2 marks.
     fn bpm_from_beats(beats: &[u64], sr: u32) -> Option<f32> {
-        if beats.len() < 2 {
-            return None;
-        }
-        let mut diffs: Vec<u64> = beats.windows(2).map(|w| w[1] - w[0]).collect();
-        diffs.sort_unstable();
-        let med = diffs[diffs.len() / 2];
-        (med > 0).then(|| sr as f32 * 60.0 / med as f32)
+        fit_beats(beats).map(|(_phase, interval)| sr as f32 * 60.0 / interval as f32)
     }
 
     /// Render the whole timeline arrangement to a `mix-N.wav` in the library.
@@ -1899,6 +1894,32 @@ fn install_fonts(ctx: &egui::Context) {
     // Phosphor icon font, appended as a fallback so icon glyphs render.
     egui_phosphor::add_to_fonts(&mut fonts, egui_phosphor::Variant::Regular);
     ctx.set_fonts(fonts);
+}
+
+/// Least-squares fit of tapped beats (sorted source frames) to a regular grid
+/// `beat[k] ≈ phase + k·interval`. Returns `(phase, interval)` in frames, so
+/// imperfect taps are averaged into a clean tempo + downbeat. `None` if < 2 marks
+/// or a non-positive interval.
+fn fit_beats(beats: &[u64]) -> Option<(f64, f64)> {
+    let n = beats.len();
+    if n < 2 {
+        return None;
+    }
+    let nf = n as f64;
+    let mean_k = (nf - 1.0) / 2.0; // mean of 0..n-1
+    let mean_b = beats.iter().map(|&x| x as f64).sum::<f64>() / nf;
+    let (mut num, mut den) = (0.0f64, 0.0f64);
+    for (k, &x) in beats.iter().enumerate() {
+        let dk = k as f64 - mean_k;
+        num += dk * (x as f64 - mean_b);
+        den += dk * dk;
+    }
+    if den == 0.0 {
+        return None;
+    }
+    let interval = num / den;
+    let phase = mean_b - interval * mean_k;
+    (interval > 0.0).then_some((phase, interval))
 }
 
 /// The next phase in the cycle (the per-block badge clicks through these).

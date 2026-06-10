@@ -125,8 +125,6 @@ enum Act {
     SetTrimIn(usize, usize),
     SetTrimOut(usize, usize),
     AuditionSel(usize),
-    /// Auto-detect beats into the clip (seed for hand-correction).
-    FindBeats(usize),
     /// Clear all beat marks on the clip.
     ClearBeats(usize),
     /// Toggle a beat mark at a clip-absolute frame (add, or remove if near one).
@@ -539,17 +537,6 @@ impl TermKrushApp {
                     let (inp, out) = self.mixer.pad_trim(i);
                     self.mixer.audition_region(i, inp, out);
                 }
-            }
-            Act::FindBeats(i) => {
-                // Auto-detect over the trimmed region; store clip-absolute.
-                let (inp, _out) = self.mixer.pad_trim(i);
-                let region = self.mixer.pad_clip_region(i);
-                let mut beats: Vec<u64> = detect_onsets(&region, 2, self.target_rate)
-                    .into_iter()
-                    .map(|f| (f + inp) as u64)
-                    .collect();
-                beats.sort_unstable();
-                self.pad_beats[i] = beats;
             }
             Act::ClearBeats(i) => self.pad_beats[i].clear(),
             Act::ToggleBeat(i, frame) => {
@@ -2271,25 +2258,23 @@ fn draw_clip_editor(
             ))
             .weak(),
         );
-        // Beat tools: auto-find, clear, and a count + how-to.
+        // Beat tapping: the one way to mark beats — play, tap ↓ on each beat.
         ui.horizontal(|ui| {
+            ui.label(
+                egui::RichText::new("① ▶ play   ② tap ↓ on each beat   ③ Enter to stop")
+                    .color(GREEN),
+            );
             if ui
-                .button("find beats")
-                .on_hover_text("auto-detect beat marks, then click the waveform to correct")
+                .button("clear")
+                .on_hover_text("clear the marks and re-tap")
                 .clicked()
             {
-                acts.push(Act::FindBeats(i));
-            }
-            if ui.button("clear beats").clicked() {
                 acts.push(Act::ClearBeats(i));
             }
             ui.label(
-                egui::RichText::new(format!(
-                    "{} beats · ▶ play then tap ↓ on each beat (Enter stops) · or click the waveform",
-                    beats.len()
-                ))
-                .color(DIM)
-                .small(),
+                egui::RichText::new(format!("{} beats", beats.len()))
+                    .color(DIM)
+                    .small(),
             );
         });
         ui.add_space(8.0);

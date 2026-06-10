@@ -1818,15 +1818,6 @@ fn apply_crt_theme(ctx: &egui::Context) {
     ctx.set_style(style);
 }
 
-/// A prominent painted close button (an amber X). Returns true on click. Used
-/// everywhere we close a view, instead of a "done" word.
-fn close_x(ui: &mut egui::Ui) -> bool {
-    ui.add(egui::Button::new(egui::RichText::new(ph::X).size(20.0)).frame(false))
-        .on_hover_cursor(egui::CursorIcon::Default)
-        .on_hover_text("close")
-        .clicked()
-}
-
 /// Small painted "new folder" button (a folder tab + a +). Returns true on click.
 fn folder_plus_button(ui: &mut egui::Ui) -> bool {
     icon_btn(ui, ph::FOLDER_PLUS, "new folder")
@@ -2230,18 +2221,27 @@ fn draw_clip_editor(
             let playing = mixer.pad_is_sounding(i);
             if icon_btn(
                 ui,
-                if playing { ph::STOP } else { ph::PLAY },
-                "play / stop selection",
+                if playing { ph::PAUSE } else { ph::PLAY },
+                "play / pause (space)",
             ) {
                 acts.push(Act::AuditionSel(i));
             }
-            if icon_btn(ui, ph::FLOPPY_DISK, "export to library (WAV)") {
-                acts.push(Act::ExportPad(i));
-            }
-            // Prominent X to close, top-right.
+            // Two clearly-labelled saves, right-aligned: "save" keeps the trim +
+            // beats and closes; "save to library" writes the trimmed WAV out.
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                if close_x(ui) {
+                if ui
+                    .button(egui::RichText::new("save").color(GREEN).strong())
+                    .on_hover_text("keep the trim + beats and close the editor")
+                    .clicked()
+                {
                     acts.push(Act::CloseClip);
+                }
+                if ui
+                    .button("save to library")
+                    .on_hover_text("write the trimmed clip to the library as a WAV")
+                    .clicked()
+                {
+                    acts.push(Act::ExportPad(i));
                 }
             });
         });
@@ -2258,11 +2258,10 @@ fn draw_clip_editor(
             ))
             .weak(),
         );
-        // Beat tapping: the one way to mark beats — play, tap ↓ on each beat.
+        // Beat tapping: the one way to mark beats — play, tap the down arrow.
         ui.horizontal(|ui| {
             ui.label(
-                egui::RichText::new("① ▶ play   ② tap ↓ on each beat   ③ Enter to stop")
-                    .color(GREEN),
+                egui::RichText::new("play, then tap the DOWN arrow key on each beat").color(GREEN),
             );
             if ui
                 .button("clear")
@@ -2371,18 +2370,10 @@ fn draw_clip_editor(
                 );
             }
         }
-        // Keys: ↓ taps a beat at the playhead; Enter stops playback.
-        let (tap, stop) = ctx.input(|i| {
-            (
-                i.key_pressed(egui::Key::ArrowDown),
-                i.key_pressed(egui::Key::Enter),
-            )
-        });
-        if playing && tap {
+        // The down arrow taps a beat mark at the playhead while auditioning.
+        // (Play/pause is the ▶/■ button or space — no separate stop key.)
+        if playing && ctx.input(|i| i.key_pressed(egui::Key::ArrowDown)) {
             acts.push(Act::TapBeat(i));
-        }
-        if playing && stop {
-            acts.push(Act::AuditionSel(i)); // toggles → stops
         }
     });
 }

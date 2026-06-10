@@ -417,7 +417,8 @@ impl TermKrushApp {
                         nudge: 0,
                         beats: done.beats,
                     };
-                    block.start = self.snapped_start(raw, block.phase, block.nudge);
+                    // Library drops aren't beat-tapped → snap the start (fbo 0).
+                    block.start = self.snapped_start(raw, block.phase, block.nudge, 0.0);
                     self.arrangement.add_block(track, block);
                 }
             }
@@ -683,9 +684,9 @@ impl TermKrushApp {
                             .tracks()
                             .get(t)
                             .and_then(|tr| tr.blocks.get(bi))
-                            .map(|b| (t, bi, b.phase, b.start, b.nudge))
+                            .map(|b| (t, bi, b.phase, b.start, b.nudge, self.first_beat_out(b)))
                     });
-                    if let Some((t, bi, cur, start, ndg)) = sel {
+                    if let Some((t, bi, cur, start, ndg, fbo)) = sel {
                         ui.add_space(12.0);
                         // Phase cycle.
                         if ui
@@ -697,7 +698,7 @@ impl TermKrushApp {
                             .clicked()
                         {
                             let next = next_phase(cur);
-                            let ns = self.snapped_start(start as f64, next, ndg);
+                            let ns = self.snapped_start(start as f64, next, ndg, fbo);
                             if let Some(bm) = self.arrangement.block_mut(t, bi) {
                                 bm.phase = next;
                                 bm.start = ns;
@@ -712,7 +713,7 @@ impl TermKrushApp {
                             for (lbl, dir) in [(ph::CARET_LEFT, -1i64), (ph::CARET_RIGHT, 1i64)] {
                                 if icon_btn(ui, lbl, "nudge ±1/16 beat") {
                                     let nn = ndg + dir * step;
-                                    let ns = self.snapped_start(start as f64, cur, nn);
+                                    let ns = self.snapped_start(start as f64, cur, nn, fbo);
                                     if let Some(bm) = self.arrangement.block_mut(t, bi) {
                                         bm.nudge = nn;
                                         bm.start = ns;
@@ -1251,7 +1252,8 @@ impl TermKrushApp {
                     {
                         let next = next_phase(b.phase);
                         let raw = b.start as f64;
-                        let ns = self.snapped_start(raw, next, b.nudge);
+                        let fbo = self.first_beat_out(b);
+                        let ns = self.snapped_start(raw, next, b.nudge, fbo);
                         if let Some(bm) = self.arrangement.block_mut(t, bi) {
                             bm.phase = next;
                             bm.start = ns;
@@ -1266,9 +1268,9 @@ impl TermKrushApp {
                         // Re-snap by the block's own phase + nudge, anchored at
                         // the grabbed point.
                         if let Some(b) = self.arrangement.tracks()[ft].blocks.get(idx) {
-                            let (phase, ndg) = (b.phase, b.nudge);
+                            let (phase, ndg, fbo) = (b.phase, b.nudge, self.first_beat_out(b));
                             let raw = frame_at(lane_rects[nt].left(), pp.x - grab_dx) as f64;
-                            let nstart = self.snapped_start(raw, phase, ndg);
+                            let nstart = self.snapped_start(raw, phase, ndg, fbo);
                             self.arrangement.move_block(ft, idx, nt, nstart);
                         }
                     }
@@ -1293,27 +1295,17 @@ impl TermKrushApp {
                         .map(|s| s * gain)
                         .collect();
                     if !samples.is_empty() {
-                        let bpm = self.mixer.pad_bpm(pad);
-                        // MASTER first, so the grid exists for the phase snap.
-                        if t == 0 {
-                            if let Some(b) = bpm {
-                                self.mixer.set_master_bpm(Some(b));
-                                self.arrangement.set_target_bpm(Some(b));
-                            }
-                        }
                         let label = self.pad_source[pad]
                             .as_ref()
                             .and_then(|p| p.file_stem())
                             .and_then(|s| s.to_str())
                             .unwrap_or("clip")
                             .to_string();
-                        // Auto-lock anything with internal rhythm (length-based),
-                        // not the clip's kind.
-                        let sync = self.default_sync(t, samples.len() / 2);
-                        // Prefer the clip's hand-marked beats (relative to the
-                        // trim region); fall back to auto-detect if unmarked.
+                        // Prefer the clip's hand-tapped beats (relative to the
+                        // trim region); fall back to auto-detect if untapped.
                         let (inp, out) = self.mixer.pad_trim(pad);
-                        let beats: Vec<u64> = if !self.pad_beats[pad].is_empty() {
+                        let tapped = !self.pad_beats[pad].is_empty();
+                        let beats: Vec<u64> = if tapped {
                             self.pad_beats[pad]
                                 .iter()
                                 .filter(|&&b| b >= inp as u64 && (b as usize) < out)
@@ -1325,6 +1317,24 @@ impl TermKrushApp {
                                 .map(|f| f as u64)
                                 .collect()
                         };
+                        // Tempo from the TAPPED beats (exact) when available,
+                        // else the clip's detected bpm.
+                        let bpm = if tapped {
+                            Self::bpm_from_beats(&beats, self.target_rate)
+                                .or_else(|| self.mixer.pad_bpm(pad))
+                        } else {
+                            self.mixer.pad_bpm(pad)
+                        };
+                        // MASTER first, so the grid exists for the snap.
+                        if t == 0 {
+                            if let Some(b) = bpm {
+                                self.mixer.set_master_bpm(Some(b));
+                                self.arrangement.set_target_bpm(Some(b));
+                            }
+                        }
+                        // Tapped clips always lock; else fall back to length.
+                        let sync =
+                            (tapped && beats.len() >= 2) || self.default_sync(t, samples.len() / 2);
                         let mut block = Block {
                             samples: std::sync::Arc::new(samples),
                             start: 0,
@@ -1336,7 +1346,9 @@ impl TermKrushApp {
                             nudge: 0,
                             beats,
                         };
-                        block.start = self.snapped_start(raw as f64, block.phase, block.nudge);
+                        // Align the block's FIRST tapped beat to the master grid.
+                        let fbo = self.first_beat_out(&block);
+                        block.start = self.snapped_start(raw as f64, block.phase, block.nudge, fbo);
                         self.arrangement.add_block(t, block);
                     }
                 }
@@ -1551,11 +1563,11 @@ impl TermKrushApp {
         for t in 0..self.arrangement.track_count() {
             let n = self.arrangement.tracks()[t].blocks.len();
             for i in 0..n {
-                let (start, phase, nudge) = {
+                let (start, phase, nudge, fbo) = {
                     let b = &self.arrangement.tracks()[t].blocks[i];
-                    (b.start as f64, b.phase, b.nudge)
+                    (b.start as f64, b.phase, b.nudge, self.first_beat_out(b))
                 };
-                let ns = self.snapped_start(start, phase, nudge);
+                let ns = self.snapped_start(start, phase, nudge, fbo);
                 if let Some(bm) = self.arrangement.block_mut(t, i) {
                     bm.start = ns;
                 }
@@ -1588,15 +1600,24 @@ impl TermKrushApp {
             .tracks()
             .first()
             .and_then(|t| t.blocks.first())
-            .map(|b| b.start as f64)
+            .map(|b| b.start as f64 + self.first_beat_out(b))
             .unwrap_or(0.0)
     }
 
-    /// Snap a block's START to the phase target nearest `raw_start` on the
-    /// MASTER-anchored grid, plus the manual `nudge` (frames). With no master
-    /// tempo, returns `raw_start + nudge`. (Clips are trimmed so the hit is at
-    /// the start — far more reliable than guessing an onset.)
-    fn snapped_start(&self, raw_start: f64, phase: Phase, nudge: i64) -> u64 {
+    /// A block's first marked beat in *timeline* frames (source beat ÷ varispeed).
+    /// 0 if it has no marks. The grid + phase align on this, so the block's first
+    /// tapped beat lands on a master beat — not its raw start.
+    fn first_beat_out(&self, b: &Block) -> f64 {
+        match b.beats.first() {
+            Some(&fb) => fb as f64 / b.speed(self.arrangement.target_bpm()),
+            None => 0.0,
+        }
+    }
+
+    /// Snap so the block's FIRST BEAT (`first_beat_out` frames past its start)
+    /// lands on the phase target of the MASTER grid, plus the manual `nudge`.
+    /// No master tempo → `raw_start + nudge`.
+    fn snapped_start(&self, raw_start: f64, phase: Phase, nudge: i64, first_beat_out: f64) -> u64 {
         let sr = self.target_rate.max(1) as f64;
         let n = nudge as f64;
         let fpb = match self.mixer.master_bpm() {
@@ -1610,8 +1631,22 @@ impl TermKrushApp {
         } else {
             0.0
         };
-        let anchor = origin + off + ((raw_start - origin - off) / grid).round() * grid;
-        (anchor + n).max(0.0) as u64
+        // Where the block's first beat currently sits, snapped to the grid.
+        let beat_pos = raw_start + first_beat_out;
+        let anchor = origin + off + ((beat_pos - origin - off) / grid).round() * grid;
+        (anchor - first_beat_out + n).max(0.0) as u64
+    }
+
+    /// Tempo (BPM) implied by a clip's marked beats — median inter-beat interval.
+    /// `None` with fewer than 2 marks.
+    fn bpm_from_beats(beats: &[u64], sr: u32) -> Option<f32> {
+        if beats.len() < 2 {
+            return None;
+        }
+        let mut diffs: Vec<u64> = beats.windows(2).map(|w| w[1] - w[0]).collect();
+        diffs.sort_unstable();
+        let med = diffs[diffs.len() / 2];
+        (med > 0).then(|| sr as f32 * 60.0 / med as f32)
     }
 
     /// Render the whole timeline arrangement to a `mix-N.wav` in the library.

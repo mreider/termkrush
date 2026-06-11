@@ -23,13 +23,12 @@
 |  | [Record the timeline into a pad (overwrite confirm if not empty)](termkrush/Record-the-timeline-into-a-pad-overwrite-confirm-if-not-empty.md) | 5 |  |
 |  | [Save and load a session as a .tekr file (pads + timeline)](termkrush/Save-and-load-a-session-as-a-tekr-file-pads-timeline.md) | 8 |  |
 |  | [Bass drops: duck the lows, slam back on the one](termkrush/Bass-drops-duck-the-lows-slam-back-on-the-one.md) | 3 |  |
-|  | [Beat-tap any library track, cached for good](termkrush/Beat-tap-any-library-track-cached-for-good.md) | 3 |  |
 |  | [Bit-identical determinism: same sequence, same file](termkrush/Bit-identical-determinism-same-sequence-same-file.md) | 3 |  |
 |  | [Energy-arc shaping: waves not ramps](termkrush/Energy-arc-shaping-waves-not-ramps.md) | 5 |  |
 |  | [Engine-placed scratches and fader chops with human micro-timing](termkrush/Engine-placed-scratches-and-fader-chops-with-human-micro-timing.md) | 8 |  |
 |  | [Naive auto-mix render: phrase sections varispeeded and butt-joined on the master grid](termkrush/Naive-auto-mix-render-phrase-sections-varispeeded-and-butt-joined-on-the-master-grid.md) | 8 |  |
 |  | [Transition scheduler: hard cuts as punctuation, rare fades](termkrush/Transition-scheduler-hard-cuts-as-punctuation-rare-fades.md) | 3 |  |
-| Total Points | | 82 | |
+| Total Points | | 79 | |
 
 ### Started
 | User | Title | Points | Tags |
@@ -126,8 +125,9 @@
 |  | [Jog scratch voice DSP in the core engine](termkrush/Jog-scratch-voice-DSP-in-the-core-engine.md) | 5 |  |
 |  | [Library home: Enter on a song offers load rename delete move](termkrush/Library-home-Enter-on-a-song-offers-load-rename-delete-move.md) | 5 |  |
 |  | [Move a file to a folder via a folder-picker modal](termkrush/Move-a-file-to-a-folder-via-a-folder-picker-modal.md) | 8 |  |
-|  | [Bug: timeline border should show just 0, not [0], to match pad number titles](termkrush/Bug-timeline-border-should-show-just-0-not-0-to-match-pad-number-titles.md) |  |  |
 |  | [Sequence line: order tracks from the library, save/load as the project file](termkrush/Sequence-line-order-tracks-from-the-library-save-load-as-the-project-file.md) | 5 |  |
+|  | [Beat-tap any library track, cached for good](termkrush/Beat-tap-any-library-track-cached-for-good.md) | 3 |  |
+|  | [Bug: timeline border should show just 0, not [0], to match pad number titles](termkrush/Bug-timeline-border-should-show-just-0-not-0-to-match-pad-number-titles.md) |  |  |
 
 ### Accepted
 | User | Title | Points | Tags |

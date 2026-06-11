@@ -606,11 +606,11 @@ fn apply_tilt(out: &mut [f32]) {
     let mut lp = [0.0f32; 2];
     for fr in 0..total {
         let k = TILT_MAX * fr as f32 / total as f32;
-        for c in 0..2 {
+        for (c, state) in lp.iter_mut().enumerate() {
             let i = fr * 2 + c;
             let x = out[i];
-            lp[c] += a * (x - lp[c]);
-            out[i] = x + lp[c] * k;
+            *state += a * (x - *state);
+            out[i] = x + *state * k;
         }
     }
 }

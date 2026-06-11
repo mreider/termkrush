@@ -40,6 +40,11 @@ pub const TARGET_RMS: f32 = 0.18;
 /// Gain is clamped so a near-silent section can't be boosted into noise.
 const MAX_GAIN: f32 = 4.0;
 
+/// The bass-drop crossover: everything below this ducks. The duck is a
+/// 2nd-order high-pass (the classic DJ bass-kill) — at 60 Hz that is
+/// roughly −16 dB, comfortably past the reference's measured >10 dB.
+pub const DROP_CROSSOVER_HZ: f64 = 150.0;
+
 /// One track of input: decoded stereo audio at [`RENDER_RATE`] plus the
 /// user's tapped beat marks (also at [`RENDER_RATE`]).
 pub struct TrackInput {
@@ -136,6 +141,17 @@ pub struct Chop {
     pub frames: u64,
 }
 
+/// A bass drop: the mix's low band ducks hard, then slams back exactly
+/// on a bar line (usually the incoming section's one). Tension, then
+/// release — the reference deals roughly sixteen an hour.
+#[derive(Debug, Clone, PartialEq)]
+pub struct BassDrop {
+    /// Duck start, bar-quantized (output frames).
+    pub out_start: u64,
+    /// Duck length in output frames; `out_start + frames` is a bar line.
+    pub frames: u64,
+}
+
 /// The deterministic plan for a whole mix.
 #[derive(Debug, Clone, PartialEq)]
 pub struct MixPlan {
@@ -150,6 +166,8 @@ pub struct MixPlan {
     pub flurries: Vec<Flurry>,
     /// Engine-performed fader chops.
     pub chops: Vec<Chop>,
+    /// Bass drops (low band ducked, restored on the one).
+    pub drops: Vec<BassDrop>,
 }
 
 impl MixPlan {
@@ -450,6 +468,45 @@ pub fn plan(tracks: &[TrackInput], order: &[usize]) -> Result<MixPlan, PlanError
     }
     flurries.sort_by_key(|fl| fl.out_start);
 
+    // ── bass drops: roughly one per 96 bars (the reference's ~16/hour),
+    // 1–6 bars long (1–16 s at song tempi), duck start bar-quantized and
+    // the restore landing exactly on a bar line — favoring section ends
+    // so the bass slams back on the incoming section's one.
+    let mut drops: Vec<BassDrop> = Vec::new();
+    let n_drops = (total_bars / 96).max(1) as usize;
+    let bar_secs = master_fpb / RENDER_RATE as f64;
+    let max_len_bars = ((16.0 / bar_secs).floor() as u64).clamp(1, 6);
+    for _ in 0..n_drops {
+        let sec = &sections[(rng.next() % sections.len() as u64) as usize];
+        if sec.bars < 2 {
+            continue;
+        }
+        let len_bars = (1 + rng.next() % max_len_bars).min(sec.bars - 1);
+        // Section bars in master-grid terms: where does this section sit?
+        let sec_start_bar = (sec.out_start as f64 / master_fpb).round() as u64;
+        let end_bar = if rng.next() % 10 < 7 {
+            sec_start_bar + sec.bars // the boundary: back on the next one
+        } else {
+            // an internal bar line
+            sec_start_bar + len_bars + rng.next() % (sec.bars - len_bars).max(1)
+        };
+        let start_bar = end_bar - len_bars;
+        let out_start = (start_bar as f64 * master_fpb).round() as u64;
+        let out_end = (end_bar as f64 * master_fpb).round() as u64;
+        // No overlapping ducks — keep the first claim on a stretch.
+        if drops
+            .iter()
+            .any(|d| out_start < d.out_start + d.frames && d.out_start < out_end)
+        {
+            continue;
+        }
+        drops.push(BassDrop {
+            out_start,
+            frames: out_end - out_start,
+        });
+    }
+    drops.sort_by_key(|d| d.out_start);
+
     Ok(MixPlan {
         master_bpm,
         frames_per_bar: master_fpb,
@@ -457,6 +514,7 @@ pub fn plan(tracks: &[TrackInput], order: &[usize]) -> Result<MixPlan, PlanError
         sections,
         flurries,
         chops,
+        drops,
     })
 }
 
@@ -491,10 +549,66 @@ pub fn render(plan: &MixPlan, tracks: &[TrackInput]) -> Vec<f32> {
         }
     }
     // The performance layer: fader chops cut the bed; scratch flurries
-    // overlay it. Both are plan-level, so both are deterministic.
+    // overlay it; bass drops duck the master's low band last. All
+    // plan-level, all deterministic.
     apply_chops(plan, &mut out);
     apply_flurries(plan, tracks, &mut out);
+    apply_drops(plan, &mut out);
     out
+}
+
+/// Duck the lows during each drop: a 2nd-order Butterworth high-pass at
+/// [`DROP_CROSSOVER_HZ`] (RBJ biquad) runs across the window, crossfaded
+/// dry→wet over ~10 ms on the way in and snapped back over 5 ms exactly
+/// at the bar line — the slam, minus the click.
+fn apply_drops(plan: &MixPlan, out: &mut [f32]) {
+    let total = (out.len() / 2) as u64;
+    // RBJ cookbook high-pass, Q = 1/√2.
+    let w0 = 2.0 * std::f64::consts::PI * DROP_CROSSOVER_HZ / RENDER_RATE as f64;
+    let (sin, cos) = (w0.sin(), w0.cos());
+    let alpha = sin / (2.0 * std::f64::consts::FRAC_1_SQRT_2.recip());
+    let a0 = 1.0 + alpha;
+    let b0 = ((1.0 + cos) / 2.0 / a0) as f32;
+    let b1 = (-(1.0 + cos) / a0) as f32;
+    let b2 = b0;
+    let a1 = (-2.0 * cos / a0) as f32;
+    let a2 = ((1.0 - alpha) / a0) as f32;
+
+    let attack = (RENDER_RATE as f64 * 0.010) as u64; // ease in
+    let release = (RENDER_RATE as f64 * 0.005) as u64; // the slam (de-click)
+    for d in &plan.drops {
+        let end = (d.out_start + d.frames).min(total);
+        // Warm the filter up ahead of the duck so it is settled when the
+        // crossfade starts moving.
+        let warm = d.out_start.saturating_sub((RENDER_RATE / 10) as u64);
+        let (mut x1, mut x2, mut y1, mut y2) = ([0.0f32; 2], [0.0f32; 2], [0.0f32; 2], [0.0f32; 2]);
+        for fr in warm..end {
+            let into = fr.saturating_sub(d.out_start);
+            let left = end - fr;
+            // wet amount: 0 dry → 1 fully bass-killed
+            let wet = if fr < d.out_start {
+                0.0
+            } else if into < attack {
+                into as f32 / attack as f32
+            } else if left <= release {
+                left as f32 / release as f32
+            } else {
+                1.0
+            };
+            for c in 0..2 {
+                let i = (fr * 2) as usize + c;
+                let x = out[i];
+                let y = b0 * x + b1 * x1[c] + b2 * x2[c] - a1 * y1[c] - a2 * y2[c];
+                x2[c] = x1[c];
+                x1[c] = x;
+                y2[c] = y1[c];
+                y1[c] = y;
+                if fr >= d.out_start {
+                    out[i] = x + (y - x) * wet;
+                }
+            }
+        }
+    }
 }
 
 /// RMS of an interleaved-stereo region (both channels pooled).
@@ -729,7 +843,15 @@ mod tests {
     #[test]
     fn sections_render_loudness_matched() {
         let tracks = two_long_tracks(); // amps 0.5 and 0.1 — very different
-        let p = plan(&tracks, &[0, 1]).unwrap();
+                                        // Strip the performance layer: this test pins the BED's loudness
+                                        // matching; flurries/chops/drops/cut-punches add energy on top.
+        let mut p = plan(&tracks, &[0, 1]).unwrap();
+        p.flurries.clear();
+        p.chops.clear();
+        p.drops.clear();
+        for s in &mut p.sections {
+            s.transition = Transition::Swap;
+        }
         let mix = render(&p, &tracks);
         for s in &p.sections {
             // Skip the joint frames; measure the section's interior.
@@ -975,6 +1097,90 @@ mod tests {
         } else {
             panic!("no flurry in a 10-section mix");
         }
+    }
+
+    #[test]
+    fn drops_are_bar_quantized_and_scaled() {
+        let tracks = two_long_tracks();
+        let order: Vec<usize> = (0..200).map(|k| k % 2).collect();
+        let p = plan(&tracks, &order).unwrap();
+        let total_bars: u64 = p.sections.iter().map(|s| s.bars).sum();
+        assert!(
+            !p.drops.is_empty() && p.drops.len() as u64 <= total_bars / 96 + 1,
+            "drops {} for {} bars",
+            p.drops.len(),
+            total_bars
+        );
+        let fpb = p.frames_per_bar;
+        for d in &p.drops {
+            for edge in [d.out_start, d.out_start + d.frames] {
+                let bars = edge as f64 / fpb;
+                assert!(
+                    (bars - bars.round()).abs() * fpb < 2.0,
+                    "drop edge off the bar grid at {edge}"
+                );
+            }
+            let secs = d.frames as f64 / RENDER_RATE as f64;
+            assert!((0.9..=16.5).contains(&secs), "drop {secs} s");
+        }
+        // No overlaps.
+        for w in p.drops.windows(2) {
+            assert!(w[0].out_start + w[0].frames <= w[1].out_start);
+        }
+    }
+
+    /// Low-band RMS (one-pole at the drop crossover) of a window.
+    fn low_rms(mix: &[f32], start_frame: usize, frames: usize) -> f32 {
+        let a = (1.0 - (-2.0 * std::f64::consts::PI * DROP_CROSSOVER_HZ / RENDER_RATE as f64).exp())
+            as f32;
+        let mut lp = [0.0f32; 2];
+        // settle from a little before the window
+        let warm = start_frame.saturating_sub(4410);
+        let mut sum = 0.0f64;
+        let mut n = 0usize;
+        for fr in warm..start_frame + frames {
+            for c in 0..2 {
+                let x = mix[fr * 2 + c];
+                lp[c] += a * (x - lp[c]);
+                if fr >= start_frame {
+                    sum += (lp[c] as f64) * (lp[c] as f64);
+                    n += 1;
+                }
+            }
+        }
+        (sum / n.max(1) as f64).sqrt() as f32
+    }
+
+    #[test]
+    fn drop_ducks_the_lows_and_slams_back() {
+        // A 60 Hz track so the low band carries real energy.
+        let tracks = vec![
+            tone_track("low", 120.0, 60.0, 0.4, 1000, FPB_120),
+            tone_track("alt", 90.0, 65.0, 0.3, 500, 29_400),
+        ];
+        let order: Vec<usize> = (0..12).map(|k| k % 2).collect();
+        let p = plan(&tracks, &order).unwrap();
+        let mix = render(&p, &tracks);
+        let d = p.drops.first().expect("a drop");
+
+        // Inside the duck: lows ≥ 10 dB below the stretch just before.
+        let pre = low_rms(&mix, d.out_start as usize - 44_100, 22_050);
+        let inside = low_rms(
+            &mix,
+            d.out_start as usize + 22_050,
+            (d.frames as usize - 44_100).max(4410),
+        );
+        let db = 20.0 * (inside / pre.max(1e-9)).log10();
+        assert!(
+            db < -10.0,
+            "duck only {db:.1} dB (pre {pre}, inside {inside})"
+        );
+
+        // Back on the one: within a beat after the bar line, lows are back.
+        let fpbeat = (p.frames_per_bar / BEATS_PER_BAR) as usize;
+        let after = low_rms(&mix, (d.out_start + d.frames) as usize + fpbeat / 4, fpbeat);
+        let back = 20.0 * (after / pre.max(1e-9)).log10();
+        assert!(back > -3.0, "lows did not slam back: {back:.1} dB");
     }
 
     #[test]

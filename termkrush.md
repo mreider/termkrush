@@ -22,7 +22,16 @@
 |  | [Point termkrush.com (Porkbun DNS) at GitHub Pages + set the custom domain on GitHub](termkrush/Point-termkrushcom-Porkbun-DNS-at-GitHub-Pages-set-the-custom-domain-on-GitHub.md) |  |  |
 |  | [Record the timeline into a pad (overwrite confirm if not empty)](termkrush/Record-the-timeline-into-a-pad-overwrite-confirm-if-not-empty.md) | 5 |  |
 |  | [Save and load a session as a .tekr file (pads + timeline)](termkrush/Save-and-load-a-session-as-a-tekr-file-pads-timeline.md) | 8 |  |
-| Total Points | | 49 | |
+|  | [Bass drops: duck the lows, slam back on the one](termkrush/Bass-drops-duck-the-lows-slam-back-on-the-one.md) | 3 |  |
+|  | [Beat-tap any library track, cached for good](termkrush/Beat-tap-any-library-track-cached-for-good.md) | 3 |  |
+|  | [Bit-identical determinism: same sequence, same file](termkrush/Bit-identical-determinism-same-sequence-same-file.md) | 3 |  |
+|  | [Energy-arc shaping: waves not ramps](termkrush/Energy-arc-shaping-waves-not-ramps.md) | 5 |  |
+|  | [Engine-placed scratches and fader chops with human micro-timing](termkrush/Engine-placed-scratches-and-fader-chops-with-human-micro-timing.md) | 8 |  |
+|  | [Naive auto-mix render: phrase sections varispeeded and butt-joined on the master grid](termkrush/Naive-auto-mix-render-phrase-sections-varispeeded-and-butt-joined-on-the-master-grid.md) | 8 |  |
+|  | [Sequence line: order tracks from the library, save/load as the project file](termkrush/Sequence-line-order-tracks-from-the-library-save-load-as-the-project-file.md) | 5 |  |
+|  | [Transition scheduler: hard cuts as punctuation, rare fades](termkrush/Transition-scheduler-hard-cuts-as-punctuation-rare-fades.md) | 3 |  |
+|  | [Chore: strip the pad grid and timeline surfaces from the GUI](termkrush/chore-strip-the-pad-grid-and-timeline-surfaces-from-the-gui.md) |  |  |
+| Total Points | | 87 | |
 
 ### Started
 | User | Title | Points | Tags |
@@ -102,7 +111,6 @@
 |  | [Bug: tempo-sync wrongly tied to loop kind - decouple it; auto-lock any block with internal rhythm (length-based), add a per-block sync toggle](termkrush/Bug-tempo-sync-wrongly-tied-to-loop-kind-decouple-it-auto-lock-any-block-with-internal-rhythm-length-based-add-a-per-block-sync-toggle.md) |  |  |
 |  | [Bug: timeline blocks - drag ghost, move blocks across/along tracks with snap, mark MASTER track](termkrush/Bug-timeline-blocks-drag-ghost-move-blocks-across-along-tracks-with-snap-mark-MASTER-track.md) |  |  |
 |  | [Bug: timeline blocks play at native tempo - varispeed every block to the MASTER BPM so beats lock to the grid](termkrush/Bug-timeline-blocks-play-at-native-tempo-varispeed-every-block-to-the-MASTER-BPM-so-beats-lock-to-the-grid.md) |  |  |
-|  | [Bug: timeline border should show just 0, not [0], to match pad number titles](termkrush/Bug-timeline-border-should-show-just-0-not-0-to-match-pad-number-titles.md) |  |  |
 |  | [Bug: timeline needs a mouse-scrubbable playhead and play should be independent of library/clip preview](termkrush/Bug-timeline-needs-a-mouse-scrubbable-playhead-and-play-should-be-independent-of-library-clip-preview.md) |  |  |
 |  | [Bug: timeline needs a visible horizontal scrollbar, hint text is clipped, drag preview should be block-shaped, active lane highlight too faint](termkrush/Bug-timeline-needs-a-visible-horizontal-scrollbar-hint-text-is-clipped-drag-preview-should-be-block-shaped-active-lane-highlight-too-faint.md) |  |  |
 |  | [Bug: timeline playhead marker renders as a tofu box - paint the triangle instead of a glyph](termkrush/Bug-timeline-playhead-marker-renders-as-a-tofu-box-paint-the-triangle-instead-of-a-glyph.md) |  |  |
@@ -120,6 +128,7 @@
 |  | [Jog scratch voice DSP in the core engine](termkrush/Jog-scratch-voice-DSP-in-the-core-engine.md) | 5 |  |
 |  | [Library home: Enter on a song offers load rename delete move](termkrush/Library-home-Enter-on-a-song-offers-load-rename-delete-move.md) | 5 |  |
 |  | [Move a file to a folder via a folder-picker modal](termkrush/Move-a-file-to-a-folder-via-a-folder-picker-modal.md) | 8 |  |
+|  | [Bug: timeline border should show just 0, not [0], to match pad number titles](termkrush/Bug-timeline-border-should-show-just-0-not-0-to-match-pad-number-titles.md) |  |  |
 
 ### Accepted
 | User | Title | Points | Tags |

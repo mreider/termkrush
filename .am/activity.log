@@ -967,3 +967,12 @@
 2026-06-11T13:18:40Z	Matt Reider	unstarted	termkrush/Bug-cannot-unload-a-clip-from-a-pad.md	Retired by the 2026-06-11 auto-mix pivot: pads removed, defect surface gone; un-starting to move to icebox per PM instruction.
 2026-06-11T13:18:41Z	Matt Reider	unstarted	termkrush/Bug-trim-and-timeline-editing-are-not-usable.md	Retired by the 2026-06-11 auto-mix pivot: timeline editing removed, defect surface gone; un-starting to move to icebox per PM instruction.
 2026-06-11T13:18:44Z	Matt Reider	unstarted	termkrush/Bug-first-track-sets-master-BPM-and-prompts-to-sync-all.md	Retired by the 2026-06-11 auto-mix pivot: sync prompt model removed (engine never asks); un-starting to move to icebox per PM instruction.
+2026-06-11T13:32:36Z	Matt Reider	created	termkrush/Strip-the-pad-grid-and-timeline-surfaces-from-the-GUI.md	
+2026-06-11T13:32:41Z	Matt Reider	created	termkrush/Sequence-line-order-tracks-from-the-library-save-load-as-the-project-file.md	
+2026-06-11T13:32:46Z	Matt Reider	created	termkrush/Beat-tap-any-library-track-cached-for-good.md	
+2026-06-11T13:32:52Z	Matt Reider	created	termkrush/Naive-auto-mix-render-phrase-sections-varispeeded-and-butt-joined-on-the-master-grid.md	
+2026-06-11T13:32:58Z	Matt Reider	created	termkrush/Transition-scheduler-hard-cuts-as-punctuation-rare-fades.md	
+2026-06-11T13:33:04Z	Matt Reider	created	termkrush/Engine-placed-scratches-and-fader-chops-with-human-micro-timing.md	
+2026-06-11T13:33:10Z	Matt Reider	created	termkrush/Bass-drops-duck-the-lows-slam-back-on-the-one.md	
+2026-06-11T13:33:15Z	Matt Reider	created	termkrush/Energy-arc-shaping-waves-not-ramps.md	
+2026-06-11T13:33:20Z	Matt Reider	created	termkrush/Bit-identical-determinism-same-sequence-same-file.md	

@@ -125,8 +125,8 @@
 |  | [Move a file to a folder via a folder-picker modal](termkrush/Move-a-file-to-a-folder-via-a-folder-picker-modal.md) | 8 |  |
 |  | [Sequence line: order tracks from the library, save/load as the project file](termkrush/Sequence-line-order-tracks-from-the-library-save-load-as-the-project-file.md) | 5 |  |
 |  | [Beat-tap any library track, cached for good](termkrush/Beat-tap-any-library-track-cached-for-good.md) | 3 |  |
-|  | [Bug: timeline border should show just 0, not [0], to match pad number titles](termkrush/Bug-timeline-border-should-show-just-0-not-0-to-match-pad-number-titles.md) |  |  |
 |  | [Naive auto-mix render: phrase sections varispeeded and butt-joined on the master grid](termkrush/Naive-auto-mix-render-phrase-sections-varispeeded-and-butt-joined-on-the-master-grid.md) | 8 |  |
+|  | [Bug: timeline border should show just 0, not [0], to match pad number titles](termkrush/Bug-timeline-border-should-show-just-0-not-0-to-match-pad-number-titles.md) |  |  |
 
 ### Accepted
 | User | Title | Points | Tags |
@@ -227,6 +227,7 @@
 |  | [Write the product spec (features + backlog) as docs/SPEC.md](termkrush/Write-the-product-spec-features-backlog-as-docs-SPECmd.md) |  |  |
 |  | [Chore: strip the pad grid and timeline surfaces from the GUI](termkrush/chore-strip-the-pad-grid-and-timeline-surfaces-from-the-gui.md) |  |  |
 |  | [Chore: overwrite the spec and docs for the auto-mix model (SPEC.md, README, landing page)](termkrush/Chore-overwrite-the-spec-and-docs-for-the-auto-mix-model-SPECmd-README-landing-page.md) |  |  |
+|  | [Chore: match the app to the new auto-mix UX design (big poppa): top bar, beat-tap stage, coach, render progress + complete, sequence chips](termkrush/Chore-match-the-app-to-the-new-auto-mix-UX-design-big-poppa-top-bar-beat-tap-stage-coach-render-progress-complete-sequence-chips.md) |  |  |
 
 ### Rejected
 | User | Title | Points | Tags |

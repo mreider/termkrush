@@ -2,10 +2,13 @@
 title: 'Chore: match the app to the new auto-mix UX design (big poppa): top bar, beat-tap stage, coach, render progress + complete, sequence chips'
 type: chore
 created: "2026-06-11T18:53:25Z"
-modified: "2026-06-11T19:07:03Z"
+modified: "2026-06-11T19:08:29Z"
 author: Matt Reider
-status: started
+status: accepted
 started: "2026-06-11T18:53:25Z"
+delivered: "2026-06-11T19:08:29Z"
+accepted: "2026-06-11T19:08:29Z"
+project: termkrush
 ---
 
 ## Goal

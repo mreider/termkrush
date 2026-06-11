@@ -22,8 +22,7 @@
 |  | [Record the timeline into a pad (overwrite confirm if not empty)](termkrush/Record-the-timeline-into-a-pad-overwrite-confirm-if-not-empty.md) | 5 |  |
 |  | [Save and load a session as a .tekr file (pads + timeline)](termkrush/Save-and-load-a-session-as-a-tekr-file-pads-timeline.md) | 8 |  |
 |  | [Bit-identical determinism: same sequence, same file](termkrush/Bit-identical-determinism-same-sequence-same-file.md) | 3 |  |
-|  | [Energy-arc shaping: waves not ramps](termkrush/Energy-arc-shaping-waves-not-ramps.md) | 5 |  |
-| Total Points | | 57 | |
+| Total Points | | 52 | |
 
 ### Started
 | User | Title | Points | Tags |
@@ -127,6 +126,7 @@
 |  | [Engine-placed scratches and fader chops with human micro-timing](termkrush/Engine-placed-scratches-and-fader-chops-with-human-micro-timing.md) | 8 |  |
 |  | [Bass drops: duck the lows, slam back on the one](termkrush/Bass-drops-duck-the-lows-slam-back-on-the-one.md) | 3 |  |
 |  | [Bug: timeline border should show just 0, not [0], to match pad number titles](termkrush/Bug-timeline-border-should-show-just-0-not-0-to-match-pad-number-titles.md) |  |  |
+|  | [Energy-arc shaping: waves not ramps](termkrush/Energy-arc-shaping-waves-not-ramps.md) | 5 |  |
 
 ### Accepted
 | User | Title | Points | Tags |

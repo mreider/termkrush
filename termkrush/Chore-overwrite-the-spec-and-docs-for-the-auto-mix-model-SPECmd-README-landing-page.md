@@ -2,10 +2,13 @@
 title: 'Chore: overwrite the spec and docs for the auto-mix model (SPEC.md, README, landing page)'
 type: chore
 created: "2026-06-11T14:59:05Z"
-modified: "2026-06-11T15:09:38Z"
+modified: "2026-06-11T15:10:08Z"
 author: Matt Reider
-status: started
+status: accepted
 started: "2026-06-11T15:04:02Z"
+delivered: "2026-06-11T15:10:08Z"
+accepted: "2026-06-11T15:10:08Z"
+project: termkrush
 ---
 
 ## Goal

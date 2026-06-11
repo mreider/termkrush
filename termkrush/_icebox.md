@@ -14,4 +14,3 @@ Stack-rank order. Top is the highest priority. Edit by hand or via `am rank` / `
 - [Bug: cannot unload a clip from a pad](Bug-cannot-unload-a-clip-from-a-pad.md)
 - [Bug: trim and timeline editing are not usable](Bug-trim-and-timeline-editing-are-not-usable.md)
 - [Bug: first track sets master BPM and prompts to sync all](Bug-first-track-sets-master-BPM-and-prompts-to-sync-all.md)
-- [Point termkrush.com (Porkbun DNS) at GitHub Pages + set the custom domain on GitHub](Point-termkrush-com-Porkbun-DNS-at-GitHub-Pages-set-the-custom-domain-on-GitHub.md)

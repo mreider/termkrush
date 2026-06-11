@@ -18,7 +18,6 @@
 |  | [Master timeline as a permanent top strip](termkrush/Master-timeline-as-a-permanent-top-strip.md) | 8 |  |
 |  | [Minimal context-mapped controls: move + Space/Enter/M menu](termkrush/Minimal-context-mapped-controls-move-Space-Enter-M-menu.md) | 8 |  |
 |  | [Number keys select pads 1-8 and 0 selects the timeline](termkrush/Number-keys-select-pads-1-8-and-0-selects-the-timeline.md) | 5 |  |
-|  | [Point termkrush.com (Porkbun DNS) at GitHub Pages + set the custom domain on GitHub](termkrush/Point-termkrush-com-Porkbun-DNS-at-GitHub-Pages-set-the-custom-domain-on-GitHub.md) |  |  |
 |  | [Point termkrush.com (Porkbun DNS) at GitHub Pages + set the custom domain on GitHub](termkrush/Point-termkrushcom-Porkbun-DNS-at-GitHub-Pages-set-the-custom-domain-on-GitHub.md) |  |  |
 |  | [Record the timeline into a pad (overwrite confirm if not empty)](termkrush/Record-the-timeline-into-a-pad-overwrite-confirm-if-not-empty.md) | 5 |  |
 |  | [Save and load a session as a .tekr file (pads + timeline)](termkrush/Save-and-load-a-session-as-a-tekr-file-pads-timeline.md) | 8 |  |
@@ -227,6 +226,7 @@
 |  | [Retire the TUI front-end once the GUI reaches parity](termkrush/Retire-the-TUI-front-end-once-the-GUI-reaches-parity.md) |  |  |
 |  | [Write the product spec (features + backlog) as docs/SPEC.md](termkrush/Write-the-product-spec-features-backlog-as-docs-SPECmd.md) |  |  |
 |  | [Chore: strip the pad grid and timeline surfaces from the GUI](termkrush/chore-strip-the-pad-grid-and-timeline-surfaces-from-the-gui.md) |  |  |
+|  | [Chore: overwrite the spec and docs for the auto-mix model (SPEC.md, README, landing page)](termkrush/Chore-overwrite-the-spec-and-docs-for-the-auto-mix-model-SPECmd-README-landing-page.md) |  |  |
 
 ### Rejected
 | User | Title | Points | Tags |

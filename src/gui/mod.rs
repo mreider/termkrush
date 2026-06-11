@@ -2,10 +2,11 @@
 //! pivot in `.am/inception.md`). The engine (`termkrush-core`) is unchanged;
 //! this is all view + input.
 //!
-//! Mouse model: drag a library track onto a clip to load it, into a folder to
-//! move it, or onto a timeline lane to place it; drag a clip by its name to the
-//! timeline; double-click to rename; click ▶ to preview. No modal dialogs —
-//! inline fields and buttons.
+//! Post the 2026-06-11 auto-mix pivot this shell is three surfaces: the
+//! library (left), the beat-tap clip editor (central, opened from a library
+//! row), and an empty main area where the sequence line lands next. Pads,
+//! the timeline, and the scratch platter are gone — the engine performs the
+//! mix; the user curates tracks and taps beats.
 
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
@@ -13,14 +14,12 @@ use std::sync::mpsc::{channel, Receiver, Sender};
 
 use eframe::egui;
 use egui_phosphor::regular as ph;
-use termkrush_core::arrangement::{Arrangement, Block, Phase};
 use termkrush_core::audio::{
     decode_file, detect_bpm, probe_playable, write_wav, AudioOutput, DecodedAudio,
 };
 use termkrush_core::config::Config;
 use termkrush_core::library::Crate;
-use termkrush_core::mix::{Mixer, PadKind, PADS};
-use termkrush_core::scratch::detect_onsets;
+use termkrush_core::mix::{Mixer, PADS};
 
 // The landing-page palette (index.html CSS vars), so the app matches the site.
 // Body text is the cream `--ink`; amber/green are accents, not the text color.
@@ -36,6 +35,10 @@ const LINE: egui::Color32 = egui::Color32::from_rgb(0x1d, 0x27, 0x1f); // --line
 /// Waveform cache resolution (peak pairs). Computed once per clip, mapped to the
 /// display width each frame — cheap, so audio is never starved by redrawing.
 const WAVE_COLS: usize = 1600;
+
+/// The mixer voice that backs the clip editor. The pad grid is gone, but the
+/// engine's pad voices remain — the editor borrows one as its audition slot.
+const EDIT_SLOT: usize = 0;
 
 /// Launch the desktop app. Blocks until the window closes.
 pub fn run() -> eframe::Result<()> {
@@ -61,26 +64,16 @@ pub fn run() -> eframe::Result<()> {
     )
 }
 
-/// A track being dragged out of the library (drop onto a pad or a folder).
+/// A track being dragged out of the library (drop onto a folder to move it).
 #[derive(Clone)]
 struct DragTrack(PathBuf);
-
-/// A pad being dragged onto the timeline (its trimmed clip becomes a block).
-#[derive(Clone)]
-struct DragPad(usize);
 
 /// Where a background decode is headed when it lands.
 #[derive(Clone, Copy)]
 enum Target {
+    /// The clip editor's audition slot.
     Pad(usize),
     Preview,
-    /// Arm the scratch platter.
-    Jog,
-    /// Place a block on timeline `track` starting at `start` frames.
-    Timeline {
-        track: usize,
-        start: u64,
-    },
 }
 
 /// A finished background decode on its way to the audio engine. `audio` is
@@ -89,8 +82,6 @@ struct LoadDone {
     target: Target,
     audio: Option<DecodedAudio>,
     bpm: Option<f32>,
-    /// Detected percussion onsets (timeline drops) for the on-block beat markers.
-    beats: Vec<u64>,
     path: PathBuf,
 }
 
@@ -108,23 +99,16 @@ enum Act {
         track: PathBuf,
         folder: PathBuf,
     },
-    LoadToPad {
-        pad: usize,
-        path: PathBuf,
-    },
     StartNewFolder,
     CommitNewFolder,
     CancelNewFolder,
-    PlayPad(usize),
-    SetKind(usize, PadKind),
-    SetGain(usize, f32),
-    ClearPad(usize),
-    ExportPad(usize),
-    EditClip(usize),
+    /// Open a library track in the beat-tap clip editor.
+    EditTrack(PathBuf),
     CloseClip,
     SetTrimIn(usize, usize),
     SetTrimOut(usize, usize),
     AuditionSel(usize),
+    ExportClip(usize),
     /// Clear all beat marks on the clip.
     ClearBeats(usize),
     /// Toggle a beat mark at a clip-absolute frame (add, or remove if near one).
@@ -137,10 +121,9 @@ enum Act {
 pub struct TermKrushApp {
     mixer: Mixer,
     crate_lib: Crate,
-    /// Source path loaded on each pad (for the cell's track name).
+    /// Source path loaded on each engine voice (the editor uses `EDIT_SLOT`).
     pad_source: [Option<PathBuf>; PADS],
-    /// Beat marks per clip, in clip-absolute frames (set in the clip editor;
-    /// carried onto timeline blocks for exact sync).
+    /// Beat marks per voice, in clip-absolute frames (set in the clip editor).
     pad_beats: [Vec<u64>; PADS],
     /// The selected library track (delete / preview act on it).
     lib_sel: Option<PathBuf>,
@@ -148,42 +131,24 @@ pub struct TermKrushApp {
     renaming: Option<(PathBuf, String)>,
     /// Inline new-folder name being typed.
     new_folder: Option<String>,
-    /// Source loaded on the scratch platter (for its label).
-    jog_source: Option<PathBuf>,
     /// The library track currently previewing (so its row shows a stop button).
     previewing: Option<PathBuf>,
     /// Whether the preview has actually started sounding (to clear `previewing`
     /// only after it finishes, not during the decode gap).
     preview_was_on: bool,
-    /// The pad whose clip is open in the editor (central-panel mode).
+    /// The voice whose clip is open in the editor (central-panel mode).
     clip_edit: Option<usize>,
-    /// Cached clip-editor waveform `(pad, peaks)` — computed once on open so the
+    /// True while a decode headed for the editor is in flight — the editor
+    /// opens when it lands.
+    edit_pending: bool,
+    /// Cached clip-editor waveform `(slot, peaks)` — computed once on open so the
     /// whole-clip downsample doesn't run every frame (which starved the audio).
     clip_wave: Option<(usize, Vec<(f32, f32)>)>,
-    /// Cached scratch-platter waveform peaks (computed once when armed).
-    jog_wave: Vec<(f32, f32)>,
     /// How many background decodes are in flight (drives the loading overlay).
     pending_decodes: usize,
     /// Spring-loaded folders: `(folder, hover-start time)` while a track is
     /// dragged over it — after a hold we navigate in so you can drop elsewhere.
     spring: Option<(PathBuf, f64)>,
-
-    /// The free-track timeline arrangement.
-    arrangement: Arrangement,
-    /// Timeline transport: rolling + playhead position (frames).
-    tl_playing: bool,
-    tl_playhead: u64,
-    /// Selected block on the timeline: `(track, index)` — for move/copy/delete.
-    tl_sel: Option<(usize, usize)>,
-    /// Copied block, for Cmd-V paste.
-    tl_clip: Option<Block>,
-    /// Timeline zoom (pixels per second) and horizontal scroll (left-edge frame).
-    tl_pxps: f32,
-    tl_scroll: u64,
-    /// While moving a block: px offset from its left edge to the grab point, and
-    /// which block is being dragged (so its original is hidden, ghost shown).
-    tl_grab_dx: f32,
-    tl_moving: Option<(usize, usize)>,
 
     producer: Option<rtrb::Producer<f32>>,
     _audio: Option<AudioOutput>,
@@ -224,7 +189,6 @@ impl TermKrushApp {
         mixer.set_sample_rate(rate);
         let (load_tx, load_rx) = channel();
         let (probe_tx, probe_rx) = channel();
-        let arrangement = Arrangement::new(rate, 4); // start with 4 tracks
 
         Self {
             mixer,
@@ -234,23 +198,13 @@ impl TermKrushApp {
             lib_sel: None,
             renaming: None,
             new_folder: None,
-            jog_source: None,
             previewing: None,
             preview_was_on: false,
             clip_edit: None,
+            edit_pending: false,
             clip_wave: None,
-            jog_wave: Vec::new(),
             pending_decodes: 0,
             spring: None,
-            arrangement,
-            tl_playing: false,
-            tl_playhead: 0,
-            tl_sel: None,
-            tl_clip: None,
-            tl_pxps: 60.0,
-            tl_scroll: 0,
-            tl_grab_dx: 0.0,
-            tl_moving: None,
             producer,
             _audio: audio,
             out_channels: channels.max(1),
@@ -298,16 +252,6 @@ impl TermKrushApp {
         }
         self.scratch.resize(frames * 2, 0.0);
         self.mixer.fill_mix(&mut self.scratch);
-        // The timeline arrangement plays on top of the live pads when rolling.
-        if self.tl_playing {
-            self.arrangement
-                .mix_into(self.tl_playhead, &mut self.scratch);
-            let total = self.arrangement.total_frames();
-            self.tl_playhead += frames as u64;
-            if total == 0 || self.tl_playhead >= total {
-                self.tl_playhead = 0; // loop back to the top
-            }
-        }
         for f in 0..frames {
             let (l, r) = (self.scratch[f * 2], self.scratch[f * 2 + 1]);
             for c in 0..ch {
@@ -329,25 +273,15 @@ impl TermKrushApp {
         std::thread::spawn(move || {
             let done = match decode_file(&path, rate) {
                 Ok(audio) => {
-                    // Detect tempo for pads AND timeline drops (so a library
-                    // track dropped on the MASTER track can set the BPM).
-                    let bpm = matches!(target, Target::Pad(_) | Target::Timeline { .. })
+                    // A rough detected tempo for the editor's voice; the tapped
+                    // beats (least-squares fit) are the exact source of truth.
+                    let bpm = matches!(target, Target::Pad(_))
                         .then(|| detect_bpm(&audio.samples, audio.channels, audio.sample_rate))
                         .flatten();
-                    // Percussion-onset markers for timeline drops (visual aid).
-                    let beats = matches!(target, Target::Timeline { .. })
-                        .then(|| {
-                            detect_onsets(&audio.samples, audio.channels, audio.sample_rate)
-                                .into_iter()
-                                .map(|f| f as u64)
-                                .collect()
-                        })
-                        .unwrap_or_default();
                     LoadDone {
                         target,
                         audio: Some(audio),
                         bpm,
-                        beats,
                         path,
                     }
                 }
@@ -357,7 +291,6 @@ impl TermKrushApp {
                         target,
                         audio: None,
                         bpm: None,
-                        beats: Vec::new(),
                         path,
                     }
                 }
@@ -371,56 +304,25 @@ impl TermKrushApp {
         while let Ok(done) = self.load_rx.try_recv() {
             self.pending_decodes = self.pending_decodes.saturating_sub(1);
             let Some(audio) = done.audio else {
-                continue; // decode failed; the overlay clears via the counter
+                self.edit_pending = false; // failed decode never opens the editor
+                continue;
             };
             match done.target {
                 Target::Pad(i) => {
                     self.mixer.assign_pad(i, audio.samples);
                     if let Some(b) = done.bpm {
-                        // Remember the clip's tempo, but the MASTER timeline track
-                        // (not the first clip loaded) sets the master BPM.
                         self.mixer.set_pad_bpm(i, Some(b));
                     }
                     self.pad_source[i] = Some(done.path);
+                    if self.edit_pending && i == EDIT_SLOT {
+                        self.edit_pending = false;
+                        self.pad_beats[i].clear();
+                        self.clip_edit = Some(i);
+                        // Downsample the whole clip ONCE; reused every frame.
+                        self.clip_wave = Some((i, self.mixer.pad_peaks(i, WAVE_COLS)));
+                    }
                 }
                 Target::Preview => self.mixer.preview(audio.samples),
-                Target::Jog => {
-                    self.mixer.set_jog_source(audio.samples);
-                    self.jog_wave = self.mixer.jog_peaks(WAVE_COLS);
-                }
-                Target::Timeline { track, start } => {
-                    let raw = start as f64; // un-snapped drop frame
-                    let label = done
-                        .path
-                        .file_stem()
-                        .and_then(|s| s.to_str())
-                        .unwrap_or("clip")
-                        .to_string();
-                    // MASTER track (track 0) sets the tempo FIRST, so the grid
-                    // exists before we phase-snap this block onto it.
-                    if track == 0 {
-                        if let Some(b) = done.bpm {
-                            self.mixer.set_master_bpm(Some(b));
-                            self.arrangement.set_target_bpm(Some(b));
-                        }
-                    }
-                    // Auto-lock anything with internal rhythm (length-based).
-                    let sync = self.default_sync(track, audio.samples.len() / 2);
-                    let mut block = Block {
-                        samples: std::sync::Arc::new(audio.samples),
-                        start: 0,
-                        label,
-                        source_pad: None, // a library drop has no live clip
-                        bpm: done.bpm,
-                        phase: Phase::OnBeat,
-                        sync,
-                        nudge: 0,
-                        beats: done.beats,
-                    };
-                    // Library drops aren't beat-tapped → snap the start (fbo 0).
-                    block.start = self.snapped_start(raw, block.phase, block.nudge, 0.0);
-                    self.arrangement.add_block(track, block);
-                }
             }
         }
     }
@@ -439,9 +341,7 @@ impl TermKrushApp {
                     self.previewing = None;
                     self.preview_was_on = false;
                 } else {
-                    // Switch the preview to this track (and stop the timeline —
-                    // preview and timeline playback are mutually exclusive).
-                    self.tl_playing = false;
+                    // Switch the preview to this track.
                     self.mixer.stop_preview();
                     self.spawn_load(Target::Preview, p.clone());
                     self.previewing = Some(p);
@@ -474,9 +374,6 @@ impl TermKrushApp {
             Act::MoveTo { track, folder } => {
                 let _ = self.crate_lib.move_into(&track, &folder);
             }
-            Act::LoadToPad { pad, path } => {
-                self.spawn_load(Target::Pad(pad), path);
-            }
             Act::StartNewFolder => self.new_folder = Some(String::new()),
             Act::CommitNewFolder => {
                 if let Some(name) = self.new_folder.take() {
@@ -487,34 +384,14 @@ impl TermKrushApp {
                 }
             }
             Act::CancelNewFolder => self.new_folder = None,
-            Act::PlayPad(i) => {
-                // Playing a pad ends any library audition — they shouldn't overlap.
+            Act::EditTrack(path) => {
+                // Opening the editor silences any preview, then decodes into
+                // the audition slot; the editor opens when the decode lands.
                 self.mixer.stop_preview();
                 self.previewing = None;
-                if self.mixer.pad_is_sounding(i) {
-                    self.mixer.stop_pad(i);
-                } else {
-                    self.mixer.trigger_pad(i);
-                }
-            }
-            Act::SetKind(i, k) => self.mixer.set_pad_kind(i, k),
-            Act::SetGain(i, v) => {
-                self.mixer.set_pad_gain(i, v);
-                self.refresh_pad_blocks(i);
-            }
-            Act::ClearPad(i) => {
-                self.mixer.unload_pad(i);
-                self.pad_source[i] = None;
-                self.pad_beats[i].clear();
-                // Keep any placed blocks but cut their link to this pad.
-                self.arrangement.unlink_pad(i);
-            }
-            Act::ExportPad(i) => self.export_pad(i),
-            Act::EditClip(i) => {
-                self.mixer.stop_pad(i); // silence live playback before editing
-                self.clip_edit = Some(i);
-                // Downsample the whole clip ONCE; reused every frame while editing.
-                self.clip_wave = Some((i, self.mixer.pad_peaks(i, WAVE_COLS)));
+                self.mixer.stop_pad(EDIT_SLOT);
+                self.edit_pending = true;
+                self.spawn_load(Target::Pad(EDIT_SLOT), path);
             }
             Act::CloseClip => {
                 if let Some(i) = self.clip_edit.take() {
@@ -522,23 +399,17 @@ impl TermKrushApp {
                 }
                 self.clip_wave = None;
             }
-            Act::SetTrimIn(i, f) => {
-                self.mixer.set_pad_trim_in(i, f);
-                self.refresh_pad_blocks(i);
-            }
-            Act::SetTrimOut(i, f) => {
-                self.mixer.set_pad_trim_out(i, f);
-                self.refresh_pad_blocks(i);
-            }
+            Act::SetTrimIn(i, f) => self.mixer.set_pad_trim_in(i, f),
+            Act::SetTrimOut(i, f) => self.mixer.set_pad_trim_out(i, f),
             Act::AuditionSel(i) => {
                 if self.mixer.pad_is_sounding(i) {
                     self.mixer.stop_pad(i);
                 } else {
-                    self.tl_playing = false; // auditioning a clip stops the timeline
                     let (inp, out) = self.mixer.pad_trim(i);
                     self.mixer.audition_region(i, inp, out);
                 }
             }
+            Act::ExportClip(i) => self.export_clip(i),
             Act::ClearBeats(i) => self.pad_beats[i].clear(),
             Act::ToggleBeat(i, frame) => {
                 // Remove a nearby mark (within ~30ms), else add one.
@@ -567,947 +438,9 @@ impl TermKrushApp {
         }
     }
 
-    /// The timeline (top panel): brand + transport, then free tracks of blocks.
-    /// Drag a library track onto a lane to place a block (snapped to the beat);
-    /// click a block to select, Delete to remove, Cmd-C/V to copy/paste.
-    fn draw_timeline(&mut self, ctx: &egui::Context) {
-        const LANE_H: f32 = 34.0;
-        const GUTTER: f32 = 10.0; // left margin so frame 0 isn't flush to the edge
-        let sr = self.target_rate.max(1) as f32;
-        let master_bpm = self.mixer.master_bpm();
-        // Placement snapping now goes through `snapped_start` (onset + phase).
-
-        egui::TopBottomPanel::top("timeline")
-            .exact_height(220.0)
-            .show(ctx, |ui| {
-                ui.add_space(6.0);
-                // --- brand + transport ---
-                ui.horizontal(|ui| {
-                    let (r, _) =
-                        ui.allocate_exact_size(egui::vec2(22.0, 22.0), egui::Sense::hover());
-                    let p = ui.painter_at(r);
-                    p.circle_filled(r.center(), 10.0, PANEL);
-                    p.circle_stroke(r.center(), 10.0, egui::Stroke::new(1.0, LINE));
-                    p.circle_filled(r.center(), 3.0, AMBER);
-                    ui.label(bungee("termkrush", 18.0, AMBER));
-                    ui.add_space(12.0);
-                    if icon_btn(
-                        ui,
-                        if self.tl_playing { ph::PAUSE } else { ph::PLAY },
-                        "play / pause the timeline",
-                    ) {
-                        self.tl_playing = !self.tl_playing;
-                        if self.tl_playing {
-                            self.mixer.stop_preview();
-                            self.previewing = None;
-                            for pad in 0..PADS {
-                                self.mixer.stop_pad(pad);
-                            }
-                        }
-                    }
-                    if icon_btn(ui, ph::STOP, "stop (rewind to start)") {
-                        self.tl_playing = false;
-                        self.tl_playhead = 0;
-                        self.tl_scroll = 0;
-                    }
-                    if icon_btn(ui, ph::FLOPPY_DISK, "render the mix to the library (WAV)") {
-                        self.render_arrangement();
-                    }
-                    if icon_btn(ui, ph::PLUS, "add a track") {
-                        self.arrangement.add_track();
-                    }
-                    ui.add_space(8.0);
-                    // Zoom + horizontal scroll.
-                    if icon_btn(ui, ph::MAGNIFYING_GLASS_MINUS, "zoom out") {
-                        self.tl_pxps = (self.tl_pxps / 1.4).max(8.0);
-                    }
-                    if icon_btn(ui, ph::MAGNIFYING_GLASS_PLUS, "zoom in") {
-                        self.tl_pxps = (self.tl_pxps * 1.4).min(400.0);
-                    }
-                    let step = (sr * 2.0) as u64;
-                    if icon_btn(ui, ph::CARET_LEFT, "scroll left") {
-                        self.tl_scroll = self.tl_scroll.saturating_sub(step);
-                    }
-                    if icon_btn(ui, ph::CARET_RIGHT, "scroll right") {
-                        self.tl_scroll += step;
-                    }
-                    ui.add_space(8.0);
-                    // Master tempo — editable, because auto-detect is often
-                    // octave-off. ½/2× fix the common error; type for precision.
-                    if let Some(b) = master_bpm {
-                        if ui
-                            .button(egui::RichText::new("½").color(DIM))
-                            .on_hover_text("halve the master tempo")
-                            .clicked()
-                        {
-                            self.set_master_tempo((b * 0.5).max(20.0));
-                        }
-                        let mut bpm = b;
-                        let resp = ui.add(
-                            egui::DragValue::new(&mut bpm)
-                                .speed(0.2)
-                                .range(20.0..=300.0)
-                                .suffix(" BPM"),
-                        );
-                        if resp.changed() {
-                            self.set_master_tempo(bpm);
-                        }
-                        if ui
-                            .button(egui::RichText::new("2×").color(DIM))
-                            .on_hover_text("double the master tempo")
-                            .clicked()
-                        {
-                            self.set_master_tempo((b * 2.0).min(300.0));
-                        }
-                    } else {
-                        ui.label(egui::RichText::new("-- BPM").color(DIM));
-                    }
-                    // Where the playhead is: bar.beat (if tempo) or m:ss.
-                    let ph = self.tl_playhead;
-                    let pos = match master_bpm {
-                        Some(b) if b > 0.0 => {
-                            let fpb = (sr * 60.0 / b) as u64; // frames / beat
-                            let beat = ph.checked_div(fpb).unwrap_or(0);
-                            format!("{}.{}", beat / 4 + 1, beat % 4 + 1)
-                        }
-                        _ => {
-                            let s = (ph as f32 / sr) as u64;
-                            format!("{}:{:02}", s / 60, s % 60)
-                        }
-                    };
-                    ui.label(egui::RichText::new(pos).color(DIM));
-
-                    // Phase control for the SELECTED block — always reachable
-                    // here regardless of zoom/scroll (mirrors the block's badge).
-                    let sel = self.tl_sel.and_then(|(t, bi)| {
-                        self.arrangement
-                            .tracks()
-                            .get(t)
-                            .and_then(|tr| tr.blocks.get(bi))
-                            .map(|b| (t, bi, b.phase, b.start, b.nudge, self.first_beat_out(b)))
-                    });
-                    if let Some((t, bi, cur, start, ndg, fbo)) = sel {
-                        ui.add_space(12.0);
-                        // Phase cycle.
-                        if ui
-                            .button(
-                                egui::RichText::new(format!("phase: {}", phase_name(cur)))
-                                    .color(GREEN),
-                            )
-                            .on_hover_text("on-beat → bar → off-beat")
-                            .clicked()
-                        {
-                            let next = next_phase(cur);
-                            let ns = self.snapped_start(start as f64, next, ndg, fbo);
-                            if let Some(bm) = self.arrangement.block_mut(t, bi) {
-                                bm.phase = next;
-                                bm.start = ns;
-                            }
-                        }
-                        // Fine micro-nudge: ±1/16 of a beat per tap (hand-dialing).
-                        let sixteenth = self
-                            .mixer
-                            .master_bpm()
-                            .map(|b| (self.target_rate as f64 * 60.0 / b as f64 / 4.0) as i64);
-                        if let Some(step) = sixteenth {
-                            for (lbl, dir) in [(ph::CARET_LEFT, -1i64), (ph::CARET_RIGHT, 1i64)] {
-                                if icon_btn(ui, lbl, "nudge ±1/16 beat") {
-                                    let nn = ndg + dir * step;
-                                    let ns = self.snapped_start(start as f64, cur, nn, fbo);
-                                    if let Some(bm) = self.arrangement.block_mut(t, bi) {
-                                        bm.nudge = nn;
-                                        bm.start = ns;
-                                    }
-                                }
-                            }
-                        }
-                    }
-                });
-                ui.add_space(4.0);
-
-                let width = ui.available_width();
-                let pxps = self.tl_pxps;
-                // Mouse wheel scrolls the timeline horizontally when hovered.
-                if ui.rect_contains_pointer(ui.max_rect()) {
-                    let dx = ui.input(|i| i.smooth_scroll_delta.x + i.smooth_scroll_delta.y);
-                    if dx.abs() > 0.0 {
-                        let df = (dx / pxps * sr) as i64;
-                        self.tl_scroll = (self.tl_scroll as i64 - df).max(0) as u64;
-                    }
-                }
-                // Page the view when the playhead crosses the right edge, so it
-                // restarts from the left rather than scrolling continuously. Only
-                // while PLAYING — otherwise it yanks back any manual scroll.
-                let view_frames = (((width - GUTTER).max(1.0)) / pxps * sr) as u64;
-                if self.tl_playing
-                    && (self.tl_playhead >= self.tl_scroll + view_frames
-                        || self.tl_playhead < self.tl_scroll)
-                {
-                    self.tl_scroll = self.tl_playhead;
-                }
-
-                // Only scrollable when the content is longer than the view. When
-                // it is, the extent adds half a screen of headroom (so you can
-                // drop just past the end); otherwise there's nothing to scroll.
-                let content = self.arrangement.total_frames();
-                let scrollable = content > view_frames;
-                let extent = if scrollable {
-                    content + view_frames / 2
-                } else {
-                    view_frames.max(1)
-                };
-                let max_scroll = extent.saturating_sub(view_frames);
-                self.tl_scroll = self.tl_scroll.min(max_scroll);
-
-                let scroll = self.tl_scroll as f64;
-                let x_of = |left: f32, frame: u64| {
-                    left + GUTTER + ((frame as f64 - scroll) as f32 / sr * pxps)
-                };
-                let frame_at = |left: f32, x: f32| -> u64 {
-                    (scroll + ((x - left - GUTTER) / pxps * sr) as f64).max(0.0) as u64
-                };
-                // Beat grid anchored to the MASTER downbeat — the ruler ticks and
-                // the lane gridlines both hang off this, so they line up.
-                let g_origin = self.grid_origin();
-                let fpb_opt = master_bpm
-                    .filter(|b| *b > 0.0)
-                    .map(|b| sr as f64 * 60.0 / b as f64);
-
-                // --- ruler: scrub the playhead + read where you are ---
-                let (ruler, rresp) =
-                    ui.allocate_exact_size(egui::vec2(width, 22.0), egui::Sense::click_and_drag());
-                let rp = ui.painter_at(ruler);
-                rp.rect_filled(ruler, 0.0, GROUND);
-                rp.line_segment(
-                    [ruler.left_bottom(), ruler.right_bottom()],
-                    egui::Stroke::new(1.0, LINE),
-                );
-                let tick = |x: f32, label: Option<String>| {
-                    if x >= ruler.left() && x <= ruler.right() {
-                        rp.line_segment(
-                            [
-                                egui::pos2(x, ruler.bottom() - 5.0),
-                                egui::pos2(x, ruler.bottom()),
-                            ],
-                            egui::Stroke::new(1.0, DIM),
-                        );
-                        if let Some(s) = label {
-                            // Centered over the tick so the number lines up with it.
-                            rp.text(
-                                egui::pos2(x, ruler.top() + 1.0),
-                                egui::Align2::CENTER_TOP,
-                                s,
-                                egui::FontId::proportional(9.0),
-                                DIM,
-                            );
-                        }
-                    }
-                };
-                match master_bpm {
-                    // Bars (4/4) when a tempo is known; label every Nth so they
-                    // don't crowd at low zoom.
-                    Some(b) if b > 0.0 => {
-                        let fpbar = sr as f64 * 60.0 / b as f64 * 4.0; // frames/bar
-                        let step = ((40.0 / (fpbar as f32 / sr * pxps)).ceil() as i64).max(1);
-                        let m0 = ((scroll - g_origin) / fpbar).floor() as i64;
-                        let mut m = m0;
-                        loop {
-                            let f = g_origin + m as f64 * fpbar;
-                            let x = x_of(ruler.left(), f.max(0.0) as u64);
-                            if x > ruler.right() {
-                                break;
-                            }
-                            if f >= 0.0 {
-                                tick(x, (m.rem_euclid(step) == 0).then(|| format!("{}", m + 1)));
-                            }
-                            m += 1;
-                            if m - m0 > 8192 {
-                                break;
-                            }
-                        }
-                    }
-                    // Otherwise seconds (m:ss).
-                    _ => {
-                        let step = ((48.0 / pxps).ceil() as u32).max(1);
-                        let mut s = 0u32;
-                        loop {
-                            let x = x_of(ruler.left(), (s as f64 * sr as f64) as u64);
-                            if x > ruler.right() {
-                                break;
-                            }
-                            tick(
-                                x,
-                                (s % step == 0).then(|| format!("{}:{:02}", s / 60, s % 60)),
-                            );
-                            s += 1;
-                            if s > 100_000 {
-                                break;
-                            }
-                        }
-                    }
-                }
-                if rresp.clicked() || rresp.dragged() {
-                    if let Some(pp) = rresp.interact_pointer_pos() {
-                        self.tl_playhead = frame_at(ruler.left(), pp.x);
-                    }
-                }
-                let phx = x_of(ruler.left(), self.tl_playhead);
-                if phx >= ruler.left() && phx <= ruler.right() {
-                    // Painted downward triangle (a glyph would be tofu in our fonts).
-                    rp.add(egui::Shape::convex_polygon(
-                        vec![
-                            egui::pos2(phx - 5.0, ruler.top()),
-                            egui::pos2(phx + 5.0, ruler.top()),
-                            egui::pos2(phx, ruler.top() + 9.0),
-                        ],
-                        GREEN,
-                        egui::Stroke::NONE,
-                    ));
-                }
-
-                // --- track lanes --- (collect into locals; apply after)
-                let moving_prev = self.tl_moving;
-                let target_bpm = self.arrangement.target_bpm(); // for synced block widths
-                let mut grab_dx = self.tl_grab_dx;
-                // Length (frames) of a clip being dragged from the grid, so we
-                // can preview the real block shape on the lane it's over.
-                let drag_preview_len: Option<u64> = egui::DragAndDrop::payload::<DragPad>(ui.ctx())
-                    .map(|pd| {
-                        let (a, b) = self.mixer.pad_trim(pd.0);
-                        let native = b.saturating_sub(a) as f64;
-                        // Show the varispeed (synced) length, matching where it lands.
-                        let speed = match (self.mixer.pad_bpm(pd.0), target_bpm) {
-                            (Some(bp), Some(t)) if bp > 0.0 && t > 0.0 => (t / bp) as f64,
-                            _ => 1.0,
-                        };
-                        (native / speed).round() as u64
-                    });
-                let mut drop: Option<(usize, u64, PathBuf)> = None;
-                let mut drop_pad: Option<(usize, u64, usize)> = None;
-                let mut clicked: Option<(usize, usize)> = None;
-                let mut cycle_phase: Option<(usize, usize)> = None;
-                let mut moving: Option<(usize, usize, egui::Pos2)> = None;
-                let mut move_commit: Option<(usize, usize, egui::Pos2)> = None;
-                let mut lane_rects: Vec<egui::Rect> = Vec::new();
-                egui::ScrollArea::vertical()
-                    .max_height(138.0)
-                    .show(ui, |ui| {
-                        let tracks = self.arrangement.track_count();
-                        for t in 0..tracks {
-                            let (lane, _resp) = ui.allocate_exact_size(
-                                egui::vec2(ui.available_width(), LANE_H),
-                                egui::Sense::hover(),
-                            );
-                            lane_rects.push(lane);
-                            let p = ui.painter_at(lane); // clips drawing to this lane
-                            let is_master = t == 0;
-                            p.rect_filled(
-                                lane,
-                                3.0,
-                                if is_master {
-                                    AMBER.gamma_multiply(0.08)
-                                } else {
-                                    PANEL
-                                },
-                            );
-                            p.rect_stroke(
-                                lane,
-                                3.0,
-                                egui::Stroke::new(1.0, if is_master { AMBER } else { LINE }),
-                            );
-                            if is_master {
-                                p.text(
-                                    lane.right_top() + egui::vec2(-6.0, 2.0),
-                                    egui::Align2::RIGHT_TOP,
-                                    "MASTER",
-                                    egui::FontId::proportional(9.0),
-                                    AMBER.gamma_multiply(0.8),
-                                );
-                            }
-                            // Beat gridlines (anchored to the MASTER downbeat),
-                            // brighter on the bar — so you can SEE where beats are.
-                            if let Some(fpb) = fpb_opt {
-                                let k0 = ((scroll - g_origin) / fpb).floor() as i64;
-                                let mut k = k0;
-                                loop {
-                                    let f = g_origin + k as f64 * fpb;
-                                    let x = x_of(lane.left(), f.max(0.0) as u64);
-                                    if x > lane.right() {
-                                        break;
-                                    }
-                                    if f >= 0.0 && x >= lane.left() {
-                                        let bar = k.rem_euclid(4) == 0;
-                                        p.line_segment(
-                                            [
-                                                egui::pos2(x, lane.top()),
-                                                egui::pos2(x, lane.bottom()),
-                                            ],
-                                            egui::Stroke::new(
-                                                1.0,
-                                                DIM.gamma_multiply(if bar { 0.55 } else { 0.22 }),
-                                            ),
-                                        );
-                                    }
-                                    k += 1;
-                                    if k - k0 > 4096 {
-                                        break;
-                                    }
-                                }
-                            }
-                            for (bi, block) in
-                                self.arrangement.tracks()[t].blocks.iter().enumerate()
-                            {
-                                let x0 = x_of(lane.left(), block.start);
-                                let x1 = x_of(lane.left(), block.end_at(target_bpm));
-                                let br = egui::Rect::from_min_max(
-                                    egui::pos2(x0, lane.top() + 2.0),
-                                    egui::pos2(x1.max(x0 + 3.0), lane.bottom() - 2.0),
-                                );
-                                // Phase badge pinned to the block's START (left),
-                                // clamped to the visible area so it's reachable at
-                                // any zoom/scroll — not off at the far right.
-                                let badge_x = br.left().max(lane.left()) + 2.0;
-                                let badge =
-                                    (br.right().min(lane.right()) - badge_x > 18.0).then(|| {
-                                        egui::Rect::from_min_size(
-                                            egui::pos2(badge_x, br.top() + 1.0),
-                                            egui::vec2(14.0, 13.0),
-                                        )
-                                    });
-                                // Hide the original while it's being moved (ghost shows).
-                                if moving_prev != Some((t, bi)) {
-                                    let selected = self.tl_sel == Some((t, bi));
-                                    p.rect_filled(
-                                        br,
-                                        2.0,
-                                        AMBER.gamma_multiply(if selected { 0.55 } else { 0.3 }),
-                                    );
-                                    p.rect_stroke(
-                                        br,
-                                        2.0,
-                                        egui::Stroke::new(if selected { 2.0 } else { 1.0 }, AMBER),
-                                    );
-                                    if let Some(bd) = badge {
-                                        p.rect_filled(bd, 2.0, GROUND);
-                                        p.rect_stroke(bd, 2.0, egui::Stroke::new(1.0, GREEN));
-                                        p.text(
-                                            bd.center(),
-                                            egui::Align2::CENTER_CENTER,
-                                            phase_tag(block.phase),
-                                            egui::FontId::proportional(9.0),
-                                            GREEN,
-                                        );
-                                    }
-                                    // Name follows the badge (or the visible left).
-                                    let name_x = badge.map(|b| b.right() + 3.0).unwrap_or(badge_x);
-                                    p.text(
-                                        egui::pos2(name_x, br.top() + 3.0),
-                                        egui::Align2::LEFT_TOP,
-                                        &block.label,
-                                        egui::FontId::proportional(11.0),
-                                        INK,
-                                    );
-                                    // Detected percussion-beat markers (faint),
-                                    // mapped through varispeed — line these up
-                                    // with the gridlines by setting the BPM.
-                                    let bspeed = block.speed(target_bpm);
-                                    for &on in &block.beats {
-                                        let f = block.start + (on as f64 / bspeed) as u64;
-                                        let mx = x_of(lane.left(), f);
-                                        if mx > br.right() {
-                                            break; // onsets are sorted
-                                        }
-                                        if mx >= br.left().max(lane.left()) && mx <= lane.right() {
-                                            p.line_segment(
-                                                [
-                                                    egui::pos2(mx, br.top() + 3.0),
-                                                    egui::pos2(mx, br.bottom() - 3.0),
-                                                ],
-                                                egui::Stroke::new(1.0, INK.gamma_multiply(0.35)),
-                                            );
-                                        }
-                                    }
-                                    // Start marker: a bright tick at the block's
-                                    // start (= the hit). On a gridline → on the beat.
-                                    let hx = x_of(lane.left(), block.start);
-                                    if hx >= lane.left() && hx <= lane.right() {
-                                        p.line_segment(
-                                            [egui::pos2(hx, br.top()), egui::pos2(hx, br.bottom())],
-                                            egui::Stroke::new(2.0, GREEN),
-                                        );
-                                    }
-                                }
-                                let bresp = ui
-                                    .interact(
-                                        br,
-                                        egui::Id::new(("blk", t, bi)),
-                                        egui::Sense::click_and_drag(),
-                                    )
-                                    .on_hover_cursor(egui::CursorIcon::Grab)
-                                    .on_hover_text(format!(
-                                        "{} · phase: {} (click the corner badge to cycle)",
-                                        block.label,
-                                        phase_name(block.phase)
-                                    ));
-                                if bresp.clicked() {
-                                    // Clicking the badge cycles the phase; elsewhere selects.
-                                    let on_badge = badge
-                                        .zip(bresp.interact_pointer_pos())
-                                        .map(|(bd, pp)| bd.contains(pp))
-                                        .unwrap_or(false);
-                                    if on_badge {
-                                        cycle_phase = Some((t, bi));
-                                    } else {
-                                        clicked = Some((t, bi));
-                                    }
-                                }
-                                if bresp.drag_started() {
-                                    if let Some(pp) = ui.input(|i| i.pointer.interact_pos()) {
-                                        grab_dx = pp.x - br.left(); // keep the grab point
-                                    }
-                                }
-                                if bresp.dragged() {
-                                    if let Some(pp) = ui.input(|i| i.pointer.interact_pos()) {
-                                        moving = Some((t, bi, pp));
-                                        clicked = Some((t, bi));
-                                    }
-                                }
-                                if bresp.drag_stopped() {
-                                    if let Some(pp) = ui.input(|i| i.pointer.interact_pos()) {
-                                        move_commit = Some((t, bi, pp));
-                                    }
-                                }
-                            }
-                            // Geometric NEW-block drop (a block-move sets no payload).
-                            let dragging =
-                                egui::DragAndDrop::has_payload_of_type::<DragPad>(ui.ctx())
-                                    || egui::DragAndDrop::has_payload_of_type::<DragTrack>(
-                                        ui.ctx(),
-                                    );
-                            let pointer = ui.input(|i| i.pointer.interact_pos());
-                            let over = matches!(pointer, Some(pp) if lane.contains(pp));
-                            if dragging {
-                                if over {
-                                    // Prominent: fill + thick border on the target lane.
-                                    p.rect_filled(lane, 3.0, GREEN.gamma_multiply(0.22));
-                                    p.rect_stroke(lane, 3.0, egui::Stroke::new(2.5, GREEN));
-                                    // Preview the real block shape, beat-snapped,
-                                    // near where it'll land (the exact onset snap
-                                    // happens on drop, once the onset is known).
-                                    if let (Some(pp), Some(len)) = (pointer, drag_preview_len) {
-                                        let raw = frame_at(lane.left(), pp.x);
-                                        let s = match master_bpm {
-                                            Some(b) if b > 0.0 => {
-                                                let fpb = (sr * 60.0 / b) as f64;
-                                                ((raw as f64 / fpb).round() * fpb) as u64
-                                            }
-                                            _ => raw,
-                                        };
-                                        let x0 = x_of(lane.left(), s);
-                                        let x1 = x_of(lane.left(), s + len);
-                                        let pr = egui::Rect::from_min_max(
-                                            egui::pos2(x0, lane.top() + 2.0),
-                                            egui::pos2(x1.max(x0 + 3.0), lane.bottom() - 2.0),
-                                        );
-                                        p.rect_filled(pr, 2.0, GREEN.gamma_multiply(0.5));
-                                        p.rect_stroke(pr, 2.0, egui::Stroke::new(1.5, GREEN));
-                                    }
-                                } else {
-                                    p.rect_stroke(
-                                        lane,
-                                        3.0,
-                                        egui::Stroke::new(1.0, GREEN.gamma_multiply(0.45)),
-                                    );
-                                }
-                            }
-                            if over && ui.input(|i| i.pointer.any_released()) {
-                                let pp = pointer.unwrap();
-                                // Pass the RAW drop frame; the onset/phase snap is
-                                // applied when the onset is known (drain / inline).
-                                let raw = frame_at(lane.left(), pp.x);
-                                if let Some(pd) =
-                                    egui::DragAndDrop::take_payload::<DragPad>(ui.ctx())
-                                {
-                                    drop_pad = Some((t, raw, pd.0));
-                                } else if let Some(d) =
-                                    egui::DragAndDrop::take_payload::<DragTrack>(ui.ctx())
-                                {
-                                    drop = Some((t, raw, d.0.clone()));
-                                }
-                            }
-                            // playhead
-                            let px = x_of(lane.left(), self.tl_playhead);
-                            if px >= lane.left() && px <= lane.right() {
-                                p.line_segment(
-                                    [egui::pos2(px, lane.top()), egui::pos2(px, lane.bottom())],
-                                    egui::Stroke::new(1.5, GREEN),
-                                );
-                            }
-                            ui.add_space(4.0);
-                        }
-                    });
-                // --- horizontal scrollbar --- only when the content exceeds the
-                // view (extent includes the headroom, so the thumb reaches the end).
-                if scrollable {
-                    let total = extent;
-                    let (bar, bresp) = ui.allocate_exact_size(
-                        egui::vec2(width, 12.0),
-                        egui::Sense::click_and_drag(),
-                    );
-                    let bp = ui.painter_at(bar);
-                    bp.rect_filled(bar, 3.0, PANEL);
-                    bp.rect_stroke(bar, 3.0, egui::Stroke::new(1.0, LINE));
-                    let track_w = bar.width();
-                    let thumb_x = bar.left() + (self.tl_scroll as f32 / total as f32) * track_w;
-                    let thumb_w =
-                        ((view_frames as f32 / total as f32) * track_w).clamp(24.0, track_w);
-                    let thumb = egui::Rect::from_min_size(
-                        egui::pos2(thumb_x.min(bar.right() - thumb_w), bar.top() + 1.0),
-                        egui::vec2(thumb_w, bar.height() - 2.0),
-                    );
-                    bp.rect_filled(thumb, 3.0, AMBER.gamma_multiply(0.7));
-                    if bresp.clicked() || bresp.dragged() {
-                        if let Some(pp) = bresp.interact_pointer_pos() {
-                            // Center the thumb on the pointer.
-                            let rel =
-                                ((pp.x - bar.left() - thumb_w / 2.0) / track_w).clamp(0.0, 1.0);
-                            self.tl_scroll = ((rel * total as f32) as u64).min(max_scroll);
-                        }
-                    }
-                }
-
-                // Ghost following the cursor while dragging a CLIP from the grid.
-                if let Some(pd) = egui::DragAndDrop::payload::<DragPad>(ui.ctx()) {
-                    if let Some(pp) = ui.input(|i| i.pointer.interact_pos()) {
-                        let name = self
-                            .pad_source
-                            .get(pd.0)
-                            .and_then(|o| o.as_ref())
-                            .and_then(|p| p.file_stem())
-                            .and_then(|s| s.to_str())
-                            .unwrap_or("clip")
-                            .to_string();
-                        let g = egui::Rect::from_min_size(
-                            pp + egui::vec2(10.0, 6.0),
-                            egui::vec2(130.0, 20.0),
-                        );
-                        let gp = ui.ctx().layer_painter(egui::LayerId::new(
-                            egui::Order::Tooltip,
-                            egui::Id::new("tl-ghost"),
-                        ));
-                        gp.rect_filled(g, 3.0, AMBER.gamma_multiply(0.9));
-                        gp.text(
-                            g.left_center() + egui::vec2(6.0, 0.0),
-                            egui::Align2::LEFT_CENTER,
-                            name,
-                            egui::FontId::proportional(11.0),
-                            GROUND,
-                        );
-                    }
-                }
-                // Ghost while moving an existing block — anchored at the grab point.
-                if let Some((ft, idx, pp)) = moving {
-                    if let Some(b) = self
-                        .arrangement
-                        .tracks()
-                        .get(ft)
-                        .and_then(|tr| tr.blocks.get(idx))
-                    {
-                        let w = ((b.out_frames(target_bpm) as f32 / sr) * pxps).max(8.0);
-                        let g = egui::Rect::from_min_size(
-                            egui::pos2(pp.x - grab_dx, pp.y - 12.0),
-                            egui::vec2(w, 24.0),
-                        );
-                        let gp = ui.ctx().layer_painter(egui::LayerId::new(
-                            egui::Order::Tooltip,
-                            egui::Id::new("tl-move"),
-                        ));
-                        gp.rect_filled(g, 2.0, AMBER.gamma_multiply(0.55));
-                        gp.rect_stroke(g, 2.0, egui::Stroke::new(1.5, AMBER));
-                        gp.text(
-                            g.left_top() + egui::vec2(4.0, 3.0),
-                            egui::Align2::LEFT_TOP,
-                            &b.label,
-                            egui::FontId::proportional(11.0),
-                            GROUND,
-                        );
-                    }
-                }
-
-                // Persist drag/move state for next frame.
-                self.tl_grab_dx = grab_dx;
-                self.tl_moving = moving.map(|(t, bi, _)| (t, bi));
-
-                // Apply gathered actions (arrangement no longer borrowed).
-                if let Some(s) = clicked {
-                    self.tl_sel = Some(s);
-                }
-                if let Some((t, bi)) = cycle_phase {
-                    // Cycle the phase + re-snap, keeping the onset near where it is.
-                    if let Some(b) = self
-                        .arrangement
-                        .tracks()
-                        .get(t)
-                        .and_then(|tr| tr.blocks.get(bi))
-                    {
-                        let next = next_phase(b.phase);
-                        let raw = b.start as f64;
-                        let fbo = self.first_beat_out(b);
-                        let ns = self.snapped_start(raw, next, b.nudge, fbo);
-                        if let Some(bm) = self.arrangement.block_mut(t, bi) {
-                            bm.phase = next;
-                            bm.start = ns;
-                        }
-                    }
-                }
-                if let Some((ft, idx, pp)) = move_commit {
-                    if let Some(nt) = lane_rects
-                        .iter()
-                        .position(|r| pp.y >= r.top() && pp.y <= r.bottom())
-                    {
-                        // Re-snap by the block's own phase + nudge, anchored at
-                        // the grabbed point.
-                        if let Some(b) = self.arrangement.tracks()[ft].blocks.get(idx) {
-                            let (phase, ndg, fbo) = (b.phase, b.nudge, self.first_beat_out(b));
-                            let raw = frame_at(lane_rects[nt].left(), pp.x - grab_dx) as f64;
-                            let nstart = self.snapped_start(raw, phase, ndg, fbo);
-                            self.arrangement.move_block(ft, idx, nt, nstart);
-                        }
-                    }
-                    self.tl_sel = None;
-                    self.tl_moving = None;
-                }
-                if let Some((t, raw, path)) = drop {
-                    self.spawn_load(
-                        Target::Timeline {
-                            track: t,
-                            start: raw,
-                        },
-                        path,
-                    );
-                }
-                if let Some((t, raw, pad)) = drop_pad {
-                    let gain = self.mixer.pad_gain(pad);
-                    let samples: Vec<f32> = self
-                        .mixer
-                        .pad_clip_region(pad)
-                        .iter()
-                        .map(|s| s * gain)
-                        .collect();
-                    if !samples.is_empty() {
-                        let label = self.pad_source[pad]
-                            .as_ref()
-                            .and_then(|p| p.file_stem())
-                            .and_then(|s| s.to_str())
-                            .unwrap_or("clip")
-                            .to_string();
-                        // Prefer the clip's hand-tapped beats (relative to the
-                        // trim region); fall back to auto-detect if untapped.
-                        let (inp, out) = self.mixer.pad_trim(pad);
-                        let tapped = !self.pad_beats[pad].is_empty();
-                        let beats: Vec<u64> = if tapped {
-                            self.pad_beats[pad]
-                                .iter()
-                                .filter(|&&b| b >= inp as u64 && (b as usize) < out)
-                                .map(|&b| b - inp as u64)
-                                .collect()
-                        } else {
-                            detect_onsets(&samples, 2, self.target_rate)
-                                .into_iter()
-                                .map(|f| f as u64)
-                                .collect()
-                        };
-                        // Tempo from the TAPPED beats (exact) when available,
-                        // else the clip's detected bpm.
-                        let bpm = if tapped {
-                            Self::bpm_from_beats(&beats, self.target_rate)
-                                .or_else(|| self.mixer.pad_bpm(pad))
-                        } else {
-                            self.mixer.pad_bpm(pad)
-                        };
-                        // MASTER first, so the grid exists for the snap.
-                        if t == 0 {
-                            if let Some(b) = bpm {
-                                self.mixer.set_master_bpm(Some(b));
-                                self.arrangement.set_target_bpm(Some(b));
-                            }
-                        }
-                        // Tapped clips always lock; else fall back to length.
-                        let sync =
-                            (tapped && beats.len() >= 2) || self.default_sync(t, samples.len() / 2);
-                        let mut block = Block {
-                            samples: std::sync::Arc::new(samples),
-                            start: 0,
-                            label,
-                            source_pad: Some(pad),
-                            bpm,
-                            phase: Phase::OnBeat,
-                            sync,
-                            nudge: 0,
-                            beats,
-                        };
-                        // Align the block's FIRST tapped beat to the master grid.
-                        let fbo = self.first_beat_out(&block);
-                        block.start = self.snapped_start(raw as f64, block.phase, block.nudge, fbo);
-                        self.arrangement.add_block(t, block);
-                    }
-                }
-            });
-
-        // Keyboard: Delete removes the selected block; Cmd/Ctrl-C/V copy/paste.
-        let (del, copy, paste) = ctx.input(|i| {
-            (
-                i.key_pressed(egui::Key::Delete) || i.key_pressed(egui::Key::Backspace),
-                i.modifiers.command && i.key_pressed(egui::Key::C),
-                i.modifiers.command && i.key_pressed(egui::Key::V),
-            )
-        });
-        if let Some((t, bi)) = self.tl_sel {
-            if del {
-                self.arrangement.remove_block(t, bi);
-                self.tl_sel = None;
-            } else if copy {
-                self.tl_clip = self.arrangement.tracks()[t].blocks.get(bi).cloned();
-            }
-        }
-        if paste {
-            if let Some(mut b) = self.tl_clip.clone() {
-                // Paste at the playhead on track 0 (or the selected track).
-                let t = self.tl_sel.map(|(t, _)| t).unwrap_or(0);
-                b.start = self.tl_playhead;
-                self.arrangement.add_block(t, b);
-            }
-        }
-    }
-
-    /// The scratch platter (bottom panel): drop a sound, then drag it (or use
-    /// ←/→) to whip/wiki. Drives the engine's jog voice directly.
-    fn draw_scratch_panel(&mut self, ctx: &egui::Context) {
-        // Arrow-key jog: winit reports real key-up, so a held arrow sustains
-        // and release stops — no terminal key-up hack needed.
-        let dt = ctx.input(|i| i.stable_dt).max(1e-3) as f64;
-        let key_vel: f32 = ctx.input(|i| {
-            if i.key_down(egui::Key::ArrowRight) {
-                1.5 // wiki (forward)
-            } else if i.key_down(egui::Key::ArrowLeft) {
-                -1.5 // whip (backward)
-            } else {
-                0.0
-            }
-        });
-
-        egui::TopBottomPanel::bottom("scratch")
-            .exact_height(180.0)
-            .show(ctx, |ui| {
-                ui.add_space(6.0);
-                ui.horizontal(|ui| {
-                    ui.label(bungee("scratch", 14.0, AMBER));
-                    let name = self
-                        .jog_source
-                        .as_ref()
-                        .and_then(|p| p.file_stem())
-                        .and_then(|s| s.to_str())
-                        .unwrap_or("drag a sound onto the platter");
-                    ui.label(egui::RichText::new(name).color(GREEN));
-                    if self.mixer.has_jog() && icon_btn(ui, ph::X, "clear the platter") {
-                        self.mixer.clear_jog();
-                        self.jog_source = None;
-                        self.jog_wave.clear();
-                    }
-                });
-                ui.add_space(4.0);
-
-                let len = self.mixer.jog_len();
-                let pos = self.mixer.jog_position().unwrap_or(0.0);
-                let frac = if len > 0 {
-                    (pos / len as f64) as f32
-                } else {
-                    0.0
-                };
-
-                ui.horizontal(|ui| {
-                    // --- the vinyl platter: a drop target + the scratch surface ---
-                    let size = egui::vec2(110.0, 110.0);
-                    let (rect, resp) = ui.allocate_exact_size(size, egui::Sense::click_and_drag());
-                    let p = ui.painter_at(rect);
-                    let c = rect.center();
-                    let r = 52.0;
-                    p.circle_filled(c, r, egui::Color32::from_rgb(0x12, 0x16, 0x12));
-                    for k in 1..6 {
-                        p.circle_stroke(c, r * k as f32 / 6.0, egui::Stroke::new(1.0, LINE));
-                    }
-                    // The spinning marker: angle advances with the playhead so
-                    // you can see it move as you scratch.
-                    let turns = 8.0;
-                    let ang = frac * std::f32::consts::TAU * turns - std::f32::consts::FRAC_PI_2;
-                    p.line_segment(
-                        [c, c + r * egui::vec2(ang.cos(), ang.sin())],
-                        egui::Stroke::new(2.0, AMBER),
-                    );
-                    p.circle_filled(c, 7.0, AMBER); // label
-                    let glowing = self.mixer.has_jog();
-                    p.circle_stroke(
-                        c,
-                        r,
-                        egui::Stroke::new(1.5, if glowing { AMBER } else { DIM }),
-                    );
-
-                    // Drag the platter to scratch; fixed reference so the feel
-                    // doesn't change with the disc size.
-                    const SCRUB_REF: f64 = 520.0;
-                    let vel = if resp.dragged() && len > 0 {
-                        let dx = resp.drag_delta().x as f64;
-                        (dx * len as f64 / (SCRUB_REF * self.target_rate as f64 * dt)) as f32
-                    } else {
-                        key_vel
-                    };
-                    self.mixer.set_jog_velocity(vel);
-                    if let Some(d) = resp.dnd_release_payload::<DragTrack>() {
-                        self.jog_source = Some(d.0.clone());
-                        self.spawn_load(Target::Jog, d.0.clone());
-                    }
-
-                    // --- the waveform, with a playhead ---
-                    let wave = egui::vec2(ui.available_width(), 110.0);
-                    let (wr, _) = ui.allocate_exact_size(wave, egui::Sense::hover());
-                    let wp = ui.painter_at(wr);
-                    wp.rect_filled(wr, 4.0, GROUND);
-                    wp.rect_stroke(wr, 4.0, egui::Stroke::new(1.0, LINE));
-                    if len > 0 && !self.jog_wave.is_empty() {
-                        let cols = wr.width() as usize;
-                        let mid = wr.center().y;
-                        let amp = wr.height() * 0.42;
-                        for x in 0..cols {
-                            let (lo, hi) = self.jog_wave[x * self.jog_wave.len() / cols.max(1)];
-                            let xf = wr.left() + x as f32;
-                            wp.line_segment(
-                                [
-                                    egui::pos2(xf, mid - hi * amp),
-                                    egui::pos2(xf, mid - lo * amp),
-                                ],
-                                egui::Stroke::new(1.0, DIM),
-                            );
-                        }
-                        let px = wr.left() + frac * wr.width();
-                        wp.line_segment(
-                            [egui::pos2(px, wr.top()), egui::pos2(px, wr.bottom())],
-                            egui::Stroke::new(2.0, AMBER),
-                        );
-                    } else {
-                        wp.text(
-                            wr.center(),
-                            egui::Align2::CENTER_CENTER,
-                            "drag a sound here · hold ← whip / → wiki",
-                            egui::FontId::monospace(13.0),
-                            DIM,
-                        );
-                    }
-                });
-            });
-    }
-
-    /// Write pad `i`'s trimmed clip to the current library folder as a WAV.
-    fn export_pad(&mut self, i: usize) {
+    /// Write the editor clip's trimmed region to the current library folder as
+    /// a WAV.
+    fn export_clip(&mut self, i: usize) {
         let region = self.mixer.pad_clip_region(i);
         if region.is_empty() {
             return;
@@ -1535,136 +468,11 @@ impl TermKrushApp {
         self.probed_dir = None; // re-probe so the new file gets checked
     }
 
-    /// Re-flow a clip's current trimmed region (× its gain) into every timeline
-    /// block placed from that pad — keeps placed blocks in sync after a trim or
-    /// volume edit on the clip.
-    fn refresh_pad_blocks(&mut self, pad: usize) {
-        let gain = self.mixer.pad_gain(pad);
-        let samples: Vec<f32> = self
-            .mixer
-            .pad_clip_region(pad)
-            .iter()
-            .map(|s| s * gain)
-            .collect();
-        self.arrangement
-            .refresh_pad(pad, std::sync::Arc::new(samples));
-    }
-
-    /// Set the master tempo (manual override of detection) and re-snap every
-    /// block to the corrected grid.
-    fn set_master_tempo(&mut self, bpm: f32) {
-        self.mixer.set_master_bpm(Some(bpm));
-        self.arrangement.set_target_bpm(Some(bpm));
-        self.resnap_all();
-    }
-
-    /// Re-snap every block's start to the current grid (after a tempo change).
-    fn resnap_all(&mut self) {
-        for t in 0..self.arrangement.track_count() {
-            let n = self.arrangement.tracks()[t].blocks.len();
-            for i in 0..n {
-                let (start, phase, nudge, fbo) = {
-                    let b = &self.arrangement.tracks()[t].blocks[i];
-                    (b.start as f64, b.phase, b.nudge, self.first_beat_out(b))
-                };
-                let ns = self.snapped_start(start, phase, nudge, fbo);
-                if let Some(bm) = self.arrangement.block_mut(t, i) {
-                    bm.start = ns;
-                }
-            }
-        }
-    }
-
-    /// Should a freshly-dropped block tempo-lock by default? Anything longer
-    /// than ~2 beats has internal rhythm that would drift, so it locks; a short
-    /// one-shot hit plays native. The MASTER track always plays native (it *is*
-    /// the tempo).
-    fn default_sync(&self, track: usize, native_frames: usize) -> bool {
-        if track == 0 {
-            return false;
-        }
-        match self.mixer.master_bpm() {
-            Some(b) if b > 0.0 => {
-                let fpb = self.target_rate as f64 * 60.0 / b as f64;
-                native_frames as f64 / fpb > 2.0
-            }
-            _ => false,
-        }
-    }
-
-    /// Timeline frame the beat grid is anchored to — the MASTER track's first
-    /// block START (not frame 0), so other clips snap to where the MASTER's bars
-    /// actually begin. 0 if the MASTER track has no blocks yet.
-    fn grid_origin(&self) -> f64 {
-        self.arrangement
-            .tracks()
-            .first()
-            .and_then(|t| t.blocks.first())
-            .map(|b| b.start as f64 + self.first_beat_out(b))
-            .unwrap_or(0.0)
-    }
-
-    /// A block's first beat (the FITTED beat-0, so jittery taps average out) in
-    /// *timeline* frames (source beat ÷ varispeed). 0 if no marks. The grid +
-    /// phase align on this, so the block's first beat lands on a master beat.
-    fn first_beat_out(&self, b: &Block) -> f64 {
-        match fit_beats(&b.beats) {
-            Some((phase, _interval)) => phase / b.speed(self.arrangement.target_bpm()),
-            None => 0.0,
-        }
-    }
-
-    /// Snap so the block's FIRST BEAT (`first_beat_out` frames past its start)
-    /// lands on the phase target of the MASTER grid, plus the manual `nudge`.
-    /// No master tempo → `raw_start + nudge`.
-    fn snapped_start(&self, raw_start: f64, phase: Phase, nudge: i64, first_beat_out: f64) -> u64 {
-        let sr = self.target_rate.max(1) as f64;
-        let n = nudge as f64;
-        let fpb = match self.mixer.master_bpm() {
-            Some(b) if b > 0.0 => sr * 60.0 / b as f64,
-            _ => return (raw_start + n).max(0.0) as u64,
-        };
-        let origin = self.grid_origin();
-        let grid = if phase == Phase::Bar { fpb * 4.0 } else { fpb };
-        let off = if phase == Phase::OffBeat {
-            fpb / 2.0
-        } else {
-            0.0
-        };
-        // Where the block's first beat currently sits, snapped to the grid.
-        let beat_pos = raw_start + first_beat_out;
-        let anchor = origin + off + ((beat_pos - origin - off) / grid).round() * grid;
-        (anchor - first_beat_out + n).max(0.0) as u64
-    }
-
     /// Tempo (BPM) from a clip's tapped beats — uses the FITTED interval (the
     /// least-squares regular spacing), so imperfect taps average out. `None`
     /// with fewer than 2 marks.
     fn bpm_from_beats(beats: &[u64], sr: u32) -> Option<f32> {
         fit_beats(beats).map(|(_phase, interval)| sr as f32 * 60.0 / interval as f32)
-    }
-
-    /// Render the whole timeline arrangement to a `mix-N.wav` in the library.
-    fn render_arrangement(&mut self) {
-        let samples = self.arrangement.render();
-        if samples.is_empty() {
-            return;
-        }
-        let dir = self.crate_lib.cwd().to_path_buf();
-        let mut n = 1;
-        let path = loop {
-            let p = dir.join(format!("mix-{n}.wav"));
-            if !p.exists() {
-                break p;
-            }
-            n += 1;
-        };
-        if let Err(e) = write_wav(&path, &samples, self.mixer.sample_rate(), 2) {
-            tracing::error!(error = %e, "render failed");
-            return;
-        }
-        self.crate_lib.refresh();
-        self.probed_dir = None;
     }
 }
 
@@ -1698,10 +506,7 @@ impl eframe::App for TermKrushApp {
             self.spawn_probe();
         }
 
-        // Top + bottom panels first (they reserve their edges); both borrow
-        // &mut self directly.
-        self.draw_timeline(ctx);
-        self.draw_scratch_panel(ctx);
+        draw_brand_bar(ctx);
 
         let mut acts: Vec<Act> = Vec::new();
         let mut spring_hover: Option<PathBuf> = None;
@@ -1718,6 +523,7 @@ impl eframe::App for TermKrushApp {
                 clip_edit,
                 clip_wave,
                 previewing,
+                target_rate,
                 ..
             } = self;
             draw_library(
@@ -1731,16 +537,38 @@ impl eframe::App for TermKrushApp {
                 &mut spring_hover,
                 &mut acts,
             );
-            // Central panel: the clip editor when one is open, else the pads.
+            // Central panel: the clip editor when one is open, else the (empty)
+            // main area — the sequence line lands here next.
             if let Some(i) = *clip_edit {
                 let wave = clip_wave
                     .as_ref()
                     .filter(|(p, _)| *p == i)
                     .map(|(_, w)| w.as_slice())
                     .unwrap_or(&[]);
-                draw_clip_editor(ctx, mixer, pad_source, i, wave, &pad_beats[i], &mut acts);
+                let name = pad_source[i]
+                    .as_ref()
+                    .and_then(|p| p.file_stem())
+                    .and_then(|s| s.to_str())
+                    .unwrap_or("clip")
+                    .to_string();
+                draw_clip_editor(
+                    ctx,
+                    mixer,
+                    &name,
+                    i,
+                    wave,
+                    &pad_beats[i],
+                    *target_rate,
+                    &mut acts,
+                );
             } else {
-                draw_pad_grid(ctx, mixer, pad_source, &mut acts);
+                egui::CentralPanel::default().show(ctx, |ui| {
+                    ui.centered_and_justified(|ui| {
+                        ui.label(
+                            egui::RichText::new("pick a track · tap its beats · krush").color(DIM),
+                        );
+                    });
+                });
             }
         }
 
@@ -1769,6 +597,24 @@ impl eframe::App for TermKrushApp {
         }
         crt_overlay(ctx); // faint scanlines + vignette, on top of everything
     }
+}
+
+/// The slim top bar: the platter mark + wordmark (the brand lived on the old
+/// timeline header; the identity stays after the surface went).
+fn draw_brand_bar(ctx: &egui::Context) {
+    egui::TopBottomPanel::top("brand")
+        .exact_height(34.0)
+        .show(ctx, |ui| {
+            ui.add_space(5.0);
+            ui.horizontal(|ui| {
+                let (r, _) = ui.allocate_exact_size(egui::vec2(22.0, 22.0), egui::Sense::hover());
+                let p = ui.painter_at(r);
+                p.circle_filled(r.center(), 10.0, PANEL);
+                p.circle_stroke(r.center(), 10.0, egui::Stroke::new(1.0, LINE));
+                p.circle_filled(r.center(), 3.0, AMBER);
+                ui.label(bungee("termkrush", 18.0, AMBER));
+            });
+        });
 }
 
 /// A dimmed full-window overlay with a spinner while tracks are decoding, so a
@@ -1922,66 +768,12 @@ fn fit_beats(beats: &[u64]) -> Option<(f64, f64)> {
     (interval > 0.0).then_some((phase, interval))
 }
 
-/// The next phase in the cycle (the per-block badge clicks through these).
-fn next_phase(p: Phase) -> Phase {
-    match p {
-        Phase::OnBeat => Phase::Bar,
-        Phase::Bar => Phase::OffBeat,
-        Phase::OffBeat => Phase::OnBeat,
-    }
-}
-
-/// Short badge tag drawn on a block.
-fn phase_tag(p: Phase) -> &'static str {
-    match p {
-        Phase::OnBeat => "B",
-        Phase::Bar => "R",
-        Phase::OffBeat => "O",
-    }
-}
-
-/// Full phase name (tooltips).
-fn phase_name(p: Phase) -> &'static str {
-    match p {
-        Phase::OnBeat => "on-beat",
-        Phase::Bar => "bar",
-        Phase::OffBeat => "off-beat",
-    }
-}
-
 /// A clean icon-only button (no frame). Returns true on click.
 fn icon_btn(ui: &mut egui::Ui, icon: &str, tip: &str) -> bool {
     ui.add(egui::Button::new(egui::RichText::new(icon).size(17.0)).frame(false))
         .on_hover_cursor(egui::CursorIcon::Default)
         .on_hover_text(tip)
         .clicked()
-}
-
-/// A volume control with a *visible* track: dim rail, amber fill, a knob.
-/// Returns the new value while dragging. `0.0..=1.5` (1.0 = unity).
-fn vol_slider(ui: &mut egui::Ui, value: f32) -> Option<f32> {
-    let w = ui.available_width().clamp(60.0, 150.0);
-    let (rect, resp) = ui.allocate_exact_size(egui::vec2(w, 16.0), egui::Sense::click_and_drag());
-    let p = ui.painter_at(rect);
-    let y = rect.center().y;
-    p.line_segment(
-        [egui::pos2(rect.left(), y), egui::pos2(rect.right(), y)],
-        egui::Stroke::new(2.0, LINE),
-    );
-    let t = (value / 1.5).clamp(0.0, 1.0);
-    let knob_x = rect.left() + t * rect.width();
-    p.line_segment(
-        [egui::pos2(rect.left(), y), egui::pos2(knob_x, y)],
-        egui::Stroke::new(2.0, AMBER),
-    );
-    p.circle_filled(egui::pos2(knob_x, y), 5.0, AMBER);
-    p.circle_stroke(egui::pos2(knob_x, y), 5.0, egui::Stroke::new(1.0, GROUND));
-    if (resp.dragged() || resp.clicked()) && resp.interact_pointer_pos().is_some() {
-        let px = resp.interact_pointer_pos().unwrap().x;
-        let nt = ((px - rect.left()) / rect.width()).clamp(0.0, 1.0);
-        return Some(nt * 1.5);
-    }
-    None
 }
 
 /// Wordmark text in the Bungee display face.
@@ -2141,7 +933,8 @@ fn draw_folder_row(
     }
 }
 
-/// A track row: drag source (load/move), click to select, double-click rename.
+/// A track row: drag source (move to folder), click to select, double-click
+/// rename, pencil to open the beat-tap editor.
 fn draw_track_row(
     ui: &mut egui::Ui,
     e: &termkrush_core::library::CrateEntry,
@@ -2185,7 +978,19 @@ fn draw_track_row(
         {
             acts.push(Act::Preview(e.path.clone()));
         }
-        // The name is the drag source (load/move); click selects, dbl-click renames.
+        // Open the beat-tap clip editor on this track.
+        let pencil =
+            egui::Button::new(egui::RichText::new(ph::PENCIL_SIMPLE).size(15.0).color(INK))
+                .frame(false);
+        if ui
+            .add_enabled(!bad, pencil)
+            .on_hover_cursor(egui::CursorIcon::Default)
+            .on_hover_text("tap beats / trim")
+            .clicked()
+        {
+            acts.push(Act::EditTrack(e.path.clone()));
+        }
+        // The name is the drag source (move); click selects, dbl-click renames.
         let id = egui::Id::new(("track", &e.path));
         let resp = ui
             .dnd_drag_source(id, DragTrack(e.path.clone()), |ui| {
@@ -2220,57 +1025,22 @@ fn draw_track_row(
     });
 }
 
-fn draw_pad_grid(
-    ctx: &egui::Context,
-    mixer: &Mixer,
-    pad_source: &[Option<PathBuf>; PADS],
-    acts: &mut Vec<Act>,
-) {
-    egui::CentralPanel::default().show(ctx, |ui| {
-        ui.add_space(6.0);
-        ui.horizontal(|ui| {
-            ui.label(bungee("clips", 14.0, AMBER));
-            ui.label(egui::RichText::new("drag a track onto a clip to load").color(DIM));
-        });
-        ui.add_space(6.0);
-        // `ui.columns` gives equal-width columns regardless of content, so the
-        // cells are uniform; names truncate to fit.
-        const COLS: usize = 4;
-        egui::ScrollArea::vertical().show(ui, |ui| {
-            for row in 0..PADS.div_ceil(COLS) {
-                ui.columns(COLS, |cols| {
-                    for (c, col) in cols.iter_mut().enumerate() {
-                        let i = row * COLS + c;
-                        if i < PADS {
-                            draw_pad_cell(col, mixer, pad_source, i, acts);
-                        }
-                    }
-                });
-                ui.add_space(8.0); // a little breathing room between pad rows
-            }
-        });
-    });
-}
-
-/// The clip editor: a full-clip waveform with draggable in/out handles. With a
-/// mouse the handles are precise enough that no zoom window is needed.
+/// The clip editor: a full-clip waveform with draggable in/out handles, and the
+/// beat-tap surface — play, tap the down arrow on each beat; the least-squares
+/// fit shows the tempo those taps imply.
 #[allow(clippy::too_many_arguments)]
 fn draw_clip_editor(
     ctx: &egui::Context,
     mixer: &Mixer,
-    pad_source: &[Option<PathBuf>; PADS],
+    track: &str,
     i: usize,
     wave: &[(f32, f32)],
     beats: &[u64],
+    sample_rate: u32,
     acts: &mut Vec<Act>,
 ) {
     egui::CentralPanel::default().show(ctx, |ui| {
         ui.add_space(6.0);
-        let track = pad_source[i]
-            .as_ref()
-            .and_then(|p| p.file_stem())
-            .and_then(|s| s.to_str())
-            .unwrap_or("clip");
         ui.horizontal(|ui| {
             // Just the track name — you can see you're editing; no "EDIT" label.
             ui.label(bungee(track, 16.0, AMBER));
@@ -2297,7 +1067,7 @@ fn draw_clip_editor(
                     .on_hover_text("write the trimmed clip to the library as a WAV")
                     .clicked()
                 {
-                    acts.push(Act::ExportPad(i));
+                    acts.push(Act::ExportClip(i));
                 }
             });
         });
@@ -2326,11 +1096,10 @@ fn draw_clip_editor(
             {
                 acts.push(Act::ClearBeats(i));
             }
-            ui.label(
-                egui::RichText::new(format!("{} beats", beats.len()))
-                    .color(DIM)
-                    .small(),
-            );
+            let fitted = TermKrushApp::bpm_from_beats(beats, sample_rate)
+                .map(|b| format!("{} beats · ≈{b:.1} BPM", beats.len()))
+                .unwrap_or_else(|| format!("{} beats", beats.len()));
+            ui.label(egui::RichText::new(fitted).color(DIM).small());
         });
         ui.add_space(8.0);
 
@@ -2434,132 +1203,6 @@ fn draw_clip_editor(
     });
 }
 
-#[allow(clippy::too_many_arguments)]
-fn draw_pad_cell(
-    ui: &mut egui::Ui,
-    mixer: &Mixer,
-    pad_source: &[Option<PathBuf>; PADS],
-    i: usize,
-    acts: &mut Vec<Act>,
-) {
-    let loaded = mixer.pad_loaded(i);
-    let track = pad_source[i]
-        .as_ref()
-        .and_then(|p| p.file_stem())
-        .and_then(|s| s.to_str())
-        .unwrap_or("")
-        .to_string();
-    let frame = egui::Frame::group(ui.style())
-        .fill(PANEL)
-        .stroke(egui::Stroke::new(1.0, if loaded { AMBER } else { LINE }));
-    // A plain group frame (NOT a dnd drop-zone — a drop-zone swallows the inner
-    // drag-handle's drag). We detect the library-track drop on its response.
-    let inner = frame.show(ui, |ui| {
-        ui.set_width(ui.available_width()); // fill the equal column → uniform cells
-        ui.set_min_height(96.0);
-        ui.vertical(|ui| {
-            // Header: play/pause + the (truncated) track name. No pad number.
-            ui.horizontal(|ui| {
-                if loaded {
-                    let icon = if mixer.pad_is_sounding(i) {
-                        ph::PAUSE
-                    } else {
-                        ph::PLAY
-                    };
-                    if icon_btn(ui, icon, "play / pause") {
-                        acts.push(Act::PlayPad(i));
-                    }
-                }
-                // Drag handle: only the grip + name strip is the drag source, so
-                // the kind/volume/edit/clear/export controls below keep their clicks.
-                let handle = ui
-                    .horizontal(|ui| {
-                        if loaded {
-                            ui.label(egui::RichText::new(ph::DOTS_SIX_VERTICAL).color(DIM));
-                        }
-                        let name = if track.is_empty() { "—" } else { &track };
-                        ui.add(
-                            egui::Label::new(egui::RichText::new(name).color(AMBER).strong())
-                                .truncate(),
-                        );
-                    })
-                    .response;
-                if loaded {
-                    let handle = handle
-                        .interact(egui::Sense::click_and_drag())
-                        .on_hover_text("drag the clip onto the timeline");
-                    handle.dnd_set_drag_payload(DragPad(i));
-                    if handle.dragged() {
-                        ui.ctx().set_cursor_icon(egui::CursorIcon::Grabbing);
-                    } else {
-                        handle.on_hover_cursor(egui::CursorIcon::Grab);
-                    }
-                }
-            });
-
-            if !loaded {
-                ui.label(egui::RichText::new("drag a track here").weak());
-                return;
-            }
-
-            // Kind selector (click to set).
-            ui.horizontal(|ui| {
-                let k = mixer.pad_kind(i);
-                for (label, want) in [
-                    ("1shot", PadKind::OneShot),
-                    ("loop", PadKind::Loop),
-                    ("scratch", PadKind::Scratch),
-                ] {
-                    if ui.selectable_label(k == want, label).clicked() {
-                        acts.push(Act::SetKind(i, want));
-                    }
-                }
-            });
-
-            // Volume — visible amber track.
-            ui.horizontal(|ui| {
-                ui.label(egui::RichText::new("vol").color(DIM).small());
-                if let Some(v) = vol_slider(ui, mixer.pad_gain(i)) {
-                    acts.push(Act::SetGain(i, v));
-                }
-            });
-
-            // Actions — icon buttons (no "on" toggle; a loaded pad is live).
-            ui.horizontal(|ui| {
-                if icon_btn(ui, ph::PENCIL_SIMPLE, "trim the clip") {
-                    acts.push(Act::EditClip(i));
-                }
-                if icon_btn(ui, ph::ERASER, "clear the clip") {
-                    acts.push(Act::ClearPad(i));
-                }
-                if icon_btn(ui, ph::FLOPPY_DISK, "export to library (WAV)") {
-                    acts.push(Act::ExportPad(i));
-                }
-            });
-        });
-    });
-    // Cell-level HOVER interact (not drag/click — so it never eats the inner
-    // buttons' clicks): just receives a dragged library track + the highlight.
-    // The drag source is the header handle above.
-    let cell = ui.interact(
-        inner.response.rect,
-        egui::Id::new(("clipcell", i)),
-        egui::Sense::hover(),
-    );
-    if cell.dnd_hover_payload::<DragTrack>().is_some() {
-        let r = inner.response.rect;
-        ui.painter().rect_filled(r, 4.0, AMBER.gamma_multiply(0.15));
-        ui.painter()
-            .rect_stroke(r, 4.0, egui::Stroke::new(2.0, AMBER));
-    }
-    if let Some(p) = cell.dnd_release_payload::<DragTrack>() {
-        acts.push(Act::LoadToPad {
-            pad: i,
-            path: p.0.clone(),
-        });
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -2574,5 +1217,34 @@ mod tests {
         );
         assert_eq!(v.widgets.inactive.fg_stroke.color, INK);
         assert_eq!(v.panel_fill, GROUND);
+    }
+
+    // The least-squares tap fit survives the pivot as the beat-marking core:
+    // regular taps recover their exact interval; jittered taps average out.
+    #[test]
+    fn fit_beats_recovers_a_regular_grid() {
+        let beats: Vec<u64> = (0..8).map(|k| 1000 + k * 22050).collect();
+        let (phase, interval) = fit_beats(&beats).expect("fit");
+        assert!((phase - 1000.0).abs() < 1e-6, "phase {phase}");
+        assert!((interval - 22050.0).abs() < 1e-6, "interval {interval}");
+    }
+
+    #[test]
+    fn fit_beats_averages_jitter() {
+        // ±200-frame jitter around a 22050 grid: the fit lands near the truth.
+        let jitter = [150i64, -200, 80, -120, 190, -60, 30, -90];
+        let beats: Vec<u64> = jitter
+            .iter()
+            .enumerate()
+            .map(|(k, j)| (5000 + k as i64 * 22050 + j) as u64)
+            .collect();
+        let (_phase, interval) = fit_beats(&beats).expect("fit");
+        assert!((interval - 22050.0).abs() < 50.0, "interval {interval}");
+    }
+
+    #[test]
+    fn fit_beats_needs_two_marks() {
+        assert!(fit_beats(&[]).is_none());
+        assert!(fit_beats(&[44100]).is_none());
     }
 }

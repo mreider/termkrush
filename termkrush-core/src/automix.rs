@@ -40,6 +40,18 @@ pub const TARGET_RMS: f32 = 0.18;
 /// Gain is clamped so a near-silent section can't be boosted into noise.
 const MAX_GAIN: f32 = 4.0;
 
+/// The energy arc breathes between these fractions of full level —
+/// the reference oscillates between ~0.4 and ~0.7 of peak.
+pub const ARC_LO: f64 = 0.4;
+pub const ARC_HI: f64 = 0.7;
+
+/// Low-shelf warmth added by the end of the mix (the reference's back
+/// half runs measurably bassier).
+pub const TILT_MAX: f32 = 0.25;
+
+/// The warmth shelf's corner.
+pub const TILT_CROSSOVER_HZ: f64 = 200.0;
+
 /// The bass-drop crossover: everything below this ducks. The duck is a
 /// 2nd-order high-pass (the classic DJ bass-kill) — at 60 Hz that is
 /// roughly −16 dB, comfortably past the reference's measured >10 dB.
@@ -168,6 +180,11 @@ pub struct MixPlan {
     pub chops: Vec<Chop>,
     /// Bass drops (low band ducked, restored on the one).
     pub drops: Vec<BassDrop>,
+    /// Energy-arc wave period in output frames (≈6–8 min on long mixes,
+    /// scaled down so short mixes still breathe).
+    pub arc_period: f64,
+    /// Seeded phase of the arc wave, radians.
+    pub arc_phase: f64,
 }
 
 impl MixPlan {
@@ -352,15 +369,34 @@ pub fn plan(tracks: &[TrackInput], order: &[usize]) -> Result<MixPlan, PlanError
         out_bars += bars;
     }
 
-    // ── fader chops: 0–2 per section, ~30–80 ms, un-quantized offsets
+    // ── the energy arc: a seeded wave the whole performance bends to.
+    // Period leans toward the reference's 6–8 minutes, scaled down so a
+    // short mix still gets at least a couple of swells.
+    let total_frames_f = out_bars as f64 * master_fpb;
+    let arc_period =
+        (total_frames_f * 0.45).clamp(60.0 * RENDER_RATE as f64, 450.0 * RENDER_RATE as f64);
+    let arc_phase = (rng.next() as f64 / u64::MAX as f64) * 2.0 * std::f64::consts::PI;
+    for s in &mut sections {
+        let mid = s.out_start as f64 + s.out_frames as f64 / 2.0;
+        s.gain *= arc_level(mid, arc_period, arc_phase) as f32;
+    }
+
+    // ── fader chops: ~0–2 per section, ~30–80 ms, un-quantized offsets
     // inside the section (never in its first or last bar, so transitions
-    // stay clean). Macro on the grid, micro human.
+    // stay clean). Macro on the grid, micro human — and denser where the
+    // arc runs hot.
     let mut chops = Vec::new();
     for s in &sections {
         if s.bars < 3 {
             continue;
         }
-        let n = rng.next() % 3;
+        let mid = s.out_start as f64 + s.out_frames as f64 / 2.0;
+        let hot = arc_level(mid, arc_period, arc_phase) > 1.05;
+        let n = if hot {
+            1 + rng.next() % 3 // 1–3 in the swells
+        } else {
+            rng.next() % 2 // 0–1 in the lulls
+        };
         for _ in 0..n {
             let span = s.out_frames as f64 - 2.0 * master_fpb;
             let off = master_fpb + (rng.next() as f64 / u64::MAX as f64) * span;
@@ -515,6 +551,8 @@ pub fn plan(tracks: &[TrackInput], order: &[usize]) -> Result<MixPlan, PlanError
         flurries,
         chops,
         drops,
+        arc_period,
+        arc_phase,
     })
 }
 
@@ -554,7 +592,27 @@ pub fn render(plan: &MixPlan, tracks: &[TrackInput]) -> Vec<f32> {
     apply_chops(plan, &mut out);
     apply_flurries(plan, tracks, &mut out);
     apply_drops(plan, &mut out);
+    apply_tilt(&mut out);
     out
+}
+
+/// The warmth tilt: a low-shelf boost that ramps from nothing to
+/// [`TILT_MAX`] across the mix, so the back half runs gently bassier —
+/// the reference's spectral drift, not a mastering move.
+fn apply_tilt(out: &mut [f32]) {
+    let total = (out.len() / 2).max(1);
+    let a =
+        (1.0 - (-2.0 * std::f64::consts::PI * TILT_CROSSOVER_HZ / RENDER_RATE as f64).exp()) as f32;
+    let mut lp = [0.0f32; 2];
+    for fr in 0..total {
+        let k = TILT_MAX * fr as f32 / total as f32;
+        for c in 0..2 {
+            let i = fr * 2 + c;
+            let x = out[i];
+            lp[c] += a * (x - lp[c]);
+            out[i] = x + lp[c] * k;
+        }
+    }
 }
 
 /// Duck the lows during each drop: a 2nd-order Butterworth high-pass at
@@ -684,6 +742,16 @@ fn apply_flurries(plan: &MixPlan, tracks: &[TrackInput], out: &mut [f32]) {
             }
         }
     }
+}
+
+/// The arc's energy target at `pos` output frames: a wave between
+/// [`ARC_LO`] and [`ARC_HI`], normalized so 1.0 is the mix's mid level.
+/// Loudness breathes; it never just ramps.
+fn arc_level(pos: f64, period: f64, phase: f64) -> f64 {
+    let mid = (ARC_LO + ARC_HI) / 2.0;
+    let amp = (ARC_HI - ARC_LO) / 2.0;
+    let e = mid + amp * (2.0 * std::f64::consts::PI * pos / period + phase).sin();
+    e / mid
 }
 
 /// The multiplier a transition applies at `k` output frames into its
@@ -859,12 +927,16 @@ mod tests {
             let b = (s.out_start + s.out_frames - 1000) as usize * 2;
             let sum: f64 = mix[a..b].iter().map(|&x| (x as f64) * (x as f64)).sum();
             let rms = (sum / (b - a) as f64).sqrt() as f32;
+            // Matched to one target, then bent by the planned arc — the
+            // deviation is the arc's, never the source levels'.
+            let mid = s.out_start as f64 + s.out_frames as f64 / 2.0;
+            let want = TARGET_RMS * arc_level(mid, p.arc_period, p.arc_phase) as f32;
             assert!(
-                (rms - TARGET_RMS).abs() < 0.02,
+                (rms - want).abs() < 0.025,
                 "section at {} has RMS {} (want ≈{})",
                 s.out_start,
                 rms,
-                TARGET_RMS
+                want
             );
         }
     }
@@ -1181,6 +1253,95 @@ mod tests {
         let after = low_rms(&mix, (d.out_start + d.frames) as usize + fpbeat / 4, fpbeat);
         let back = 20.0 * (after / pre.max(1e-9)).log10();
         assert!(back > -3.0, "lows did not slam back: {back:.1} dB");
+    }
+
+    #[test]
+    fn the_arc_breathes_in_waves_not_ramps() {
+        let tracks = two_long_tracks();
+        let order: Vec<usize> = (0..24).map(|k| k % 2).collect();
+        // Bed only: the arc is a planner property; the performance layer
+        // (flurries, punches) would speckle the measurement.
+        let mut p = plan(&tracks, &order).unwrap();
+        p.flurries.clear();
+        p.chops.clear();
+        p.drops.clear();
+        for s in &mut p.sections {
+            s.transition = Transition::Swap;
+        }
+        let mix = render(&p, &tracks);
+
+        // Smoothed loudness, one window per 5 s.
+        let win = 5 * RENDER_RATE as usize;
+        let total = mix.len() / 2;
+        let arcs: Vec<f32> = (0..total / win)
+            .map(|w| win_rms(&mix, w * win, win))
+            .collect();
+        assert!(arcs.len() >= 12, "windows {}", arcs.len());
+
+        // It turns: at least two direction changes (a wave, not a ramp).
+        let mut turns = 0;
+        for w in arcs.windows(3) {
+            if (w[1] > w[0]) != (w[2] > w[1]) {
+                turns += 1;
+            }
+        }
+        assert!(turns >= 2, "loudness arc looks monotonic: {arcs:?}");
+
+        // And it stays inside the breathing envelope (≈0.4–0.7 of peak,
+        // i.e. ~0.57–1.0 once normalized to the loudest window).
+        let peak = arcs.iter().cloned().fold(0.0f32, f32::max);
+        let floor = arcs.iter().cloned().fold(f32::MAX, f32::min);
+        let ratio = floor / peak;
+        assert!(
+            (0.4..0.95).contains(&ratio),
+            "arc envelope off: floor/peak {ratio}"
+        );
+    }
+
+    #[test]
+    fn the_back_half_runs_warmer() {
+        // Tracks with real lows AND highs so the tilt is measurable.
+        fn two_tone(id: &str, secs: f64, amp: f32, phase: u64, interval: u64) -> TrackInput {
+            let frames = (secs * RENDER_RATE as f64) as usize;
+            let mut samples = Vec::with_capacity(frames * 2);
+            for n in 0..frames {
+                let tt = n as f64 / RENDER_RATE as f64;
+                let v = amp
+                    * (0.5 * (2.0 * std::f64::consts::PI * 60.0 * tt).sin()
+                        + 0.5 * (2.0 * std::f64::consts::PI * 1200.0 * tt).sin())
+                        as f32;
+                samples.push(v);
+                samples.push(v);
+            }
+            let n_beats = ((frames as u64).saturating_sub(phase)) / interval;
+            let beats: Vec<u64> = (0..n_beats).map(|k| phase + k * interval).collect();
+            TrackInput {
+                id: id.to_string(),
+                samples: Arc::new(samples),
+                beats,
+            }
+        }
+        let tracks = vec![
+            two_tone("a", 80.0, 0.4, 1000, FPB_120),
+            two_tone("b", 90.0, 0.3, 500, 29_400),
+        ];
+        let order: Vec<usize> = (0..12).map(|k| k % 2).collect();
+        let p = plan(&tracks, &order).unwrap();
+        let mix = render(&p, &tracks);
+
+        // low/high balance, first third vs final third.
+        let third = mix.len() / 2 / 3;
+        let lh = |start: usize| {
+            let lo = low_rms(&mix, start, third.min(20 * RENDER_RATE as usize));
+            let full = win_rms(&mix, start, third.min(20 * RENDER_RATE as usize));
+            lo / full.max(1e-9)
+        };
+        let early = lh(1000);
+        let late = lh(2 * third);
+        assert!(
+            late > early * 1.03,
+            "no warmth drift: early {early} late {late}"
+        );
     }
 
     #[test]

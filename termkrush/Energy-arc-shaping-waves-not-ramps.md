@@ -2,11 +2,12 @@
 title: 'Energy-arc shaping: waves not ramps'
 type: feature
 created: "2026-06-11T13:33:15Z"
-modified: "2026-06-11T13:38:02Z"
+modified: "2026-06-11T19:37:57Z"
 author: Matt Reider
-status: unstarted
+status: started
 estimate: "5"
 project: termkrush
+started: "2026-06-11T19:37:57Z"
 ---
 
 ## Goal

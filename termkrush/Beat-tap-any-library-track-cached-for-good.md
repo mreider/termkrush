@@ -2,11 +2,12 @@
 title: Beat-tap any library track, cached for good
 type: feature
 created: "2026-06-11T13:32:46Z"
-modified: "2026-06-11T13:37:17Z"
+modified: "2026-06-11T14:49:24Z"
 author: Matt Reider
-status: unstarted
+status: started
 estimate: "3"
 project: termkrush
+started: "2026-06-11T14:49:24Z"
 ---
 
 ## Goal

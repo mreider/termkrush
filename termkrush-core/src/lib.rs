@@ -6,6 +6,7 @@
 //! thin shell over it.
 //!
 //! - [`audio`]    — output device, decoding, resampling, BPM, time-stretch.
+//! - [`beats`]    — the per-track tapped-beat cache (tap once, ever).
 //! - [`clip`]     — a captured clip: the unit the sampler pads play.
 //! - [`mix`]      — the master bus + sampler pads/voices.
 //! - [`library`]  — local track list (filesystem).
@@ -15,6 +16,7 @@
 
 pub mod arrangement;
 pub mod audio;
+pub mod beats;
 pub mod clip;
 pub mod config;
 pub mod library;

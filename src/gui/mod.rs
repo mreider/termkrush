@@ -18,6 +18,7 @@ use egui_phosphor::regular as ph;
 use termkrush_core::audio::{
     decode_file, detect_bpm, probe_playable, write_wav, AudioOutput, DecodedAudio,
 };
+use termkrush_core::beats::{beats_path, BeatCache};
 use termkrush_core::config::Config;
 use termkrush_core::library::Crate;
 use termkrush_core::mix::{Mixer, PADS};
@@ -173,6 +174,11 @@ pub struct TermKrushApp {
     /// Where the sequence autosaves (`None` when the home dir is unknown —
     /// the sequence still works for the session, it just can't persist).
     seq_path: Option<PathBuf>,
+    /// Every track's tapped beats — tap once, ever. Autosaved like the
+    /// sequence; marks follow renames/moves and die with deletes.
+    beats: BeatCache,
+    /// Where the beat cache autosaves (`None` when the home dir is unknown).
+    beats_file: Option<PathBuf>,
 
     producer: Option<rtrb::Producer<f32>>,
     _audio: Option<AudioOutput>,
@@ -214,9 +220,15 @@ impl TermKrushApp {
         let (load_tx, load_rx) = channel();
         let (probe_tx, probe_rx) = channel();
 
-        // Reopening the app restores the last sequence — the project file.
+        // Reopening the app restores the last sequence — the project file —
+        // and every track's tapped beats.
         let seq_path = sequence_path();
         let sequence = seq_path.as_deref().map(Sequence::load).unwrap_or_default();
+        let beats_file = beats_path();
+        let beats = beats_file
+            .as_deref()
+            .map(BeatCache::load)
+            .unwrap_or_default();
         tracing::info!(entries = sequence.len(), "sequence restored");
 
         Self {
@@ -236,6 +248,8 @@ impl TermKrushApp {
             spring: None,
             sequence,
             seq_path,
+            beats,
+            beats_file,
             producer,
             _audio: audio,
             out_channels: channels.max(1),
@@ -344,10 +358,17 @@ impl TermKrushApp {
                     if let Some(b) = done.bpm {
                         self.mixer.set_pad_bpm(i, Some(b));
                     }
+                    // A previously-tapped track opens with its cached marks
+                    // (rescaled if this device runs at a different rate).
+                    let cached = self
+                        .beats
+                        .get(&done.path)
+                        .map(|m| m.at_rate(self.target_rate))
+                        .unwrap_or_default();
                     self.pad_source[i] = Some(done.path);
                     if self.edit_pending && i == EDIT_SLOT {
                         self.edit_pending = false;
-                        self.pad_beats[i].clear();
+                        self.pad_beats[i] = cached;
                         self.clip_edit = Some(i);
                         // Downsample the whole clip ONCE; reused every frame.
                         self.clip_wave = Some((i, self.mixer.pad_peaks(i, WAVE_COLS)));
@@ -391,19 +412,25 @@ impl TermKrushApp {
                 if let Some((p, buf)) = self.renaming.take() {
                     let buf = buf.trim();
                     if !buf.is_empty() && self.crate_lib.rename(&p, buf).is_ok() {
-                        // Keep sequence entries pointing at the renamed file.
+                        // Keep sequence entries + beat marks pointing at the
+                        // renamed file.
                         let new = p.parent().unwrap_or(Path::new("")).join(buf);
                         self.sequence.retarget(&p, &new);
                         self.save_sequence();
+                        self.beats.retarget(&p, &new);
+                        self.save_beats();
                     }
                 }
             }
             Act::CancelRename => self.renaming = None,
             Act::Delete(p) => {
                 if self.crate_lib.delete(&p).is_ok() {
-                    // A deleted track can't play — drop its sequence entries.
+                    // A deleted track can't play — drop its sequence entries
+                    // and its beat marks.
                     self.sequence.purge(&p);
                     self.save_sequence();
+                    self.beats.purge(&p);
+                    self.save_beats();
                 }
                 if self.lib_sel.as_deref() == Some(p.as_path()) {
                     self.lib_sel = None;
@@ -411,10 +438,14 @@ impl TermKrushApp {
             }
             Act::MoveTo { track, folder } => {
                 if self.crate_lib.move_into(&track, &folder).is_ok() {
-                    // Keep sequence entries pointing at the moved file.
+                    // Keep sequence entries + beat marks pointing at the
+                    // moved file.
                     if let Some(name) = track.file_name() {
-                        self.sequence.retarget(&track, &folder.join(name));
+                        let new = folder.join(name);
+                        self.sequence.retarget(&track, &new);
                         self.save_sequence();
+                        self.beats.retarget(&track, &new);
+                        self.save_beats();
                     }
                 }
             }
@@ -452,6 +483,12 @@ impl TermKrushApp {
             Act::CloseClip => {
                 if let Some(i) = self.clip_edit.take() {
                     self.mixer.stop_pad(i);
+                    // "save" persists the taps — the track is marked for good.
+                    if let Some(track) = self.pad_source[i].clone() {
+                        self.beats
+                            .set(&track, self.target_rate, self.pad_beats[i].clone());
+                        self.save_beats();
+                    }
                 }
                 self.clip_wave = None;
             }
@@ -535,6 +572,16 @@ impl TermKrushApp {
         }
     }
 
+    /// Autosave the beat cache, mirroring `save_sequence`.
+    fn save_beats(&self) {
+        let Some(path) = self.beats_file.as_deref() else {
+            return; // no home dir: session-only marks
+        };
+        if let Err(e) = self.beats.save(path) {
+            tracing::error!(error = %e, path = %path.display(), "beats autosave failed");
+        }
+    }
+
     /// Tempo (BPM) from a clip's tapped beats — uses the FITTED interval (the
     /// least-squares regular spacing), so imperfect taps average out. `None`
     /// with fewer than 2 marks.
@@ -592,9 +639,10 @@ impl eframe::App for TermKrushApp {
                 previewing,
                 target_rate,
                 sequence,
+                beats,
                 ..
             } = self;
-            draw_sequence_line(ctx, sequence, &mut acts);
+            draw_sequence_line(ctx, sequence, beats, &mut acts);
             draw_library(
                 ctx,
                 crate_lib,
@@ -602,6 +650,7 @@ impl eframe::App for TermKrushApp {
                 renaming,
                 new_folder,
                 playable,
+                beats,
                 previewing.as_deref(),
                 &mut spring_hover,
                 &mut acts,
@@ -690,7 +739,12 @@ fn draw_brand_bar(ctx: &egui::Context) {
 /// Drag tracks from the library into the lane (repeats welcome), drag entries
 /// to reorder, X to remove. Every entry shows its beat-mark status — the
 /// engine can't render an entry until its track has tapped beats.
-fn draw_sequence_line(ctx: &egui::Context, sequence: &Sequence, acts: &mut Vec<Act>) {
+fn draw_sequence_line(
+    ctx: &egui::Context,
+    sequence: &Sequence,
+    beats: &BeatCache,
+    acts: &mut Vec<Act>,
+) {
     egui::TopBottomPanel::bottom("sequence")
         .exact_height(92.0)
         .show(ctx, |ui| {
@@ -703,6 +757,32 @@ fn draw_sequence_line(ctx: &egui::Context, sequence: &Sequence, acts: &mut Vec<A
                     "drag to reorder · the same track can repeat"
                 };
                 ui.label(egui::RichText::new(hint).color(DIM).small());
+                // The render-readiness report: marks are the only per-track
+                // labor, so this is the one thing standing between the user
+                // and a mix.
+                if !sequence.is_empty() {
+                    let untapped = sequence
+                        .entries()
+                        .iter()
+                        .filter(|p| !beats.has_beats(p))
+                        .count();
+                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                        if untapped == 0 {
+                            ui.label(
+                                egui::RichText::new("ready to render").color(GREEN).small(),
+                            );
+                        } else {
+                            ui.label(
+                                egui::RichText::new(format!(
+                                    "{untapped} entr{} need beats",
+                                    if untapped == 1 { "y" } else { "ies" }
+                                ))
+                                .color(AMBER)
+                                .small(),
+                            );
+                        }
+                    });
+                }
             });
             ui.add_space(4.0);
 
@@ -713,7 +793,10 @@ fn draw_sequence_line(ctx: &egui::Context, sequence: &Sequence, acts: &mut Vec<A
             egui::ScrollArea::horizontal().show(ui, |ui| {
                 ui.horizontal(|ui| {
                     for (i, path) in sequence.entries().iter().enumerate() {
-                        draw_sequence_chip(ui, i, path, acts);
+                        let tempo = beats
+                            .get(path)
+                            .and_then(|m| TermKrushApp::bpm_from_beats(&m.frames, m.sample_rate));
+                        draw_sequence_chip(ui, i, path, tempo, acts);
                     }
                     // The tail: drop a library track to append, or an entry to
                     // send it to the end. Wide enough to be an easy target.
@@ -751,8 +834,15 @@ fn draw_sequence_line(ctx: &egui::Context, sequence: &Sequence, acts: &mut Vec<A
 }
 
 /// One sequence entry: a numbered chip. Drag it to reorder; drop a library
-/// track on it to insert *before* it; X removes this entry.
-fn draw_sequence_chip(ui: &mut egui::Ui, i: usize, path: &Path, acts: &mut Vec<Act>) {
+/// track on it to insert *before* it; X removes this entry. The badge shows
+/// the track's fitted tempo, or "needs beats" (click it to go tap them).
+fn draw_sequence_chip(
+    ui: &mut egui::Ui,
+    i: usize,
+    path: &Path,
+    tempo: Option<f32>,
+    acts: &mut Vec<Act>,
+) {
     let stem = path.file_stem().and_then(|s| s.to_str()).unwrap_or("track");
     let frame = egui::Frame::group(ui.style())
         .fill(PANEL)
@@ -784,9 +874,31 @@ fn draw_sequence_chip(ui: &mut egui::Ui, i: usize, path: &Path, acts: &mut Vec<A
                     }
                 });
             });
-            // Beat-mark status: the cache story lights this up; until a track
-            // has tapped beats the engine can't place it on the grid.
-            ui.label(egui::RichText::new("needs beats").color(DIM).small());
+            // Beat-mark status: tempo when tapped; otherwise a click-to-tap
+            // nudge — the engine can't place an untapped track on the grid.
+            match tempo {
+                Some(b) => {
+                    ui.label(
+                        egui::RichText::new(format!("{b:.1} BPM"))
+                            .color(GREEN)
+                            .small(),
+                    );
+                }
+                None => {
+                    if ui
+                        .add(
+                            egui::Button::new(
+                                egui::RichText::new("needs beats").color(AMBER).small(),
+                            )
+                            .frame(false),
+                        )
+                        .on_hover_text("tap this track's beats")
+                        .clicked()
+                    {
+                        acts.push(Act::EditTrack(path.to_path_buf()));
+                    }
+                }
+            }
         });
     });
     // The whole chip accepts drops: a library track inserts before this entry;
@@ -1021,6 +1133,7 @@ fn draw_library(
     renaming: &mut Option<(PathBuf, String)>,
     new_folder: &mut Option<String>,
     playable: &HashMap<PathBuf, bool>,
+    beats: &BeatCache,
     previewing: Option<&Path>,
     spring_hover: &mut Option<PathBuf>,
     acts: &mut Vec<Act>,
@@ -1083,7 +1196,10 @@ fn draw_library(
                     } else {
                         let bad = playable.get(&e.path) == Some(&false);
                         let playing = previewing == Some(e.path.as_path());
-                        draw_track_row(ui, e, sel, renaming, bad, playing, acts);
+                        let tempo = beats
+                            .get(&e.path)
+                            .and_then(|m| TermKrushApp::bpm_from_beats(&m.frames, m.sample_rate));
+                        draw_track_row(ui, e, sel, renaming, bad, playing, tempo, acts);
                     }
                 }
                 if lib.is_empty() {
@@ -1136,7 +1252,9 @@ fn draw_folder_row(
 }
 
 /// A track row: drag source (move to folder), click to select, double-click
-/// rename, pencil to open the beat-tap editor.
+/// rename, pencil to open the beat-tap editor. Tapped tracks show their
+/// fitted tempo.
+#[allow(clippy::too_many_arguments)]
 fn draw_track_row(
     ui: &mut egui::Ui,
     e: &termkrush_core::library::CrateEntry,
@@ -1144,6 +1262,7 @@ fn draw_track_row(
     renaming: &mut Option<(PathBuf, String)>,
     bad: bool,
     playing: bool,
+    tempo: Option<f32>,
     acts: &mut Vec<Act>,
 ) {
     // Inline rename for this row.
@@ -1223,6 +1342,11 @@ fn draw_track_row(
         }
         if resp.double_clicked() {
             acts.push(Act::StartRename(e.path.clone()));
+        }
+        // A tapped track wears its tempo; marks are forever (cached).
+        if let Some(b) = tempo {
+            ui.label(egui::RichText::new(format!("{b:.0}")).color(GREEN).small())
+                .on_hover_text(format!("tapped · {b:.1} BPM"));
         }
     });
 }

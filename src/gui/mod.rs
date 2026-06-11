@@ -18,7 +18,8 @@ use egui_phosphor::regular as ph;
 use termkrush_core::audio::{
     decode_file, detect_bpm, probe_playable, write_wav, AudioOutput, DecodedAudio,
 };
-use termkrush_core::beats::{beats_path, BeatCache};
+use termkrush_core::automix;
+use termkrush_core::beats::{beats_path, fit_grid, BeatCache};
 use termkrush_core::config::Config;
 use termkrush_core::library::Crate;
 use termkrush_core::mix::{Mixer, PADS};
@@ -135,6 +136,8 @@ enum Act {
     ToggleBeat(usize, u64),
     /// Tap: add a beat mark at the clip's current play position (add-only).
     TapBeat(usize),
+    /// Render the sequence to a mix WAV via the auto-mix engine.
+    RenderMix,
 }
 
 /// The whole app: the engine, the audio sink, and the browsed library.
@@ -179,6 +182,10 @@ pub struct TermKrushApp {
     beats: BeatCache,
     /// Where the beat cache autosaves (`None` when the home dir is unknown).
     beats_file: Option<PathBuf>,
+    /// True while a background auto-mix render is running.
+    rendering: bool,
+    render_tx: Sender<Result<PathBuf, String>>,
+    render_rx: Receiver<Result<PathBuf, String>>,
 
     producer: Option<rtrb::Producer<f32>>,
     _audio: Option<AudioOutput>,
@@ -219,6 +226,7 @@ impl TermKrushApp {
         mixer.set_sample_rate(rate);
         let (load_tx, load_rx) = channel();
         let (probe_tx, probe_rx) = channel();
+        let (render_tx, render_rx) = channel();
 
         // Reopening the app restores the last sequence — the project file —
         // and every track's tapped beats.
@@ -250,6 +258,9 @@ impl TermKrushApp {
             seq_path,
             beats,
             beats_file,
+            rendering: false,
+            render_tx,
+            render_rx,
             producer,
             _audio: audio,
             out_channels: channels.max(1),
@@ -528,7 +539,26 @@ impl TermKrushApp {
                     }
                 }
             }
+            Act::RenderMix => self.start_render(),
         }
+    }
+
+    /// Kick off the auto-mix render on a background thread: decode every
+    /// unique sequence track at the fixed render rate, feed the cached
+    /// marks, plan + render deterministically, write `automix-N.wav` into
+    /// the current library folder.
+    fn start_render(&mut self) {
+        if self.rendering || self.sequence.is_empty() {
+            return;
+        }
+        self.rendering = true;
+        let entries: Vec<PathBuf> = self.sequence.entries().to_vec();
+        let beats = self.beats.clone();
+        let out_dir = self.crate_lib.cwd().to_path_buf();
+        let tx = self.render_tx.clone();
+        std::thread::spawn(move || {
+            let _ = tx.send(render_sequence(&entries, &beats, &out_dir));
+        });
     }
 
     /// Write the editor clip's trimmed region to the current library folder as
@@ -586,7 +616,7 @@ impl TermKrushApp {
     /// least-squares regular spacing), so imperfect taps average out. `None`
     /// with fewer than 2 marks.
     fn bpm_from_beats(beats: &[u64], sr: u32) -> Option<f32> {
-        fit_beats(beats).map(|(_phase, interval)| sr as f32 * 60.0 / interval as f32)
+        fit_grid(beats).map(|(_phase, interval)| sr as f32 * 60.0 / interval as f32)
     }
 }
 
@@ -602,6 +632,20 @@ impl eframe::App for TermKrushApp {
         self.pump_audio();
         self.drain_loads();
         ctx.request_repaint(); // keep the audio ring fed in real time
+
+        // A finished background render: refresh the library so the new
+        // mix shows up (and gets probed) immediately.
+        while let Ok(done) = self.render_rx.try_recv() {
+            self.rendering = false;
+            match done {
+                Ok(path) => {
+                    tracing::info!(path = %path.display(), "mix rendered");
+                    self.crate_lib.refresh();
+                    self.probed_dir = None;
+                }
+                Err(e) => tracing::error!(error = %e, "render failed"),
+            }
+        }
 
         // Clear the preview indicator once it has played and finished (but not
         // during the decode gap before it starts).
@@ -713,8 +757,69 @@ impl eframe::App for TermKrushApp {
         if self.pending_decodes > 0 {
             draw_loading_overlay(ctx, self.pending_decodes);
         }
+        if self.rendering {
+            draw_busy_overlay(ctx, "krushing the mix…");
+        }
         crt_overlay(ctx); // faint scanlines + vignette, on top of everything
     }
+}
+
+/// The render worker (runs off-thread): decode each unique track at the
+/// fixed engine rate, marks from the cache, plan + render, write the WAV.
+/// Everything here is deterministic for a given (entries, beats) input.
+fn render_sequence(
+    entries: &[PathBuf],
+    beats: &BeatCache,
+    out_dir: &Path,
+) -> Result<PathBuf, String> {
+    // Unique tracks in first-appearance order; the order list indexes them.
+    let mut uniq: Vec<&PathBuf> = Vec::new();
+    let mut order = Vec::with_capacity(entries.len());
+    for e in entries {
+        let idx = match uniq.iter().position(|u| *u == e) {
+            Some(i) => i,
+            None => {
+                uniq.push(e);
+                uniq.len() - 1
+            }
+        };
+        order.push(idx);
+    }
+
+    let mut tracks = Vec::with_capacity(uniq.len());
+    for path in &uniq {
+        let audio = decode_file(path, automix::RENDER_RATE)
+            .map_err(|e| format!("{}: {e}", path.display()))?;
+        let marks = beats
+            .get(path)
+            .map(|m| m.at_rate(automix::RENDER_RATE))
+            .unwrap_or_default();
+        tracks.push(automix::TrackInput {
+            id: path.to_string_lossy().into_owned(),
+            samples: std::sync::Arc::new(audio.samples),
+            beats: marks,
+        });
+    }
+
+    let plan = automix::plan(&tracks, &order).map_err(|e| e.to_string())?;
+    let mix = automix::render(&plan, &tracks);
+    tracing::info!(
+        master_bpm = plan.master_bpm,
+        sections = plan.sections.len(),
+        seed = plan.seed,
+        "automix rendered"
+    );
+
+    let mut n = 1;
+    let out = loop {
+        let p = out_dir.join(format!("automix-{n}.wav"));
+        if !p.exists() {
+            break p;
+        }
+        n += 1;
+    };
+    write_wav(&out, &mix, automix::RENDER_RATE, 2).map_err(|e| e.to_string())?;
+    Ok(out)
 }
 
 /// The slim top bar: the platter mark + wordmark (the brand lived on the old
@@ -768,9 +873,19 @@ fn draw_sequence_line(
                         .count();
                     ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                         if untapped == 0 {
-                            ui.label(
-                                egui::RichText::new("ready to render").color(GREEN).small(),
-                            );
+                            // The moment the product exists for: one button,
+                            // zero knobs — the engine does the craft.
+                            if ui
+                                .button(
+                                    egui::RichText::new(format!("{}  krush", ph::VINYL_RECORD))
+                                        .color(GREEN)
+                                        .strong(),
+                                )
+                                .on_hover_text("render the sequence to a mix (WAV in the library)")
+                                .clicked()
+                            {
+                                acts.push(Act::RenderMix);
+                            }
                         } else {
                             ui.label(
                                 egui::RichText::new(format!(
@@ -934,6 +1049,16 @@ fn draw_sequence_chip(
 /// A dimmed full-window overlay with a spinner while tracks are decoding, so a
 /// slow load doesn't feel frozen. Non-blocking — it's just paint.
 fn draw_loading_overlay(ctx: &egui::Context, n: usize) {
+    let label = if n > 1 {
+        format!("loading {n} tracks…")
+    } else {
+        "loading…".to_string()
+    };
+    draw_busy_overlay(ctx, &label);
+}
+
+/// The dimmed spinner overlay itself — shared by loading and rendering.
+fn draw_busy_overlay(ctx: &egui::Context, label: &str) {
     let rect = ctx.screen_rect();
     ctx.layer_painter(egui::LayerId::new(
         egui::Order::Foreground,
@@ -948,12 +1073,7 @@ fn draw_loading_overlay(ctx: &egui::Context, n: usize) {
             ui.vertical_centered(|ui| {
                 ui.add(egui::Spinner::new().size(44.0).color(AMBER));
                 ui.add_space(8.0);
-                let label = if n > 1 {
-                    format!("loading {n} tracks…")
-                } else {
-                    "loading…".to_string()
-                };
-                ui.label(bungee(label, 14.0, INK));
+                ui.label(bungee(label.to_string(), 14.0, INK));
             });
         });
 }
@@ -1054,32 +1174,6 @@ fn install_fonts(ctx: &egui::Context) {
     // Phosphor icon font, appended as a fallback so icon glyphs render.
     egui_phosphor::add_to_fonts(&mut fonts, egui_phosphor::Variant::Regular);
     ctx.set_fonts(fonts);
-}
-
-/// Least-squares fit of tapped beats (sorted source frames) to a regular grid
-/// `beat[k] ≈ phase + k·interval`. Returns `(phase, interval)` in frames, so
-/// imperfect taps are averaged into a clean tempo + downbeat. `None` if < 2 marks
-/// or a non-positive interval.
-fn fit_beats(beats: &[u64]) -> Option<(f64, f64)> {
-    let n = beats.len();
-    if n < 2 {
-        return None;
-    }
-    let nf = n as f64;
-    let mean_k = (nf - 1.0) / 2.0; // mean of 0..n-1
-    let mean_b = beats.iter().map(|&x| x as f64).sum::<f64>() / nf;
-    let (mut num, mut den) = (0.0f64, 0.0f64);
-    for (k, &x) in beats.iter().enumerate() {
-        let dk = k as f64 - mean_k;
-        num += dk * (x as f64 - mean_b);
-        den += dk * dk;
-    }
-    if den == 0.0 {
-        return None;
-    }
-    let interval = num / den;
-    let phase = mean_b - interval * mean_k;
-    (interval > 0.0).then_some((phase, interval))
 }
 
 /// A clean icon-only button (no frame). Returns true on click.
@@ -1543,34 +1637,5 @@ mod tests {
         );
         assert_eq!(v.widgets.inactive.fg_stroke.color, INK);
         assert_eq!(v.panel_fill, GROUND);
-    }
-
-    // The least-squares tap fit survives the pivot as the beat-marking core:
-    // regular taps recover their exact interval; jittered taps average out.
-    #[test]
-    fn fit_beats_recovers_a_regular_grid() {
-        let beats: Vec<u64> = (0..8).map(|k| 1000 + k * 22050).collect();
-        let (phase, interval) = fit_beats(&beats).expect("fit");
-        assert!((phase - 1000.0).abs() < 1e-6, "phase {phase}");
-        assert!((interval - 22050.0).abs() < 1e-6, "interval {interval}");
-    }
-
-    #[test]
-    fn fit_beats_averages_jitter() {
-        // ±200-frame jitter around a 22050 grid: the fit lands near the truth.
-        let jitter = [150i64, -200, 80, -120, 190, -60, 30, -90];
-        let beats: Vec<u64> = jitter
-            .iter()
-            .enumerate()
-            .map(|(k, j)| (5000 + k as i64 * 22050 + j) as u64)
-            .collect();
-        let (_phase, interval) = fit_beats(&beats).expect("fit");
-        assert!((interval - 22050.0).abs() < 50.0, "interval {interval}");
-    }
-
-    #[test]
-    fn fit_beats_needs_two_marks() {
-        assert!(fit_beats(&[]).is_none());
-        assert!(fit_beats(&[44100]).is_none());
     }
 }

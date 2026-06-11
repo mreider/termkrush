@@ -16,6 +16,7 @@
 
 pub mod arrangement;
 pub mod audio;
+pub mod automix;
 pub mod beats;
 pub mod clip;
 pub mod config;

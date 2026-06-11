@@ -153,6 +153,35 @@ pub fn beats_path() -> Option<PathBuf> {
     crate::config::config_path().map(|p| p.with_file_name("beats.txt"))
 }
 
+/// Least-squares fit of tapped beats (sorted frames) to a regular grid
+/// `beat[k] ≈ phase + k·interval`. Returns `(phase, interval)` in frames,
+/// so imperfect taps are averaged into a clean tempo + downbeat. `None`
+/// with fewer than 2 marks or a non-positive interval.
+///
+/// This fit is the engine's ground truth for a track's tempo and grid —
+/// the GUI's beat-tap editor and the auto-mix planner both build on it.
+pub fn fit_grid(beats: &[u64]) -> Option<(f64, f64)> {
+    let n = beats.len();
+    if n < 2 {
+        return None;
+    }
+    let nf = n as f64;
+    let mean_k = (nf - 1.0) / 2.0; // mean of 0..n-1
+    let mean_b = beats.iter().map(|&x| x as f64).sum::<f64>() / nf;
+    let (mut num, mut den) = (0.0f64, 0.0f64);
+    for (k, &x) in beats.iter().enumerate() {
+        let dk = k as f64 - mean_k;
+        num += dk * (x as f64 - mean_b);
+        den += dk * dk;
+    }
+    if den == 0.0 {
+        return None;
+    }
+    let interval = num / den;
+    let phase = mean_b - interval * mean_k;
+    (interval > 0.0).then_some((phase, interval))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -236,5 +265,32 @@ mod tests {
         assert!(c.has_beats(Path::new("/m/ok.wav")));
         assert_eq!(c.map.len(), 1);
         let _ = std::fs::remove_dir_all(&tmp);
+    }
+
+    #[test]
+    fn fit_grid_recovers_a_regular_grid() {
+        let beats: Vec<u64> = (0..8).map(|k| 1000 + k * 22050).collect();
+        let (phase, interval) = fit_grid(&beats).expect("fit");
+        assert!((phase - 1000.0).abs() < 1e-6, "phase {phase}");
+        assert!((interval - 22050.0).abs() < 1e-6, "interval {interval}");
+    }
+
+    #[test]
+    fn fit_grid_averages_jitter() {
+        // ±200-frame jitter around a 22050 grid: the fit lands near truth.
+        let jitter = [150i64, -200, 80, -120, 190, -60, 30, -90];
+        let beats: Vec<u64> = jitter
+            .iter()
+            .enumerate()
+            .map(|(k, j)| (5000 + k as i64 * 22050 + j) as u64)
+            .collect();
+        let (_phase, interval) = fit_grid(&beats).expect("fit");
+        assert!((interval - 22050.0).abs() < 50.0, "interval {interval}");
+    }
+
+    #[test]
+    fn fit_grid_needs_two_marks() {
+        assert!(fit_grid(&[]).is_none());
+        assert!(fit_grid(&[44100]).is_none());
     }
 }

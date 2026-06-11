@@ -1,0 +1,485 @@
+//! The auto-mix engine: the naive render slice (see the 2026-06-11 pivot in
+//! `.am/inception.md` and `docs/SPEC.md` §2).
+//!
+//! Input: the sequence (ordered tracks, repeats allowed) with each track's
+//! decoded audio and tapped beat marks. Output: one continuous stereo mix.
+//!
+//! This slice implements the grammar's skeleton:
+//! - **One master tempo** — the first entry's fitted tempo; every section
+//!   varispeeds to it (pitch rides, like a platter).
+//! - **Phrase sections** — each entry contributes 8–16 bars (clamped to
+//!   what the track has), phrase-aligned to that track's own fitted grid;
+//!   repeat entries pick different material.
+//! - **Equal-loudness swaps** — sections are gain-matched to a shared RMS
+//!   target and butt-joined on the master grid's phrase boundaries.
+//! - **Determinism** — every choice flows from a seed hashed from the
+//!   input itself (paths, order, marks). No wall clock, no thread order,
+//!   no platform-dependent shortcuts: same input → the same `Vec<f32>`.
+//!
+//! Transition variety, scratches, drops, and the energy arc land in their
+//! own stories on top of the `MixPlan` this module produces.
+
+use std::sync::Arc;
+
+use crate::beats::fit_grid;
+
+/// The fixed render rate. Rendering is offline and must not depend on the
+/// machine's output device, or the same sequence would produce different
+/// mixes on different hardware.
+pub const RENDER_RATE: u32 = 44_100;
+
+/// Beats per bar. The grammar is 4/4 throughout.
+pub const BEATS_PER_BAR: f64 = 4.0;
+
+/// Shared loudness target every section is gain-matched to (linear RMS
+/// over interleaved stereo, ≈ −15 dBFS). The reference mix's transitions
+/// have a median level step of 0 dB — matching sections to one target is
+/// what makes the default swap seamless.
+pub const TARGET_RMS: f32 = 0.18;
+
+/// Gain is clamped so a near-silent section can't be boosted into noise.
+const MAX_GAIN: f32 = 4.0;
+
+/// One track of input: decoded stereo audio at [`RENDER_RATE`] plus the
+/// user's tapped beat marks (also at [`RENDER_RATE`]).
+pub struct TrackInput {
+    /// Identity used for seeding; typically the library path as a string.
+    pub id: String,
+    /// Interleaved stereo samples at [`RENDER_RATE`].
+    pub samples: Arc<Vec<f32>>,
+    /// Tapped beat marks in frames at [`RENDER_RATE`] (≥ 2 to render).
+    pub beats: Vec<u64>,
+}
+
+/// One planned section: which bars of which track land where in the mix.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Section {
+    /// Index into the planner's track list.
+    pub track: usize,
+    /// Position in the sequence this section realizes.
+    pub order_pos: usize,
+    /// First bar of the track used (in the track's own fitted grid).
+    pub start_bar: u64,
+    /// Section length in bars (8–16, clamped to what the track has).
+    pub bars: u64,
+    /// Output start frame (on a master phrase boundary by construction).
+    pub out_start: u64,
+    /// Output length in frames.
+    pub out_frames: u64,
+    /// Varispeed ratio: source frames consumed per output frame.
+    pub speed: f64,
+    /// Loudness-matching gain applied to the section.
+    pub gain: f32,
+}
+
+/// The deterministic plan for a whole mix.
+#[derive(Debug, Clone, PartialEq)]
+pub struct MixPlan {
+    /// Master tempo (the first entry's fitted tempo).
+    pub master_bpm: f64,
+    /// Master frames per bar at [`RENDER_RATE`].
+    pub frames_per_bar: f64,
+    /// The seed every choice flowed from (input-derived).
+    pub seed: u64,
+    pub sections: Vec<Section>,
+}
+
+impl MixPlan {
+    /// Total mix length in frames.
+    pub fn total_frames(&self) -> u64 {
+        self.sections
+            .last()
+            .map(|s| s.out_start + s.out_frames)
+            .unwrap_or(0)
+    }
+}
+
+/// Why a plan could not be made.
+#[derive(Debug, PartialEq, Eq)]
+pub enum PlanError {
+    /// The sequence has no entries.
+    EmptySequence,
+    /// An order entry points past the track list.
+    BadOrderIndex(usize),
+    /// A track has fewer than 2 beat marks (no grid can be fitted).
+    NotEnoughBeats(usize),
+    /// A track's marks fit no positive-interval grid.
+    NoGrid(usize),
+    /// A track is shorter than one bar of its own grid.
+    TooShort(usize),
+}
+
+impl std::fmt::Display for PlanError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            PlanError::EmptySequence => write!(f, "the sequence is empty"),
+            PlanError::BadOrderIndex(i) => write!(f, "order entry {i} points past the track list"),
+            PlanError::NotEnoughBeats(t) => write!(f, "track {t} needs at least 2 beat marks"),
+            PlanError::NoGrid(t) => write!(f, "track {t}: beat marks fit no grid"),
+            PlanError::TooShort(t) => write!(f, "track {t} is shorter than one bar"),
+        }
+    }
+}
+
+impl std::error::Error for PlanError {}
+
+/// Per-track facts the planner derives once from the input.
+struct TrackGrid {
+    /// Fitted grid: first beat position (frames, f64) in the source.
+    phase: f64,
+    /// Fitted beat interval (frames).
+    interval: f64,
+    /// Whole bars available from `phase` to the end of the track.
+    bars_avail: u64,
+}
+
+/// Build the deterministic plan: master tempo, section choices, gains,
+/// and output positions. Pure — no I/O, no clock, no global state.
+pub fn plan(tracks: &[TrackInput], order: &[usize]) -> Result<MixPlan, PlanError> {
+    if order.is_empty() {
+        return Err(PlanError::EmptySequence);
+    }
+    for (pos, &t) in order.iter().enumerate() {
+        if t >= tracks.len() {
+            return Err(PlanError::BadOrderIndex(pos));
+        }
+    }
+
+    // Fit each track's grid once.
+    let mut grids = Vec::with_capacity(tracks.len());
+    for (ti, tr) in tracks.iter().enumerate() {
+        if tr.beats.len() < 2 {
+            return Err(PlanError::NotEnoughBeats(ti));
+        }
+        let (phase, interval) = fit_grid(&tr.beats).ok_or(PlanError::NoGrid(ti))?;
+        let frames = (tr.samples.len() / 2) as f64;
+        let bar = interval * BEATS_PER_BAR;
+        let bars_avail = ((frames - phase) / bar).floor().max(0.0) as u64;
+        if bars_avail == 0 {
+            return Err(PlanError::TooShort(ti));
+        }
+        grids.push(TrackGrid {
+            phase,
+            interval,
+            bars_avail,
+        });
+    }
+
+    // Master tempo: the first entry in the sequence sets it.
+    let first = &grids[order[0]];
+    let master_bpm = RENDER_RATE as f64 * 60.0 / first.interval;
+    let master_fpb = first.interval * BEATS_PER_BAR; // frames per master bar
+
+    // The seed is the input: track ids, order, and every mark.
+    let mut h = Fnv64::new();
+    for tr in tracks {
+        h.write(tr.id.as_bytes());
+        for &b in &tr.beats {
+            h.write_u64(b);
+        }
+    }
+    for &o in order {
+        h.write_u64(o as u64);
+    }
+    let seed = h.finish();
+    let mut rng = SplitMix64::new(seed);
+
+    // Section length distribution: 8–16 bars, even lengths (phrase feel),
+    // matching the reference's 8–16-bar cluster. Longer stretches and the
+    // occasional 24/32 arrive with the energy-arc story.
+    const LENGTHS: [u64; 5] = [8, 10, 12, 14, 16];
+
+    let mut sections = Vec::with_capacity(order.len());
+    let mut used_starts: Vec<Vec<u64>> = vec![Vec::new(); tracks.len()];
+    let mut out_bars: u64 = 0; // master bars laid down so far
+
+    for (pos, &ti) in order.iter().enumerate() {
+        let g = &grids[ti];
+        let mut bars = LENGTHS[(rng.next() % LENGTHS.len() as u64) as usize];
+        bars = bars.min(g.bars_avail); // short tracks contribute what they have
+
+        // Material choice: a bar-aligned start inside the track. Repeat
+        // entries land on different material when the track is long
+        // enough — walk away from used starts deterministically.
+        let span = g.bars_avail - bars; // last viable start bar
+        let mut start_bar = if span == 0 {
+            0
+        } else {
+            rng.next() % (span + 1)
+        };
+        if span > 0 {
+            let stride = (span / 3).max(1);
+            let mut tries = 0;
+            while used_starts[ti].contains(&start_bar) && tries <= span {
+                start_bar = (start_bar + stride) % (span + 1);
+                tries += stride;
+            }
+        }
+        used_starts[ti].push(start_bar);
+
+        // Varispeed: source frames consumed per output frame so the
+        // track's bars land exactly on master bars (pitch rides).
+        let speed = g.interval / first.interval;
+
+        // Equal-loudness: gain-match the section's source RMS to target.
+        let src_start = g.phase + start_bar as f64 * g.interval * BEATS_PER_BAR;
+        let src_frames = bars as f64 * g.interval * BEATS_PER_BAR;
+        let rms = region_rms(&tracks[ti].samples, src_start as usize, src_frames as usize);
+        let gain = if rms > 1e-6 {
+            (TARGET_RMS / rms).min(MAX_GAIN)
+        } else {
+            1.0
+        };
+
+        // Butt-join on the master grid: this section starts exactly where
+        // the previous ended, which is a phrase boundary by construction.
+        let out_start = (out_bars as f64 * master_fpb).round() as u64;
+        let out_end = ((out_bars + bars) as f64 * master_fpb).round() as u64;
+        sections.push(Section {
+            track: ti,
+            order_pos: pos,
+            start_bar,
+            bars,
+            out_start,
+            out_frames: out_end - out_start,
+            speed,
+            gain,
+        });
+        out_bars += bars;
+    }
+
+    Ok(MixPlan {
+        master_bpm,
+        frames_per_bar: master_fpb,
+        seed,
+        sections,
+    })
+}
+
+/// Render a plan to one interleaved stereo buffer at [`RENDER_RATE`].
+/// Varispeed is linear-interpolated (pitch rides speed, platter-style).
+pub fn render(plan: &MixPlan, tracks: &[TrackInput]) -> Vec<f32> {
+    let total = plan.total_frames() as usize;
+    let mut out = vec![0.0f32; total * 2];
+    for s in &plan.sections {
+        let tr = &tracks[s.track];
+        let grid_phase = fit_grid(&tr.beats).map(|(p, _)| p).unwrap_or(0.0);
+        let interval = fit_grid(&tr.beats).map(|(_, i)| i).unwrap_or(1.0);
+        let src_start = grid_phase + s.start_bar as f64 * interval * BEATS_PER_BAR;
+        let frames_in = tr.samples.len() / 2;
+        for k in 0..s.out_frames as usize {
+            let src = src_start + k as f64 * s.speed;
+            let i = src as usize;
+            if i + 1 >= frames_in {
+                break; // ran off the end (rounding); leave silence
+            }
+            let frac = (src - i as f64) as f32;
+            let oi = (s.out_start as usize + k) * 2;
+            for c in 0..2 {
+                let a = tr.samples[i * 2 + c];
+                let b = tr.samples[(i + 1) * 2 + c];
+                out[oi + c] = (a + (b - a) * frac) * s.gain;
+            }
+        }
+    }
+    out
+}
+
+/// RMS of an interleaved-stereo region (both channels pooled).
+fn region_rms(samples: &[f32], start_frame: usize, frames: usize) -> f32 {
+    let total = samples.len() / 2;
+    let end = (start_frame + frames).min(total);
+    if end <= start_frame {
+        return 0.0;
+    }
+    let slice = &samples[start_frame * 2..end * 2];
+    let sum: f64 = slice.iter().map(|&s| (s as f64) * (s as f64)).sum();
+    (sum / slice.len() as f64).sqrt() as f32
+}
+
+/// FNV-1a 64 — tiny, dependency-free, platform-stable input hashing.
+struct Fnv64(u64);
+
+impl Fnv64 {
+    fn new() -> Self {
+        Fnv64(0xcbf2_9ce4_8422_2325)
+    }
+    fn write(&mut self, bytes: &[u8]) {
+        for &b in bytes {
+            self.0 ^= b as u64;
+            self.0 = self.0.wrapping_mul(0x0000_0100_0000_01b3);
+        }
+    }
+    fn write_u64(&mut self, v: u64) {
+        self.write(&v.to_le_bytes());
+    }
+    fn finish(&self) -> u64 {
+        self.0
+    }
+}
+
+/// SplitMix64 — a tiny, well-distributed, platform-stable PRNG. All the
+/// engine's "taste" flows from this, seeded by the input, so the same
+/// sequence always makes the same choices.
+struct SplitMix64(u64);
+
+impl SplitMix64 {
+    fn new(seed: u64) -> Self {
+        SplitMix64(seed)
+    }
+    fn next(&mut self) -> u64 {
+        self.0 = self.0.wrapping_add(0x9e37_79b9_7f4a_7c15);
+        let mut z = self.0;
+        z = (z ^ (z >> 30)).wrapping_mul(0xbf58_476d_1ce4_e5b9);
+        z = (z ^ (z >> 27)).wrapping_mul(0x94d0_49bb_1331_11eb);
+        z ^ (z >> 31)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// A synthetic track: `secs` of a sine at `hz`, RMS ≈ amp/√2, with
+    /// beat marks every `interval` frames starting at `phase`.
+    fn tone_track(id: &str, secs: f64, hz: f64, amp: f32, phase: u64, interval: u64) -> TrackInput {
+        let frames = (secs * RENDER_RATE as f64) as usize;
+        let mut samples = Vec::with_capacity(frames * 2);
+        for n in 0..frames {
+            let v = amp
+                * (2.0 * std::f64::consts::PI * hz * n as f64 / RENDER_RATE as f64).sin() as f32;
+            samples.push(v);
+            samples.push(v);
+        }
+        let n_beats = ((frames as u64).saturating_sub(phase)) / interval;
+        let beats: Vec<u64> = (0..n_beats).map(|k| phase + k * interval).collect();
+        TrackInput {
+            id: id.to_string(),
+            samples: Arc::new(samples),
+            beats,
+        }
+    }
+
+    /// 120 BPM at 44100 Hz: 22050 frames per beat.
+    const FPB_120: u64 = 22_050;
+
+    fn two_long_tracks() -> Vec<TrackInput> {
+        vec![
+            // 120 BPM, 80 s ≈ 40 bars available.
+            tone_track("a", 80.0, 220.0, 0.5, 1000, FPB_120),
+            // 90 BPM (29400 frames/beat), 90 s ≈ 17 bars.
+            tone_track("b", 90.0, 330.0, 0.1, 500, 29_400),
+        ]
+    }
+
+    #[test]
+    fn first_track_sets_master_and_speed_ratios() {
+        let tracks = two_long_tracks();
+        let p = plan(&tracks, &[0, 1]).unwrap();
+        assert!((p.master_bpm - 120.0).abs() < 0.01, "bpm {}", p.master_bpm);
+        assert!((p.sections[0].speed - 1.0).abs() < 1e-9);
+        // 90 BPM source under a 120 BPM master: consume 29400/22050 = 4/3
+        // source frames per output frame (faster, pitch up — varispeed).
+        assert!(
+            (p.sections[1].speed - 4.0 / 3.0).abs() < 1e-6,
+            "speed {}",
+            p.sections[1].speed
+        );
+    }
+
+    #[test]
+    fn sections_are_phrase_sized_and_butt_joined() {
+        let tracks = two_long_tracks();
+        let p = plan(&tracks, &[0, 1, 0]).unwrap();
+        let fpb = p.frames_per_bar;
+        let mut expect_start = 0u64;
+        let mut bars_cum = 0u64;
+        for s in &p.sections {
+            assert!((8..=16).contains(&s.bars), "bars {}", s.bars);
+            assert_eq!(s.out_start, expect_start, "butt joint broken");
+            // Every boundary lands on a master bar line.
+            bars_cum += s.bars;
+            let want_end = (bars_cum as f64 * fpb).round() as u64;
+            assert_eq!(s.out_start + s.out_frames, want_end);
+            expect_start = want_end;
+        }
+        assert_eq!(p.total_frames(), expect_start);
+    }
+
+    #[test]
+    fn repeat_entries_pick_different_material() {
+        let tracks = two_long_tracks();
+        let p = plan(&tracks, &[0, 1, 0, 0]).unwrap();
+        let track0_starts: Vec<u64> = p
+            .sections
+            .iter()
+            .filter(|s| s.track == 0)
+            .map(|s| s.start_bar)
+            .collect();
+        assert_eq!(track0_starts.len(), 3);
+        assert!(
+            track0_starts[0] != track0_starts[1] && track0_starts[1] != track0_starts[2],
+            "repeats reused material: {track0_starts:?}"
+        );
+    }
+
+    #[test]
+    fn sections_render_loudness_matched() {
+        let tracks = two_long_tracks(); // amps 0.5 and 0.1 — very different
+        let p = plan(&tracks, &[0, 1]).unwrap();
+        let mix = render(&p, &tracks);
+        for s in &p.sections {
+            // Skip the joint frames; measure the section's interior.
+            let a = (s.out_start + 1000) as usize * 2;
+            let b = (s.out_start + s.out_frames - 1000) as usize * 2;
+            let sum: f64 = mix[a..b].iter().map(|&x| (x as f64) * (x as f64)).sum();
+            let rms = (sum / (b - a) as f64).sqrt() as f32;
+            assert!(
+                (rms - TARGET_RMS).abs() < 0.02,
+                "section at {} has RMS {} (want ≈{})",
+                s.out_start,
+                rms,
+                TARGET_RMS
+            );
+        }
+    }
+
+    #[test]
+    fn same_input_same_plan_and_bytes() {
+        let tracks = two_long_tracks();
+        let order = [0usize, 1, 0];
+        let p1 = plan(&tracks, &order).unwrap();
+        let p2 = plan(&tracks, &order).unwrap();
+        assert_eq!(p1, p2, "plan must be deterministic");
+        let m1 = render(&p1, &tracks);
+        let m2 = render(&p2, &tracks);
+        assert_eq!(m1, m2, "render must be bit-identical");
+    }
+
+    #[test]
+    fn different_order_different_seed() {
+        let tracks = two_long_tracks();
+        let p1 = plan(&tracks, &[0, 1]).unwrap();
+        let p2 = plan(&tracks, &[1, 0]).unwrap();
+        assert_ne!(p1.seed, p2.seed, "order must feed the seed");
+    }
+
+    #[test]
+    fn short_track_clamps_to_available_bars() {
+        // ~6 bars of 120 BPM: a section must clamp, not fail.
+        let tracks = vec![tone_track("short", 12.5, 220.0, 0.3, 0, FPB_120)];
+        let p = plan(&tracks, &[0]).unwrap();
+        assert!(p.sections[0].bars <= 6, "bars {}", p.sections[0].bars);
+        assert!(p.sections[0].bars >= 1);
+    }
+
+    #[test]
+    fn plan_errors_are_specific() {
+        assert_eq!(plan(&[], &[]), Err(PlanError::EmptySequence));
+        let one = vec![tone_track("a", 30.0, 220.0, 0.3, 0, FPB_120)];
+        assert_eq!(plan(&one, &[3]), Err(PlanError::BadOrderIndex(0)));
+        let mut untapped = vec![tone_track("a", 30.0, 220.0, 0.3, 0, FPB_120)];
+        untapped[0].beats.truncate(1);
+        assert_eq!(plan(&untapped, &[0]), Err(PlanError::NotEnoughBeats(0)));
+    }
+}

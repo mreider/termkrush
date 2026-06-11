@@ -30,7 +30,6 @@
 |  | [Naive auto-mix render: phrase sections varispeeded and butt-joined on the master grid](termkrush/Naive-auto-mix-render-phrase-sections-varispeeded-and-butt-joined-on-the-master-grid.md) | 8 |  |
 |  | [Sequence line: order tracks from the library, save/load as the project file](termkrush/Sequence-line-order-tracks-from-the-library-save-load-as-the-project-file.md) | 5 |  |
 |  | [Transition scheduler: hard cuts as punctuation, rare fades](termkrush/Transition-scheduler-hard-cuts-as-punctuation-rare-fades.md) | 3 |  |
-|  | [Chore: strip the pad grid and timeline surfaces from the GUI](termkrush/chore-strip-the-pad-grid-and-timeline-surfaces-from-the-gui.md) |  |  |
 | Total Points | | 87 | |
 
 ### Started
@@ -227,6 +226,7 @@
 |  | [Match the egui app to the design mockup (platter, CRT scanlines, fonts, library/pad polish)](termkrush/Match-the-egui-app-to-the-design-mockup-platter-CRT-scanlines-fonts-library-pad-polish.md) |  |  |
 |  | [Retire the TUI front-end once the GUI reaches parity](termkrush/Retire-the-TUI-front-end-once-the-GUI-reaches-parity.md) |  |  |
 |  | [Write the product spec (features + backlog) as docs/SPEC.md](termkrush/Write-the-product-spec-features-backlog-as-docs-SPECmd.md) |  |  |
+|  | [Chore: strip the pad grid and timeline surfaces from the GUI](termkrush/chore-strip-the-pad-grid-and-timeline-surfaces-from-the-gui.md) |  |  |
 
 ### Rejected
 | User | Title | Points | Tags |

@@ -2,11 +2,13 @@
 title: 'Chore: strip the pad grid and timeline surfaces from the GUI'
 type: chore
 created: "2026-06-11T13:32:36Z"
-modified: "2026-06-11T14:20:30Z"
+modified: "2026-06-11T14:40:30Z"
 author: Matt Reider
-status: started
+status: accepted
 project: termkrush
 started: "2026-06-11T14:20:30Z"
+delivered: "2026-06-11T14:40:30Z"
+accepted: "2026-06-11T14:40:30Z"
 ---
 
 ## Goal

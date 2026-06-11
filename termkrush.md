@@ -25,8 +25,7 @@
 |  | [Bit-identical determinism: same sequence, same file](termkrush/Bit-identical-determinism-same-sequence-same-file.md) | 3 |  |
 |  | [Energy-arc shaping: waves not ramps](termkrush/Energy-arc-shaping-waves-not-ramps.md) | 5 |  |
 |  | [Engine-placed scratches and fader chops with human micro-timing](termkrush/Engine-placed-scratches-and-fader-chops-with-human-micro-timing.md) | 8 |  |
-|  | [Transition scheduler: hard cuts as punctuation, rare fades](termkrush/Transition-scheduler-hard-cuts-as-punctuation-rare-fades.md) | 3 |  |
-| Total Points | | 71 | |
+| Total Points | | 68 | |
 
 ### Started
 | User | Title | Points | Tags |
@@ -127,6 +126,7 @@
 |  | [Beat-tap any library track, cached for good](termkrush/Beat-tap-any-library-track-cached-for-good.md) | 3 |  |
 |  | [Naive auto-mix render: phrase sections varispeeded and butt-joined on the master grid](termkrush/Naive-auto-mix-render-phrase-sections-varispeeded-and-butt-joined-on-the-master-grid.md) | 8 |  |
 |  | [Bug: timeline border should show just 0, not [0], to match pad number titles](termkrush/Bug-timeline-border-should-show-just-0-not-0-to-match-pad-number-titles.md) |  |  |
+|  | [Transition scheduler: hard cuts as punctuation, rare fades](termkrush/Transition-scheduler-hard-cuts-as-punctuation-rare-fades.md) | 3 |  |
 
 ### Accepted
 | User | Title | Points | Tags |

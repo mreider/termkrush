@@ -650,15 +650,17 @@ impl Mixer {
     }
 
     /// Playback speed for pad `i`. A loop with a known tempo and a known
-    /// master tempo varispeeds by `pad_bpm / master_bpm` so its beats lock to
-    /// the grid (pitch rides); everything else plays native (1.0).
+    /// master tempo varispeeds by `master_bpm / pad_bpm` so its beats lock to
+    /// the grid (pitch rides); everything else plays native (1.0). This matches
+    /// the arrangement renderer's `target / clip` convention (arrangement.rs):
+    /// a clip faster than the master slows down, a slower clip speeds up.
     fn pad_play_speed(&self, i: usize, looping: bool) -> f64 {
         if !looping {
             return 1.0;
         }
         let gs = self.global_speed as f64;
         match (self.pad_bpm(i), self.master_bpm) {
-            (Some(pad), Some(master)) if pad > 0.0 && master > 0.0 => (pad / master) as f64 * gs,
+            (Some(pad), Some(master)) if pad > 0.0 && master > 0.0 => (master / pad) as f64 * gs,
             _ => gs, // looping but un-tempo'd: still follows the global speed
         }
     }
@@ -1335,22 +1337,44 @@ mod tests {
 
     #[test]
     fn loop_varispeeds_to_the_master_tempo() {
+        // A loop locks to the master by playing at speed = master_bpm / pad_bpm
+        // (same convention as the arrangement renderer). A clip FASTER than the
+        // master must SLOW DOWN; a SLOWER clip must SPEED UP. Getting the ratio
+        // upside-down is the "beats won't land" bug — pin both directions.
+
+        // A 100 BPM clip under a 50 BPM master → slow to 0.5x.
         let mut m = Mixer::new();
-        // Ramp clip (value = i/100), 100 frames; loop at 100 BPM.
         let clip: Vec<f32> = (0..100).flat_map(|i| [i as f32 / 100.0; 2]).collect();
         m.assign_pad(0, clip);
         m.set_pad_bpm(0, Some(100.0));
         m.cycle_pad_kind(0); // → Loop
-        m.set_master_bpm(Some(50.0)); // master half the clip's tempo → speed 2.0
+        m.set_master_bpm(Some(50.0));
         m.trigger_pad(0);
         let mut buf = vec![0.0f32; 100]; // 50 output frames
         m.fill_mix(&mut buf);
-        // At speed 2.0, output frame 25 reads source frame 50 → value ~0.5
-        // (native speed would read frame 25 → ~0.25).
+        // speed 0.5 → output frame 25 reads source frame 12.5 → value ~0.125.
+        // (The inverted bug played at 2x and would read frame 50 → ~0.5.)
         assert!(
-            (buf[25 * 2] - 0.5).abs() < 0.02,
-            "loop ran at ~2x, got {}",
+            (buf[25 * 2] - 0.125).abs() < 0.02,
+            "100 BPM clip under a 50 BPM master should slow to 0.5x; got {}",
             buf[25 * 2]
+        );
+
+        // A 50 BPM clip under a 100 BPM master → speed up to 2.0x.
+        let mut m = Mixer::new();
+        let clip: Vec<f32> = (0..100).flat_map(|i| [i as f32 / 100.0; 2]).collect();
+        m.assign_pad(0, clip);
+        m.set_pad_bpm(0, Some(50.0));
+        m.cycle_pad_kind(0); // → Loop
+        m.set_master_bpm(Some(100.0));
+        m.trigger_pad(0);
+        let mut buf = vec![0.0f32; 100]; // 50 output frames
+        m.fill_mix(&mut buf);
+        // speed 2.0 → output frame 20 reads source frame 40 → value ~0.40.
+        assert!(
+            (buf[20 * 2] - 0.40).abs() < 0.02,
+            "50 BPM clip under a 100 BPM master should speed to 2.0x; got {}",
+            buf[20 * 2]
         );
     }
 

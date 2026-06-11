@@ -85,6 +85,53 @@ enum Target {
     Preview,
 }
 
+/// Where a background render is, phase-wise — drives the central render
+/// panel and the sequence line's progress strip (see the big-poppa design).
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum RenderPhase {
+    Decode,
+    GridFit,
+    Arrange,
+    Bounce,
+}
+
+impl RenderPhase {
+    fn label(self) -> &'static str {
+        match self {
+            RenderPhase::Decode => "decode",
+            RenderPhase::GridFit => "grid fit",
+            RenderPhase::Arrange => "arrange + scratch",
+            RenderPhase::Bounce => "bounce WAV",
+        }
+    }
+    fn all() -> [RenderPhase; 4] {
+        [
+            RenderPhase::Decode,
+            RenderPhase::GridFit,
+            RenderPhase::Arrange,
+            RenderPhase::Bounce,
+        ]
+    }
+}
+
+/// The facts the render-complete panel shows (and the proof line: same
+/// sequence → same seed → same mix).
+#[derive(Clone)]
+struct MixDone {
+    path: PathBuf,
+    secs: f64,
+    master_bpm: f64,
+    sections: usize,
+    seed: u64,
+}
+
+/// Messages from the background render worker.
+enum RenderMsg {
+    Progress(RenderPhase, f32),
+    Done(Result<MixDone, String>),
+    Mp3Done(Result<PathBuf, String>),
+}
+
 /// A finished background decode on its way to the audio engine. `audio` is
 /// `None` if the decode failed (so the in-flight count still settles).
 struct LoadDone {
@@ -138,6 +185,10 @@ enum Act {
     TapBeat(usize),
     /// Render the sequence to a mix WAV via the auto-mix engine.
     RenderMix,
+    /// Export the finished mix as MP3 (next to the WAV, in the library).
+    ExportMp3(PathBuf),
+    /// Dismiss the render-complete panel.
+    DismissMix,
 }
 
 /// The whole app: the engine, the audio sink, and the browsed library.
@@ -182,10 +233,13 @@ pub struct TermKrushApp {
     beats: BeatCache,
     /// Where the beat cache autosaves (`None` when the home dir is unknown).
     beats_file: Option<PathBuf>,
-    /// True while a background auto-mix render is running.
-    rendering: bool,
-    render_tx: Sender<Result<PathBuf, String>>,
-    render_rx: Receiver<Result<PathBuf, String>>,
+    /// Live phase/percent while a background auto-mix render runs.
+    render_progress: Option<(RenderPhase, f32)>,
+    /// The last finished mix — the central panel celebrates it until the
+    /// user moves on (opens the editor / starts another render).
+    last_mix: Option<MixDone>,
+    render_tx: Sender<RenderMsg>,
+    render_rx: Receiver<RenderMsg>,
 
     producer: Option<rtrb::Producer<f32>>,
     _audio: Option<AudioOutput>,
@@ -258,7 +312,8 @@ impl TermKrushApp {
             seq_path,
             beats,
             beats_file,
-            rendering: false,
+            render_progress: None,
+            last_mix: None,
             render_tx,
             render_rx,
             producer,
@@ -540,6 +595,26 @@ impl TermKrushApp {
                 }
             }
             Act::RenderMix => self.start_render(),
+            Act::ExportMp3(wav) => {
+                let tx = self.render_tx.clone();
+                std::thread::spawn(move || {
+                    let res = (|| {
+                        let audio =
+                            decode_file(&wav, automix::RENDER_RATE).map_err(|e| e.to_string())?;
+                        let out = wav.with_extension("mp3");
+                        termkrush_core::audio::export_mp3(
+                            &out,
+                            &audio.samples,
+                            automix::RENDER_RATE,
+                            2,
+                        )
+                        .map_err(|e| e.to_string())?;
+                        Ok(out)
+                    })();
+                    let _ = tx.send(RenderMsg::Mp3Done(res));
+                });
+            }
+            Act::DismissMix => self.last_mix = None,
         }
     }
 
@@ -548,17 +623,33 @@ impl TermKrushApp {
     /// marks, plan + render deterministically, write `automix-N.wav` into
     /// the current library folder.
     fn start_render(&mut self) {
-        if self.rendering || self.sequence.is_empty() {
+        if self.render_progress.is_some() || self.sequence.is_empty() {
             return;
         }
-        self.rendering = true;
+        self.render_progress = Some((RenderPhase::Decode, 0.0));
+        self.last_mix = None;
         let entries: Vec<PathBuf> = self.sequence.entries().to_vec();
         let beats = self.beats.clone();
         let out_dir = self.crate_lib.cwd().to_path_buf();
         let tx = self.render_tx.clone();
         std::thread::spawn(move || {
-            let _ = tx.send(render_sequence(&entries, &beats, &out_dir));
+            let done = render_sequence(&entries, &beats, &out_dir, &tx);
+            let _ = tx.send(RenderMsg::Done(done));
         });
+    }
+
+    /// Master tempo readout: the first sequence entry's fitted tempo (the
+    /// grid the whole mix locks to) plus the track that set it.
+    fn master_info(&self) -> Option<(f32, String)> {
+        let first = self.sequence.entries().first()?;
+        let m = self.beats.get(first)?;
+        let bpm = Self::bpm_from_beats(&m.frames, m.sample_rate)?;
+        let name = first
+            .file_stem()
+            .and_then(|s| s.to_str())
+            .unwrap_or("track")
+            .to_string();
+        Some((bpm, name))
     }
 
     /// Write the editor clip's trimmed region to the current library folder as
@@ -633,17 +724,34 @@ impl eframe::App for TermKrushApp {
         self.drain_loads();
         ctx.request_repaint(); // keep the audio ring fed in real time
 
-        // A finished background render: refresh the library so the new
-        // mix shows up (and gets probed) immediately.
-        while let Ok(done) = self.render_rx.try_recv() {
-            self.rendering = false;
-            match done {
-                Ok(path) => {
-                    tracing::info!(path = %path.display(), "mix rendered");
-                    self.crate_lib.refresh();
-                    self.probed_dir = None;
+        // Background render messages: live phase/percent, the finished
+        // mix (refresh the library so it shows up + gets probed), or a
+        // completed MP3 export.
+        while let Ok(msg) = self.render_rx.try_recv() {
+            match msg {
+                RenderMsg::Progress(phase, pct) => {
+                    self.render_progress = Some((phase, pct));
                 }
-                Err(e) => tracing::error!(error = %e, "render failed"),
+                RenderMsg::Done(done) => {
+                    self.render_progress = None;
+                    match done {
+                        Ok(mix) => {
+                            tracing::info!(path = %mix.path.display(), seed = mix.seed, "mix rendered");
+                            self.crate_lib.refresh();
+                            self.probed_dir = None;
+                            self.last_mix = Some(mix);
+                        }
+                        Err(e) => tracing::error!(error = %e, "render failed"),
+                    }
+                }
+                RenderMsg::Mp3Done(res) => match res {
+                    Ok(path) => {
+                        tracing::info!(path = %path.display(), "mp3 exported");
+                        self.crate_lib.refresh();
+                        self.probed_dir = None;
+                    }
+                    Err(e) => tracing::error!(error = %e, "mp3 export failed"),
+                },
             }
         }
 
@@ -664,7 +772,8 @@ impl eframe::App for TermKrushApp {
             self.spawn_probe();
         }
 
-        draw_brand_bar(ctx);
+        let master = self.master_info();
+        draw_top_bar(ctx, master.as_ref(), self.crate_lib.root());
 
         let mut acts: Vec<Act> = Vec::new();
         let mut spring_hover: Option<PathBuf> = None;
@@ -684,9 +793,12 @@ impl eframe::App for TermKrushApp {
                 target_rate,
                 sequence,
                 beats,
+                render_progress,
                 ..
             } = self;
-            draw_sequence_line(ctx, sequence, beats, &mut acts);
+            let render_progress = *render_progress;
+            let working = render_progress.map(|(_, pct)| pct);
+            draw_sequence_line(ctx, sequence, beats, working, master.as_ref(), &mut acts);
             draw_library(
                 ctx,
                 crate_lib,
@@ -713,6 +825,11 @@ impl eframe::App for TermKrushApp {
                     .and_then(|s| s.to_str())
                     .unwrap_or("clip")
                     .to_string();
+                let saved = pad_source[i]
+                    .as_ref()
+                    .and_then(|p| beats.get(p))
+                    .map(|m| m.at_rate(*target_rate) == pad_beats[i])
+                    .unwrap_or(false);
                 draw_clip_editor(
                     ctx,
                     mixer,
@@ -721,16 +838,15 @@ impl eframe::App for TermKrushApp {
                     wave,
                     &pad_beats[i],
                     *target_rate,
+                    saved,
                     &mut acts,
                 );
+            } else if let Some((phase, pct)) = self.render_progress {
+                draw_render_panel(ctx, phase, pct, master.as_ref());
+            } else if let Some(mix) = &self.last_mix {
+                draw_complete_panel(ctx, mix, &mut acts);
             } else {
-                egui::CentralPanel::default().show(ctx, |ui| {
-                    ui.centered_and_justified(|ui| {
-                        ui.label(
-                            egui::RichText::new("pick a track · tap its beats · krush").color(DIM),
-                        );
-                    });
-                });
+                draw_coach(ctx);
             }
         }
 
@@ -757,21 +873,20 @@ impl eframe::App for TermKrushApp {
         if self.pending_decodes > 0 {
             draw_loading_overlay(ctx, self.pending_decodes);
         }
-        if self.rendering {
-            draw_busy_overlay(ctx, "krushing the mix…");
-        }
         crt_overlay(ctx); // faint scanlines + vignette, on top of everything
     }
 }
 
 /// The render worker (runs off-thread): decode each unique track at the
 /// fixed engine rate, marks from the cache, plan + render, write the WAV.
-/// Everything here is deterministic for a given (entries, beats) input.
+/// Everything here is deterministic for a given (entries, beats) input;
+/// progress messages drive the render panel and are display-only.
 fn render_sequence(
     entries: &[PathBuf],
     beats: &BeatCache,
     out_dir: &Path,
-) -> Result<PathBuf, String> {
+    tx: &Sender<RenderMsg>,
+) -> Result<MixDone, String> {
     // Unique tracks in first-appearance order; the order list indexes them.
     let mut uniq: Vec<&PathBuf> = Vec::new();
     let mut order = Vec::with_capacity(entries.len());
@@ -787,7 +902,9 @@ fn render_sequence(
     }
 
     let mut tracks = Vec::with_capacity(uniq.len());
-    for path in &uniq {
+    for (i, path) in uniq.iter().enumerate() {
+        let pct = 5.0 + 55.0 * i as f32 / uniq.len() as f32;
+        let _ = tx.send(RenderMsg::Progress(RenderPhase::Decode, pct));
         let audio = decode_file(path, automix::RENDER_RATE)
             .map_err(|e| format!("{}: {e}", path.display()))?;
         let marks = beats
@@ -801,8 +918,11 @@ fn render_sequence(
         });
     }
 
+    let _ = tx.send(RenderMsg::Progress(RenderPhase::GridFit, 64.0));
     let plan = automix::plan(&tracks, &order).map_err(|e| e.to_string())?;
+    let _ = tx.send(RenderMsg::Progress(RenderPhase::Arrange, 72.0));
     let mix = automix::render(&plan, &tracks);
+    let _ = tx.send(RenderMsg::Progress(RenderPhase::Bounce, 92.0));
     tracing::info!(
         master_bpm = plan.master_bpm,
         sections = plan.sections.len(),
@@ -819,12 +939,19 @@ fn render_sequence(
         n += 1;
     };
     write_wav(&out, &mix, automix::RENDER_RATE, 2).map_err(|e| e.to_string())?;
-    Ok(out)
+    Ok(MixDone {
+        path: out,
+        secs: plan.total_frames() as f64 / automix::RENDER_RATE as f64,
+        master_bpm: plan.master_bpm,
+        sections: plan.sections.len(),
+        seed: plan.seed,
+    })
 }
 
-/// The slim top bar: the platter mark + wordmark (the brand lived on the old
-/// timeline header; the identity stays after the surface went).
-fn draw_brand_bar(ctx: &egui::Context) {
+/// The top bar: brand on the left; status on the right — the crate path
+/// and the master-grid readout ("grid locked · 92 bpm master · track_01").
+/// Status only: the bar carries zero knobs by design.
+fn draw_top_bar(ctx: &egui::Context, master: Option<&(f32, String)>, crate_root: &Path) {
     egui::TopBottomPanel::top("brand")
         .exact_height(34.0)
         .show(ctx, |ui| {
@@ -836,69 +963,319 @@ fn draw_brand_bar(ctx: &egui::Context) {
                 p.circle_stroke(r.center(), 10.0, egui::Stroke::new(1.0, LINE));
                 p.circle_filled(r.center(), 3.0, AMBER);
                 ui.label(bungee("termkrush", 18.0, AMBER));
+                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                    match master {
+                        Some((bpm, from)) => {
+                            ui.label(
+                                egui::RichText::new(format!("{bpm:.0} bpm master · {from}"))
+                                    .color(AMBER),
+                            );
+                            ui.label(egui::RichText::new("grid locked").color(GREEN).small());
+                        }
+                        None => {
+                            ui.label(egui::RichText::new("— bpm master").color(DIM));
+                            ui.label(egui::RichText::new("no grid").color(DIM).small());
+                        }
+                    }
+                    ui.add_space(10.0);
+                    ui.label(
+                        egui::RichText::new(format!(
+                            "{}  crate {}",
+                            ph::SQUARES_FOUR,
+                            crate_root.display()
+                        ))
+                        .color(DIM)
+                        .small(),
+                    );
+                });
             });
         });
 }
 
-/// The sequence line (bottom panel): the product's only arranging surface.
-/// Drag tracks from the library into the lane (repeats welcome), drag entries
-/// to reorder, X to remove. Every entry shows its beat-mark status — the
-/// engine can't render an entry until its track has tapped beats.
+/// First-run coach (central, when nothing else claims the stage): the one
+/// idea the user must get — tap a beat, once — and the three-step path.
+fn draw_coach(ctx: &egui::Context) {
+    egui::CentralPanel::default().show(ctx, |ui| {
+        ui.add_space(ui.available_height() * 0.24);
+        ui.vertical_centered(|ui| {
+            ui.label(bungee("↓", 34.0, GREEN));
+            ui.add_space(6.0);
+            ui.label(bungee("tap a beat, once", 22.0, INK));
+            ui.add_space(10.0);
+            ui.label(
+                egui::RichText::new(
+                    "Pick a track in the library and hit the pencil. Play it, tap the                      ↓ arrow on each beat — termkrush fits an exact tempo and downbeat.                      You tap each track once, ever.",
+                )
+                .color(DIM),
+            );
+            ui.add_space(18.0);
+            ui.horizontal(|ui| {
+                let w = ui.available_width();
+                ui.add_space((w - 360.0).max(0.0) / 2.0);
+                for (n, label) in [(1, "tap beats"), (2, "line up tracks"), (3, "render")] {
+                    ui.label(egui::RichText::new(format!("{n}")).color(GREEN).strong());
+                    ui.label(egui::RichText::new(label).color(INK));
+                    if n < 3 {
+                        ui.add_space(18.0);
+                    }
+                }
+            });
+        });
+    });
+}
+
+/// The central render panel: spinning vinyl, progress, and the phase chips
+/// (decode → varispeed/grid fit → arrange + scratch → bounce WAV).
+fn draw_render_panel(
+    ctx: &egui::Context,
+    phase: RenderPhase,
+    pct: f32,
+    master: Option<&(f32, String)>,
+) {
+    egui::CentralPanel::default().show(ctx, |ui| {
+        ui.add_space(ui.available_height() * 0.2);
+        ui.vertical_centered(|ui| {
+            // The vinyl: rings + amber label, spun by time while rendering.
+            let (r, _) = ui.allocate_exact_size(egui::vec2(64.0, 64.0), egui::Sense::hover());
+            let p = ui.painter_at(r);
+            let c = r.center();
+            p.circle_filled(c, 30.0, PANEL);
+            for k in 1..5 {
+                p.circle_stroke(c, 30.0 * k as f32 / 5.0, egui::Stroke::new(1.0, LINE));
+            }
+            let ang = (ui.input(|i| i.time) * 2.2) as f32;
+            p.line_segment(
+                [c, c + 28.0 * egui::vec2(ang.cos(), ang.sin())],
+                egui::Stroke::new(2.0, AMBER),
+            );
+            p.circle_filled(c, 8.0, AMBER);
+            ui.add_space(10.0);
+            ui.label(bungee("rendering mix", 20.0, INK));
+            ui.add_space(12.0);
+
+            // Progress bar.
+            let w = ui.available_width().min(460.0);
+            let (bar, _) = ui.allocate_exact_size(egui::vec2(w, 10.0), egui::Sense::hover());
+            let bp = ui.painter_at(bar);
+            bp.rect_filled(bar, 4.0, PANEL);
+            bp.rect_stroke(bar, 4.0, egui::Stroke::new(1.0, LINE));
+            let mut fill = bar;
+            fill.set_width(bar.width() * (pct / 100.0).clamp(0.0, 1.0));
+            bp.rect_filled(fill, 4.0, AMBER.gamma_multiply(0.85));
+            ui.label(
+                egui::RichText::new(format!("{pct:.0}%"))
+                    .color(DIM)
+                    .small(),
+            );
+            ui.add_space(10.0);
+
+            // Phase chips: done (green), now (amber), pending (dim).
+            ui.horizontal(|ui| {
+                let total: f32 = 320.0;
+                ui.add_space((ui.available_width() - total).max(0.0) / 2.0);
+                let phases = RenderPhase::all();
+                let now = phases.iter().position(|p| *p == phase).unwrap_or(0);
+                for (i, ph_) in phases.iter().enumerate() {
+                    let (color, mark) = match i.cmp(&now) {
+                        std::cmp::Ordering::Less => (GREEN, "✓ "),
+                        std::cmp::Ordering::Equal => (AMBER, "● "),
+                        std::cmp::Ordering::Greater => (DIM, ""),
+                    };
+                    ui.label(
+                        egui::RichText::new(format!("{mark}{}", ph_.label()))
+                            .color(color)
+                            .small(),
+                    );
+                    if i < phases.len() - 1 {
+                        ui.label(egui::RichText::new("›").color(LINE));
+                    }
+                }
+            });
+            ui.add_space(14.0);
+            if let Some((bpm, from)) = master {
+                ui.label(
+                    egui::RichText::new(format!(
+                        "everything varispeeds to {bpm:.0} BPM — the grid set by {from} never moves.                          seeded, so this render is bit-for-bit reproducible."
+                    ))
+                    .color(DIM)
+                    .small(),
+                );
+            }
+        });
+    });
+}
+
+/// The render-complete panel: the mix's facts, the reproducibility line
+/// with its seed, and the next moves (play / reveal / export MP3).
+fn draw_complete_panel(ctx: &egui::Context, mix: &MixDone, acts: &mut Vec<Act>) {
+    egui::CentralPanel::default().show(ctx, |ui| {
+        ui.add_space(ui.available_height() * 0.18);
+        ui.vertical_centered(|ui| {
+            ui.label(bungee("✓", 30.0, GREEN));
+            ui.add_space(4.0);
+            ui.label(bungee("mix rendered", 20.0, INK));
+            ui.add_space(4.0);
+            let name = mix
+                .path
+                .file_name()
+                .and_then(|s| s.to_str())
+                .unwrap_or("mix.wav");
+            ui.label(egui::RichText::new(name).color(AMBER).strong());
+            ui.add_space(12.0);
+
+            let mins = (mix.secs / 60.0).floor() as u64;
+            let secs = (mix.secs % 60.0).floor() as u64;
+            ui.horizontal(|ui| {
+                let total: f32 = 420.0;
+                ui.add_space((ui.available_width() - total).max(0.0) / 2.0);
+                for (k, v, amber) in [
+                    ("length", format!("{mins}:{secs:02}"), false),
+                    ("tempo", format!("{:.0} BPM", mix.master_bpm), true),
+                    ("phrases", format!("{}", mix.sections), false),
+                    ("format", "WAV · 44.1k".to_string(), false),
+                ] {
+                    ui.label(egui::RichText::new(k).color(DIM).small());
+                    ui.label(
+                        egui::RichText::new(v)
+                            .color(if amber { AMBER } else { INK })
+                            .strong(),
+                    );
+                    ui.add_space(14.0);
+                }
+            });
+            ui.add_space(10.0);
+            ui.label(
+                egui::RichText::new(format!(
+                    "same sequence → same mix, bit for bit · seed {:#06x}",
+                    mix.seed & 0xffff
+                ))
+                .color(DIM)
+                .small(),
+            );
+            ui.add_space(16.0);
+            ui.horizontal(|ui| {
+                let total: f32 = 430.0;
+                ui.add_space((ui.available_width() - total).max(0.0) / 2.0);
+                if ui
+                    .button(egui::RichText::new("▶ play mix").color(GREEN).strong())
+                    .clicked()
+                {
+                    acts.push(Act::Preview(mix.path.clone()));
+                }
+                if ui.button("reveal in library").clicked() {
+                    acts.push(Act::Select(mix.path.clone()));
+                    acts.push(Act::DismissMix);
+                }
+                if ui.button("export → MP3").clicked() {
+                    acts.push(Act::ExportMp3(mix.path.clone()));
+                }
+                if ui
+                    .button(egui::RichText::new("✕").color(DIM))
+                    .on_hover_text("dismiss")
+                    .clicked()
+                {
+                    acts.push(Act::DismissMix);
+                }
+            });
+        });
+    });
+}
+
+/// The sequence line (bottom panel): the product's only arranging
+/// surface, in the big-poppa shape — status pills, the autosave note,
+/// the master mini-readout, the render button (with its working state
+/// and progress strip), and chips with order numbers, tempo badges,
+/// pseudo-wave minis, and › swap separators.
 fn draw_sequence_line(
     ctx: &egui::Context,
     sequence: &Sequence,
     beats: &BeatCache,
+    working: Option<f32>,
+    master: Option<&(f32, String)>,
     acts: &mut Vec<Act>,
 ) {
+    let untapped = sequence
+        .entries()
+        .iter()
+        .filter(|p| !beats.has_beats(p))
+        .count();
+    let ready = !sequence.is_empty() && untapped == 0;
+
     egui::TopBottomPanel::bottom("sequence")
-        .exact_height(92.0)
+        .exact_height(128.0)
         .show(ctx, |ui| {
             ui.add_space(5.0);
+            // ── header ──
             ui.horizontal(|ui| {
                 ui.label(bungee("sequence", 14.0, AMBER));
-                let hint = if sequence.is_empty() {
-                    "drag tracks here in the order you want them — the engine mixes them"
+                if let Some(pct) = working {
+                    ui.label(
+                        egui::RichText::new(format!("● rendering… {pct:.0}%"))
+                            .color(AMBER)
+                            .small(),
+                    );
+                } else if sequence.is_empty() {
+                    ui.label(
+                        egui::RichText::new("empty — drag tracks in to start")
+                            .color(DIM)
+                            .small(),
+                    );
+                } else if ready {
+                    ui.label(egui::RichText::new("✓ ready to render").color(GREEN).small());
                 } else {
-                    "drag to reorder · the same track can repeat"
-                };
-                ui.label(egui::RichText::new(hint).color(DIM).small());
-                // The render-readiness report: marks are the only per-track
-                // labor, so this is the one thing standing between the user
-                // and a mix.
-                if !sequence.is_empty() {
-                    let untapped = sequence
-                        .entries()
-                        .iter()
-                        .filter(|p| !beats.has_beats(p))
-                        .count();
-                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                        if untapped == 0 {
-                            // The moment the product exists for: one button,
-                            // zero knobs — the engine does the craft.
-                            if ui
-                                .button(
-                                    egui::RichText::new(format!("{}  krush", ph::VINYL_RECORD))
-                                        .color(GREEN)
-                                        .strong(),
-                                )
-                                .on_hover_text("render the sequence to a mix (WAV in the library)")
-                                .clicked()
-                            {
-                                acts.push(Act::RenderMix);
-                            }
-                        } else {
-                            ui.label(
-                                egui::RichText::new(format!(
-                                    "{untapped} entr{} need beats",
-                                    if untapped == 1 { "y" } else { "ies" }
-                                ))
+                    ui.label(
+                        egui::RichText::new(format!(
+                            "◷ {untapped} track{} need beats",
+                            if untapped == 1 { "" } else { "s" }
+                        ))
+                        .color(AMBER)
+                        .small(),
+                    );
+                }
+                ui.label(
+                    egui::RichText::new("· autosaved · sequence.txt")
+                        .color(DIM)
+                        .small(),
+                );
+                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                    if working.is_none() {
+                        let btn = egui::Button::new(
+                            egui::RichText::new("▶ render mix")
+                                .color(if ready { GROUND } else { DIM })
+                                .strong(),
+                        )
+                        .fill(if ready { AMBER } else { PANEL });
+                        if ui
+                            .add_enabled(ready, btn)
+                            .on_hover_text("render the sequence to a mix (WAV in the library)")
+                            .clicked()
+                        {
+                            acts.push(Act::RenderMix);
+                        }
+                    }
+                    ui.add_space(8.0);
+                    match master {
+                        Some((bpm, _)) => ui.label(
+                            egui::RichText::new(format!("master {bpm:.0} BPM"))
                                 .color(AMBER)
                                 .small(),
-                            );
-                        }
-                    });
-                }
+                        ),
+                        None => ui.label(egui::RichText::new("master — BPM").color(DIM).small()),
+                    };
+                });
             });
+            // progress strip under the header while rendering
+            if let Some(pct) = working {
+                let (bar, _) = ui.allocate_exact_size(
+                    egui::vec2(ui.available_width(), 3.0),
+                    egui::Sense::hover(),
+                );
+                let p = ui.painter_at(bar);
+                p.rect_filled(bar, 0.0, PANEL);
+                let mut fill = bar;
+                fill.set_width(bar.width() * (pct / 100.0).clamp(0.0, 1.0));
+                p.rect_filled(fill, 0.0, AMBER.gamma_multiply(0.85));
+            }
             ui.add_space(4.0);
 
             let track_drag = egui::DragAndDrop::has_payload_of_type::<DragTrack>(ui.ctx());
@@ -907,27 +1284,49 @@ fn draw_sequence_line(
 
             egui::ScrollArea::horizontal().show(ui, |ui| {
                 ui.horizontal(|ui| {
+                    if sequence.is_empty() {
+                        ui.label(
+                            egui::RichText::new(
+                                "＋  drag tracks here to build your mix — the first track                                  sets the master tempo · repeats welcome",
+                            )
+                            .color(DIM),
+                        );
+                    }
                     for (i, path) in sequence.entries().iter().enumerate() {
+                        if i > 0 {
+                            ui.label(egui::RichText::new("›").color(DIM));
+                        }
                         let tempo = beats
                             .get(path)
                             .and_then(|m| TermKrushApp::bpm_from_beats(&m.frames, m.sample_rate));
                         draw_sequence_chip(ui, i, path, tempo, acts);
                     }
-                    // The tail: drop a library track to append, or an entry to
-                    // send it to the end. Wide enough to be an easy target.
-                    let w = ui.available_width().max(120.0);
+                    // the tail: drop a library track to append, or an entry
+                    // to send it to the end
+                    if !sequence.is_empty() {
+                        ui.label(egui::RichText::new("›").color(DIM));
+                    }
+                    let w = ui.available_width().max(96.0);
                     let (rect, _) =
-                        ui.allocate_exact_size(egui::vec2(w, 48.0), egui::Sense::hover());
-                    let hovered =
-                        matches!(ui.input(|inp| inp.pointer.interact_pos()), Some(pp) if rect.contains(pp));
+                        ui.allocate_exact_size(egui::vec2(w.min(140.0), 72.0), egui::Sense::hover());
+                    let p = ui.painter_at(rect);
+                    p.rect_stroke(rect, 4.0, egui::Stroke::new(1.0, LINE));
+                    p.text(
+                        rect.center(),
+                        egui::Align2::CENTER_CENTER,
+                        "＋ drop",
+                        egui::FontId::proportional(11.0),
+                        DIM,
+                    );
+                    let hovered = matches!(
+                        ui.input(|inp| inp.pointer.interact_pos()),
+                        Some(pp) if rect.contains(pp)
+                    );
                     if (track_drag || entry_drag) && hovered {
-                        ui.painter()
-                            .rect_filled(rect, 4.0, GREEN.gamma_multiply(0.18));
-                        ui.painter()
-                            .rect_stroke(rect, 4.0, egui::Stroke::new(1.5, GREEN));
+                        p.rect_filled(rect, 4.0, GREEN.gamma_multiply(0.18));
+                        p.rect_stroke(rect, 4.0, egui::Stroke::new(1.5, GREEN));
                         if ui.input(|inp| inp.pointer.any_released()) {
-                            if let Some(d) =
-                                egui::DragAndDrop::take_payload::<DragTrack>(ui.ctx())
+                            if let Some(d) = egui::DragAndDrop::take_payload::<DragTrack>(ui.ctx())
                             {
                                 acts.push(Act::SeqInsert {
                                     idx: n,
@@ -948,9 +1347,10 @@ fn draw_sequence_line(
         });
 }
 
-/// One sequence entry: a numbered chip. Drag it to reorder; drop a library
-/// track on it to insert *before* it; X removes this entry. The badge shows
-/// the track's fitted tempo, or "needs beats" (click it to go tap them).
+/// One sequence chip: order number + name + ✕ on top, tempo (or the
+/// click-to-tap needs-beats badge) + "sets tempo" on the master below,
+/// and a deterministic pseudo-waveform mini — seeded from the path, the
+/// way the design seeds its waves (it stands in for the audio, cheaply).
 fn draw_sequence_chip(
     ui: &mut egui::Ui,
     i: usize,
@@ -959,15 +1359,26 @@ fn draw_sequence_chip(
     acts: &mut Vec<Act>,
 ) {
     let stem = path.file_stem().and_then(|s| s.to_str()).unwrap_or("track");
+    let is_master = i == 0;
+    let flagged = tempo.is_none();
     let frame = egui::Frame::group(ui.style())
         .fill(PANEL)
-        .stroke(egui::Stroke::new(1.0, LINE))
+        .stroke(egui::Stroke::new(
+            1.0,
+            if is_master {
+                AMBER
+            } else if flagged {
+                AMBER.gamma_multiply(0.5)
+            } else {
+                LINE
+            },
+        ))
         .inner_margin(egui::Margin::symmetric(6.0, 4.0));
     let inner = frame.show(ui, |ui| {
-        ui.set_width(132.0);
+        ui.set_width(140.0);
         ui.vertical(|ui| {
             ui.horizontal(|ui| {
-                // The number + name strip is the drag handle for reordering.
+                // the number + name strip is the drag handle for reordering
                 let id = egui::Id::new(("seq-entry", i));
                 let resp = ui
                     .dnd_drag_source(id, DragEntry(i), |ui| {
@@ -989,42 +1400,83 @@ fn draw_sequence_chip(
                     }
                 });
             });
-            // Beat-mark status: tempo when tapped; otherwise a click-to-tap
-            // nudge — the engine can't place an untapped track on the grid.
-            match tempo {
-                Some(b) => {
-                    ui.label(
-                        egui::RichText::new(format!("{b:.1} BPM"))
-                            .color(GREEN)
-                            .small(),
-                    );
-                }
-                None => {
-                    if ui
-                        .add(
-                            egui::Button::new(
-                                egui::RichText::new("needs beats").color(AMBER).small(),
+            ui.horizontal(|ui| {
+                match tempo {
+                    Some(b) => {
+                        ui.label(
+                            egui::RichText::new(format!("{b:.0} BPM"))
+                                .color(GREEN)
+                                .small(),
+                        );
+                    }
+                    None => {
+                        if ui
+                            .add(
+                                egui::Button::new(
+                                    egui::RichText::new("needs beats ✎").color(AMBER).small(),
+                                )
+                                .frame(false),
                             )
-                            .frame(false),
-                        )
-                        .on_hover_text("tap this track's beats")
-                        .clicked()
-                    {
-                        acts.push(Act::EditTrack(path.to_path_buf()));
+                            .on_hover_text("tap this track's beats")
+                            .clicked()
+                        {
+                            acts.push(Act::EditTrack(path.to_path_buf()));
+                        }
                     }
                 }
+                if is_master {
+                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                        ui.label(egui::RichText::new("sets tempo").color(AMBER).small());
+                    });
+                }
+            });
+            // pseudo-wave mini, seeded by the path
+            let (mini, _) = ui
+                .allocate_exact_size(egui::vec2(ui.available_width(), 14.0), egui::Sense::hover());
+            let p = ui.painter_at(mini);
+            let mut seed: u64 = 0xcbf2_9ce4_8422_2325;
+            for b in path.to_string_lossy().bytes() {
+                seed ^= b as u64;
+                seed = seed.wrapping_mul(0x0000_0100_0000_01b3);
+            }
+            let bars = 26usize;
+            let bw = mini.width() / bars as f32;
+            let color = if flagged {
+                DIM
+            } else {
+                GREEN.gamma_multiply(0.8)
+            };
+            for k in 0..bars {
+                seed = seed
+                    .wrapping_mul(6364136223846793005)
+                    .wrapping_add(1442695040888963407);
+                let r = ((seed >> 33) as f32) / (u32::MAX as f32 / 2.0);
+                let env = 0.4
+                    + 0.6
+                        * ((k as f32 / bars as f32) * std::f32::consts::PI * 3.0)
+                            .sin()
+                            .abs();
+                let h = (0.16 + 0.7 * r.fract()) * env;
+                let x = mini.left() + k as f32 * bw;
+                let hh = mini.height() * h.clamp(0.08, 1.0);
+                p.line_segment(
+                    [
+                        egui::pos2(x, mini.bottom() - hh),
+                        egui::pos2(x, mini.bottom()),
+                    ],
+                    egui::Stroke::new((bw - 1.0).max(1.0), color),
+                );
             }
         });
     });
-    // The whole chip accepts drops: a library track inserts before this entry;
-    // a dragged entry lands at this position.
+    // the whole chip accepts drops: a library track inserts before this
+    // entry; a dragged entry lands at this position
     let rect = inner.response.rect;
     let hovered =
         matches!(ui.input(|inp| inp.pointer.interact_pos()), Some(pp) if rect.contains(pp));
     let track_drag = egui::DragAndDrop::has_payload_of_type::<DragTrack>(ui.ctx());
     let entry_drag = egui::DragAndDrop::has_payload_of_type::<DragEntry>(ui.ctx());
     if (track_drag || entry_drag) && hovered {
-        // Insertion indicator at the chip's left edge.
         ui.painter().line_segment(
             [rect.left_top(), rect.left_bottom()],
             egui::Stroke::new(3.0, GREEN),
@@ -1445,9 +1897,11 @@ fn draw_track_row(
     });
 }
 
-/// The clip editor: a full-clip waveform with draggable in/out handles, and the
-/// beat-tap surface — play, tap the down arrow on each beat; the least-squares
-/// fit shows the tempo those taps imply.
+/// The beat-tap stage (central): the big-poppa design's heart. A bar
+/// ruler over the waveform, the fitted beat grid (downbeats numbered),
+/// the user's raw taps as carets below, trim handles + region shading,
+/// and a fit-stats footer: tempo · downbeat · taps · residual, with the
+/// saved/fitting-live pill and the ↓ tap-key affordance.
 #[allow(clippy::too_many_arguments)]
 fn draw_clip_editor(
     ctx: &egui::Context,
@@ -1457,26 +1911,285 @@ fn draw_clip_editor(
     wave: &[(f32, f32)],
     beats: &[u64],
     sample_rate: u32,
+    saved: bool,
     acts: &mut Vec<Act>,
 ) {
+    // Provisional (amber) until the marks match what's cached; green once
+    // saved. The grid the engine will use is always the FITTED one.
+    let tone = if saved { GREEN } else { AMBER };
+    let fit = fit_grid(beats);
+    let playing = mixer.pad_is_sounding(i);
+
     egui::CentralPanel::default().show(ctx, |ui| {
         ui.add_space(6.0);
+
+        // ── header: tag · filename · hint · play-time ──
         ui.horizontal(|ui| {
-            // Just the track name — you can see you're editing; no "EDIT" label.
-            ui.label(bungee(track, 16.0, AMBER));
-            let playing = mixer.pad_is_sounding(i);
-            if icon_btn(
-                ui,
-                if playing { ph::PAUSE } else { ph::PLAY },
-                "play / pause (space)",
-            ) {
-                acts.push(Act::AuditionSel(i));
+            ui.label(
+                egui::RichText::new(if playing && !saved {
+                    "tap beats"
+                } else {
+                    "beats"
+                })
+                .color(GROUND)
+                .background_color(tone)
+                .small(),
+            );
+            ui.label(bungee(track, 15.0, AMBER));
+            ui.label(
+                egui::RichText::new("· trim is non-destructive · tapped once, kept forever")
+                    .color(DIM)
+                    .small(),
+            );
+            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                let len = mixer.pad_clip_frames(i).max(1);
+                let secs = |f: usize| f as f64 / mixer.sample_rate().max(1) as f64;
+                let pos = mixer.pad_play_pos(i).unwrap_or(0);
+                let m = |s: f64| format!("{}:{:02}", (s / 60.0) as u64, (s % 60.0) as u64);
+                ui.label(
+                    egui::RichText::new(format!("play {} / {}", m(secs(pos)), m(secs(len))))
+                        .color(DIM)
+                        .small(),
+                );
+            });
+        });
+        ui.add_space(4.0);
+
+        let len = mixer.pad_clip_frames(i).max(1);
+        let (inp, out) = mixer.pad_trim(i);
+
+        // ── the stage: ruler + waveform + grid + taps + handles ──
+        const RULER_H: f32 = 16.0;
+        const TAPLANE_H: f32 = 18.0;
+        let width = ui.available_width();
+        let height = (ui.available_height() - 96.0).clamp(120.0, 420.0);
+        let (stage, resp) = ui.allocate_exact_size(egui::vec2(width, height), egui::Sense::click());
+        let painter = ui.painter_at(stage);
+        painter.rect_filled(stage, 4.0, GROUND);
+        painter.rect_stroke(stage, 4.0, egui::Stroke::new(1.0, LINE));
+        let wave_top = stage.top() + RULER_H;
+        let wave_bot = stage.bottom() - TAPLANE_H;
+        let mid = (wave_top + wave_bot) / 2.0;
+        let amp = (wave_bot - wave_top) * 0.45;
+        let x_of = |frame: usize| stage.left() + (frame as f32 / len as f32) * stage.width();
+
+        // waveform
+        let cols = stage.width() as usize;
+        for c in 0..cols.min(if wave.is_empty() { 0 } else { cols }) {
+            let (lo, hi) = wave[c * wave.len() / cols.max(1)];
+            let x = stage.left() + c as f32;
+            let frame = (c as f32 / cols.max(1) as f32 * len as f32) as usize;
+            let inside = frame >= inp && frame < out;
+            let color = if inside { AMBER } else { DIM };
+            painter.line_segment(
+                [egui::pos2(x, mid - hi * amp), egui::pos2(x, mid - lo * amp)],
+                egui::Stroke::new(1.0, color),
+            );
+        }
+        // region shading outside the trim
+        for (a, b) in [(stage.left(), x_of(inp)), (x_of(out), stage.right())] {
+            if b > a {
+                painter.rect_filled(
+                    egui::Rect::from_min_max(egui::pos2(a, wave_top), egui::pos2(b, wave_bot)),
+                    0.0,
+                    egui::Color32::from_black_alpha(110),
+                );
             }
-            // Two clearly-labelled saves, right-aligned: "save" keeps the trim +
-            // beats and closes; "save to library" writes the trimmed WAV out.
+        }
+
+        // fitted beat grid: thin lines on every beat, stronger + numbered
+        // on downbeats (the grid the engine will lock to).
+        if let Some((phase, interval)) = fit {
+            let mut k = 0u64;
+            loop {
+                let fpos = phase + k as f64 * interval;
+                if fpos >= len as f64 {
+                    break;
+                }
+                if fpos >= 0.0 {
+                    let x = x_of(fpos as usize);
+                    let down = k % 4 == 0;
+                    painter.line_segment(
+                        [egui::pos2(x, wave_top), egui::pos2(x, wave_bot)],
+                        egui::Stroke::new(
+                            if down { 1.6 } else { 1.0 },
+                            tone.gamma_multiply(if down { 0.9 } else { 0.45 }),
+                        ),
+                    );
+                    if down {
+                        painter.text(
+                            egui::pos2(x + 2.0, stage.top() + 2.0),
+                            egui::Align2::LEFT_TOP,
+                            format!("{}", k / 4 + 1),
+                            egui::FontId::proportional(9.0),
+                            DIM,
+                        );
+                    }
+                }
+                k += 1;
+                if k > 4096 {
+                    break;
+                }
+            }
+        }
+        // the user's raw taps: carets in the lane below the waveform —
+        // the fit averages them, the carets show what it averaged.
+        painter.text(
+            egui::pos2(stage.left() + 4.0, wave_bot + 2.0),
+            egui::Align2::LEFT_TOP,
+            "↓ taps",
+            egui::FontId::proportional(9.0),
+            DIM,
+        );
+        for &b in beats {
+            if (b as usize) < len {
+                let x = x_of(b as usize);
+                painter.text(
+                    egui::pos2(x, wave_bot + 1.0),
+                    egui::Align2::CENTER_TOP,
+                    "▾",
+                    egui::FontId::proportional(11.0),
+                    tone,
+                );
+            }
+        }
+        // click the waveform to add/remove a tap at that frame
+        if resp.clicked() {
+            if let Some(p) = resp.interact_pointer_pos() {
+                if p.y >= wave_top && p.y <= wave_bot {
+                    let fr = (((p.x - stage.left()) / stage.width()).clamp(0.0, 1.0) * len as f32)
+                        as u64;
+                    acts.push(Act::ToggleBeat(i, fr));
+                }
+            }
+        }
+
+        // trim handles
+        for (is_out, frame) in [(false, inp), (true, out)] {
+            let hx = x_of(frame);
+            let handle = egui::Rect::from_min_max(
+                egui::pos2(hx - 5.0, wave_top),
+                egui::pos2(hx + 5.0, wave_bot),
+            );
+            let id = ui.id().with(("ce_handle", is_out));
+            let hresp = ui
+                .interact(handle, id, egui::Sense::drag())
+                .on_hover_cursor(egui::CursorIcon::ResizeHorizontal);
+            painter.line_segment(
+                [egui::pos2(hx, wave_top), egui::pos2(hx, wave_bot)],
+                egui::Stroke::new(2.0, AMBER),
+            );
+            let knob = egui::Rect::from_center_size(
+                egui::pos2(hx, wave_top + 7.0),
+                egui::vec2(10.0, 12.0),
+            );
+            painter.rect_filled(knob, 3.0, AMBER);
+            painter.rect_filled(
+                egui::Rect::from_center_size(knob.center(), egui::vec2(2.0, 6.0)),
+                0.0,
+                GROUND,
+            );
+            if hresp.dragged() {
+                if let Some(p) = hresp.interact_pointer_pos() {
+                    let fr = (((p.x - stage.left()) / stage.width()).clamp(0.0, 1.0) * len as f32)
+                        as usize;
+                    if is_out {
+                        acts.push(Act::SetTrimOut(i, fr));
+                    } else {
+                        acts.push(Act::SetTrimIn(i, fr));
+                    }
+                }
+            }
+        }
+
+        // playhead while auditioning — what you tap against
+        if playing {
+            if let Some(pos) = mixer.pad_play_pos(i) {
+                let px = x_of(pos.min(len));
+                painter.line_segment(
+                    [egui::pos2(px, stage.top()), egui::pos2(px, stage.bottom())],
+                    egui::Stroke::new(1.5, GREEN),
+                );
+            }
+        }
+        // ↓ taps a beat mark at the playhead while auditioning
+        if playing && ctx.input(|inp_| inp_.key_pressed(egui::Key::ArrowDown)) {
+            acts.push(Act::TapBeat(i));
+        }
+
+        ui.add_space(8.0);
+
+        // ── footer: fit stats · pill · tap key · play/save ──
+        ui.horizontal(|ui| {
+            let bpm = fit.map(|(_p, iv)| sample_rate as f64 * 60.0 / iv);
+            let downbeat = fit.map(|(p, _iv)| p / sample_rate as f64);
+            // residual: RMS distance of raw taps from the fitted grid, ms
+            let residual = fit.map(|(p, iv)| {
+                let mut sum = 0.0f64;
+                for &b in beats {
+                    let k = ((b as f64 - p) / iv).round();
+                    let d = b as f64 - (p + k * iv);
+                    sum += d * d;
+                }
+                (sum / beats.len().max(1) as f64).sqrt() / sample_rate as f64 * 1000.0
+            });
+            let kv = |ui: &mut egui::Ui, k: &str, v: String, c: egui::Color32| {
+                ui.label(egui::RichText::new(k).color(DIM).small());
+                ui.label(egui::RichText::new(v).color(c).strong());
+                ui.add_space(10.0);
+            };
+            kv(
+                ui,
+                "tempo",
+                bpm.map(|b| format!("{b:.1} bpm")).unwrap_or("—".into()),
+                tone,
+            );
+            kv(
+                ui,
+                "downbeat",
+                downbeat.map(|d| format!("{d:.3} s")).unwrap_or("—".into()),
+                INK,
+            );
+            kv(ui, "taps fit", format!("{}", beats.len()), INK);
+            kv(
+                ui,
+                "residual",
+                residual
+                    .map(|r| format!("±{r:.0} ms"))
+                    .unwrap_or("—".into()),
+                INK,
+            );
+            if saved {
+                ui.label(
+                    egui::RichText::new("✓ saved to beats.txt")
+                        .color(GREEN)
+                        .small(),
+                );
+                ui.label(
+                    egui::RichText::new("marks follow renames & moves")
+                        .color(DIM)
+                        .small(),
+                );
+            } else if fit.is_some() {
+                ui.label(egui::RichText::new("● fitting live").color(AMBER).small());
+                ui.label(
+                    egui::RichText::new("keep tapping — least-squares averages every ↓")
+                        .color(DIM)
+                        .small(),
+                );
+            }
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                 if ui
-                    .button(egui::RichText::new("save").color(GREEN).strong())
+                    .button(
+                        egui::RichText::new(if saved { "saved ✓" } else { "save" })
+                            .color(if saved { GREEN } else { GROUND })
+                            .background_color(if saved {
+                                egui::Color32::TRANSPARENT
+                            } else {
+                                AMBER
+                            })
+                            .strong(),
+                    )
                     .on_hover_text("keep the trim + beats and close the editor")
                     .clicked()
                 {
@@ -1489,137 +2202,27 @@ fn draw_clip_editor(
                 {
                     acts.push(Act::ExportClip(i));
                 }
+                if ui
+                    .button(if playing { "⏸ pause" } else { "▶ play" })
+                    .clicked()
+                {
+                    acts.push(Act::AuditionSel(i));
+                }
+                if ui
+                    .button(egui::RichText::new("clear").color(DIM))
+                    .on_hover_text("clear the marks and re-tap")
+                    .clicked()
+                {
+                    acts.push(Act::ClearBeats(i));
+                }
+                // the tap-key affordance: the one control that matters
+                ui.label(
+                    egui::RichText::new(" ↓ tap on beat ")
+                        .color(if playing { GROUND } else { DIM })
+                        .background_color(if playing { tone } else { PANEL }),
+                );
             });
         });
-
-        let len = mixer.pad_clip_frames(i).max(1);
-        let (inp, out) = mixer.pad_trim(i);
-        let secs = |f: usize| f as f64 / mixer.sample_rate().max(1) as f64;
-        ui.label(
-            egui::RichText::new(format!(
-                "in {:.3}s   out {:.3}s   selection {:.3}s   ·  drag the handles to trim",
-                secs(inp),
-                secs(out),
-                secs(out.saturating_sub(inp))
-            ))
-            .weak(),
-        );
-        // Beat tapping: the one way to mark beats — play, tap the down arrow.
-        ui.horizontal(|ui| {
-            ui.label(
-                egui::RichText::new("play, then tap the DOWN arrow key on each beat").color(GREEN),
-            );
-            if ui
-                .button("clear")
-                .on_hover_text("clear the marks and re-tap")
-                .clicked()
-            {
-                acts.push(Act::ClearBeats(i));
-            }
-            let fitted = TermKrushApp::bpm_from_beats(beats, sample_rate)
-                .map(|b| format!("{} beats · ≈{b:.1} BPM", beats.len()))
-                .unwrap_or_else(|| format!("{} beats", beats.len()));
-            ui.label(egui::RichText::new(fitted).color(DIM).small());
-        });
-        ui.add_space(8.0);
-
-        // The waveform canvas (click to toggle a beat mark).
-        let width = ui.available_width();
-        let height = (ui.available_height() - 16.0).clamp(80.0, 360.0);
-        let (rect, resp) = ui.allocate_exact_size(egui::vec2(width, height), egui::Sense::click());
-        let painter = ui.painter_at(rect);
-        painter.rect_filled(rect, 4.0, GROUND);
-        let mid = rect.center().y;
-        let amp = rect.height() * 0.45;
-        let x_of = |frame: usize| rect.left() + (frame as f32 / len as f32) * rect.width();
-
-        let cols = rect.width() as usize;
-        for c in 0..cols.min(if wave.is_empty() { 0 } else { cols }) {
-            let (lo, hi) = wave[c * wave.len() / cols.max(1)];
-            let x = rect.left() + c as f32;
-            let frame = (c as f32 / cols.max(1) as f32 * len as f32) as usize;
-            let inside = frame >= inp && frame < out;
-            let color = if inside { AMBER } else { DIM };
-            painter.line_segment(
-                [egui::pos2(x, mid - hi * amp), egui::pos2(x, mid - lo * amp)],
-                egui::Stroke::new(1.0, color),
-            );
-        }
-
-        // Beat marks (green verticals).
-        for &b in beats {
-            if (b as usize) < len {
-                let x = x_of(b as usize);
-                painter.line_segment(
-                    [egui::pos2(x, rect.top()), egui::pos2(x, rect.bottom())],
-                    egui::Stroke::new(1.5, GREEN),
-                );
-            }
-        }
-        // Click the canvas (not a handle) to add/remove a beat at that frame.
-        if resp.clicked() {
-            if let Some(p) = resp.interact_pointer_pos() {
-                let f = (((p.x - rect.left()) / rect.width()).clamp(0.0, 1.0) * len as f32) as u64;
-                acts.push(Act::ToggleBeat(i, f));
-            }
-        }
-
-        // Draggable handles. A thin grab rect around each in/out line.
-        for (is_out, frame) in [(false, inp), (true, out)] {
-            let hx = x_of(frame);
-            let handle = egui::Rect::from_min_max(
-                egui::pos2(hx - 5.0, rect.top()),
-                egui::pos2(hx + 5.0, rect.bottom()),
-            );
-            let id = ui.id().with(("ce_handle", is_out));
-            let resp = ui
-                .interact(handle, id, egui::Sense::drag())
-                .on_hover_cursor(egui::CursorIcon::ResizeHorizontal);
-            let painter = ui.painter_at(rect);
-            // The handle: a full-height line + a grab knob at the top.
-            painter.line_segment(
-                [egui::pos2(hx, rect.top()), egui::pos2(hx, rect.bottom())],
-                egui::Stroke::new(2.0, AMBER),
-            );
-            let knob = egui::Rect::from_center_size(
-                egui::pos2(hx, rect.top() + 7.0),
-                egui::vec2(10.0, 12.0),
-            );
-            painter.rect_filled(knob, 3.0, AMBER);
-            painter.rect_filled(
-                egui::Rect::from_center_size(knob.center(), egui::vec2(2.0, 6.0)),
-                0.0,
-                GROUND,
-            );
-            if resp.dragged() {
-                if let Some(p) = resp.interact_pointer_pos() {
-                    let f = (((p.x - rect.left()) / rect.width()).clamp(0.0, 1.0) * len as f32)
-                        as usize;
-                    if is_out {
-                        acts.push(Act::SetTrimOut(i, f));
-                    } else {
-                        acts.push(Act::SetTrimIn(i, f));
-                    }
-                }
-            }
-        }
-
-        // Moving playhead while auditioning — so you can see (and tap) the beat.
-        let playing = mixer.pad_is_sounding(i);
-        if playing {
-            if let Some(pos) = mixer.pad_play_pos(i) {
-                let px = x_of(pos.min(len));
-                painter.line_segment(
-                    [egui::pos2(px, rect.top()), egui::pos2(px, rect.bottom())],
-                    egui::Stroke::new(1.5, GREEN),
-                );
-            }
-        }
-        // The down arrow taps a beat mark at the playhead while auditioning.
-        // (Play/pause is the ▶/■ button or space — no separate stop key.)
-        if playing && ctx.input(|i| i.key_pressed(egui::Key::ArrowDown)) {
-            acts.push(Act::TapBeat(i));
-        }
     });
 }
 

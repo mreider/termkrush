@@ -601,8 +601,11 @@ pub fn render(plan: &MixPlan, tracks: &[TrackInput]) -> Vec<f32> {
 /// the reference's spectral drift, not a mastering move.
 fn apply_tilt(out: &mut [f32]) {
     let total = (out.len() / 2).max(1);
-    let a =
-        (1.0 - (-2.0 * std::f64::consts::PI * TILT_CROSSOVER_HZ / RENDER_RATE as f64).exp()) as f32;
+    // One-pole coefficient for TILT_CROSSOVER_HZ at RENDER_RATE,
+    // precomputed: 1 − e^(−2π·200/44100). A literal because libm's exp
+    // differs across platforms in the last ulp.
+    const A: f64 = 0.028_093_012_974_530_263;
+    let a = A as f32;
     let mut lp = [0.0f32; 2];
     for fr in 0..total {
         let k = TILT_MAX * fr as f32 / total as f32;
@@ -621,15 +624,18 @@ fn apply_tilt(out: &mut [f32]) {
 /// at the bar line — the slam, minus the click.
 fn apply_drops(plan: &MixPlan, out: &mut [f32]) {
     let total = (out.len() / 2) as u64;
-    // RBJ cookbook high-pass, Q = 1/√2.
-    let w0 = 2.0 * std::f64::consts::PI * DROP_CROSSOVER_HZ / RENDER_RATE as f64;
-    let (sin, cos) = (w0.sin(), w0.cos());
-    let alpha = sin / (2.0 * std::f64::consts::FRAC_1_SQRT_2.recip());
+    // RBJ cookbook high-pass, Q = 1/√2, at DROP_CROSSOVER_HZ /
+    // RENDER_RATE. sin/cos of the (constant) ω₀ are precomputed literals
+    // because libm differs across platforms in the last ulp; everything
+    // after is exactly-rounded IEEE arithmetic.
+    const SIN_W0: f64 = 0.021_369_751_787_301_55; // sin(2π·150/44100)
+    const COS_W0: f64 = 0.999_771_640_780_308; // cos(2π·150/44100)
+    let alpha = SIN_W0 / (2.0 * std::f64::consts::FRAC_1_SQRT_2.recip());
     let a0 = 1.0 + alpha;
-    let b0 = ((1.0 + cos) / 2.0 / a0) as f32;
-    let b1 = (-(1.0 + cos) / a0) as f32;
+    let b0 = ((1.0 + COS_W0) / 2.0 / a0) as f32;
+    let b1 = (-(1.0 + COS_W0) / a0) as f32;
     let b2 = b0;
-    let a1 = (-2.0 * cos / a0) as f32;
+    let a1 = (-2.0 * COS_W0 / a0) as f32;
     let a2 = ((1.0 - alpha) / a0) as f32;
 
     let attack = (RENDER_RATE as f64 * 0.010) as u64; // ease in
@@ -750,8 +756,32 @@ fn apply_flurries(plan: &MixPlan, tracks: &[TrackInput], out: &mut [f32]) {
 fn arc_level(pos: f64, period: f64, phase: f64) -> f64 {
     let mid = (ARC_LO + ARC_HI) / 2.0;
     let amp = (ARC_HI - ARC_LO) / 2.0;
-    let e = mid + amp * (2.0 * std::f64::consts::PI * pos / period + phase).sin();
+    let e = mid + amp * det_sin(2.0 * std::f64::consts::PI * pos / period + phase);
     e / mid
+}
+
+/// Platform-stable sine. `f64::sin` goes through the system libm, whose
+/// last-ulp rounding differs across OSes — enough to break bit-identical
+/// renders. This is pure IEEE arithmetic (exactly rounded everywhere):
+/// range-reduce to [−π, π], then a degree-13 Taylor with Horner. Max
+/// error ≈ 1e-7 over the range — inaudible in a gain curve, identical
+/// on every platform.
+fn det_sin(x: f64) -> f64 {
+    use std::f64::consts::PI;
+    let r = x - (2.0 * PI) * ((x + PI) / (2.0 * PI)).floor();
+    // fold [-π,π] onto [-π/2, π/2] where the series converges fast
+    let r = if r > PI / 2.0 {
+        PI - r
+    } else if r < -PI / 2.0 {
+        -PI - r
+    } else {
+        r
+    };
+    let r2 = r * r;
+    r * (1.0
+        + r2 * (-1.0 / 6.0
+            + r2 * (1.0 / 120.0
+                + r2 * (-1.0 / 5040.0 + r2 * (1.0 / 362_880.0 + r2 * (-1.0 / 39_916_800.0))))))
 }
 
 /// The multiplier a transition applies at `k` output frames into its

@@ -15,4 +15,3 @@ Stack-rank order. Top is the highest priority. Edit by hand or via `am rank` / `
 - [Bug: trim and timeline editing are not usable](Bug-trim-and-timeline-editing-are-not-usable.md)
 - [Bug: first track sets master BPM and prompts to sync all](Bug-first-track-sets-master-BPM-and-prompts-to-sync-all.md)
 - [Point termkrush.com (Porkbun DNS) at GitHub Pages + set the custom domain on GitHub](Point-termkrush-com-Porkbun-DNS-at-GitHub-Pages-set-the-custom-domain-on-GitHub.md)
-- [Chore: strip the pad grid and timeline surfaces from the GUI](chore-strip-the-pad-grid-and-timeline-surfaces-from-the-gui.md)

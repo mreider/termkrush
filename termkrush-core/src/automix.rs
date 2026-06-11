@@ -93,6 +93,49 @@ pub struct Section {
     pub transition: Transition,
 }
 
+/// One read-head move inside a flurry, in output frames relative to the
+/// flurry's start. The whip/wiki grammar lives in the gain: a whip's
+/// forward push is muted (gain 0) and only the pull-back sounds; a wiki
+/// sounds both ways.
+#[derive(Debug, Clone, PartialEq)]
+pub struct ScratchStroke {
+    /// Offset from the flurry start, output frames. Deliberately NOT
+    /// quantized — the jitter here is what reads as a human hand.
+    pub offset: f64,
+    /// Stroke length in output frames.
+    pub dur: f64,
+    /// Source read start (track frames).
+    pub from: f64,
+    /// Source read end (track frames) — backwards when `to < from`.
+    pub to: f64,
+    /// Fader gain over the stroke (0 = muted push, 1 = audible).
+    pub gain: f32,
+}
+
+/// A scratch flurry: 1–2 s of whip/wiki rubs over an onset-rich slice of
+/// the track playing underneath, overlaid on the mix. Starts lock to the
+/// beat grid (leaning on beat 2); the strokes inside stay loose.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Flurry {
+    /// Output start frame — always on a master beat.
+    pub out_start: u64,
+    /// Flurry length in output frames (~1–2 s, un-quantized).
+    pub frames: u64,
+    /// The track the slice is cut from (the one playing underneath).
+    pub track: usize,
+    /// Loudness-matching gain for the slice.
+    pub gain: f32,
+    pub strokes: Vec<ScratchStroke>,
+}
+
+/// A fader chop: a ~30–80 ms cut of the bed, placed at an un-quantized
+/// offset inside a section (macro on the grid, micro human).
+#[derive(Debug, Clone, PartialEq)]
+pub struct Chop {
+    pub out_start: u64,
+    pub frames: u64,
+}
+
 /// The deterministic plan for a whole mix.
 #[derive(Debug, Clone, PartialEq)]
 pub struct MixPlan {
@@ -103,6 +146,10 @@ pub struct MixPlan {
     /// The seed every choice flowed from (input-derived).
     pub seed: u64,
     pub sections: Vec<Section>,
+    /// Engine-performed scratch passages, clustered into one stretch.
+    pub flurries: Vec<Flurry>,
+    /// Engine-performed fader chops.
+    pub chops: Vec<Chop>,
 }
 
 impl MixPlan {
@@ -287,11 +334,129 @@ pub fn plan(tracks: &[TrackInput], order: &[usize]) -> Result<MixPlan, PlanError
         out_bars += bars;
     }
 
+    // ── fader chops: 0–2 per section, ~30–80 ms, un-quantized offsets
+    // inside the section (never in its first or last bar, so transitions
+    // stay clean). Macro on the grid, micro human.
+    let mut chops = Vec::new();
+    for s in &sections {
+        if s.bars < 3 {
+            continue;
+        }
+        let n = rng.next() % 3;
+        for _ in 0..n {
+            let span = s.out_frames as f64 - 2.0 * master_fpb;
+            let off = master_fpb + (rng.next() as f64 / u64::MAX as f64) * span;
+            let ms = 30 + rng.next() % 51; // 30–80 ms
+            let frames = (ms as f64 * RENDER_RATE as f64 / 1000.0) as u64;
+            chops.push(Chop {
+                out_start: s.out_start + off as u64,
+                frames,
+            });
+        }
+    }
+    chops.sort_by_key(|c| c.out_start);
+
+    // ── scratch flurries: a handful per hour, clustered into one stretch
+    // of the mix; each starts on a beat (leaning beat 2) and rubs an
+    // onset-rich half-beat slice of the track playing underneath.
+    let fpbeat = master_fpb / BEATS_PER_BAR;
+    let total_bars: u64 = sections.iter().map(|s| s.bars).sum();
+    let total_frames = (out_bars as f64 * master_fpb) as u64;
+    let n_flurries = (total_bars / 128).max(1) as usize;
+    // The cluster: a window of ~30% of the mix, seeded into its middle.
+    let win_w = (total_bars as f64 * 0.30).max(8.0);
+    let win_lo =
+        1.0 + (rng.next() as f64 / u64::MAX as f64) * (total_bars as f64 - win_w - 2.0).max(0.0);
+    let mut flurries: Vec<Flurry> = Vec::with_capacity(n_flurries);
+    for _ in 0..n_flurries {
+        // Bar inside the cluster window + a beat offset leaning on 2.
+        let bar = win_lo + (rng.next() as f64 / u64::MAX as f64) * win_w;
+        let beat = match rng.next() % 6 {
+            0..=2 => 1u64, // beat 2 (index 1) — the reference's lean
+            3 => 0,
+            4 => 2,
+            _ => 3,
+        };
+        let out_start = ((bar.floor() * BEATS_PER_BAR + beat as f64) * fpbeat).round() as u64;
+        let frames = (RENDER_RATE as f64 * (1.0 + (rng.next() as f64 / u64::MAX as f64))) as u64;
+        if out_start + frames >= total_frames {
+            continue;
+        }
+        // The section (and so the track) under the flurry.
+        let Some(sec) = sections
+            .iter()
+            .find(|s| out_start >= s.out_start && out_start < s.out_start + s.out_frames)
+        else {
+            continue;
+        };
+        let g = &grids[sec.track];
+        let slice_frames = (g.interval / 2.0) as u64; // half a beat of source
+        let src_lo = g.phase + sec.start_bar as f64 * g.interval * BEATS_PER_BAR;
+        let src_span = sec.bars as f64 * g.interval * BEATS_PER_BAR - slice_frames as f64;
+        // Onset-rich ≈ loudest of 8 seeded candidate slices.
+        let mut best = (0.0f32, src_lo);
+        for _ in 0..8 {
+            let cand = src_lo + (rng.next() as f64 / u64::MAX as f64) * src_span.max(1.0);
+            let r = region_rms(
+                &tracks[sec.track].samples,
+                cand as usize,
+                slice_frames as usize,
+            );
+            if r > best.0 {
+                best = (r, cand);
+            }
+        }
+        let (slice_rms, slice_start) = best;
+        let gain = if slice_rms > 1e-6 {
+            (0.9 * TARGET_RMS / slice_rms).min(MAX_GAIN)
+        } else {
+            1.0
+        };
+        // Strokes: alternating whips and wikis, durations jittered ±35%
+        // around a base rub — never snapped to a 16th.
+        let mut strokes = Vec::new();
+        let base = fpbeat / 3.0; // a brisk rub half-stroke
+        let mut tpos = 0.0f64;
+        let mut whip_turn = rng.next() % 2 == 0;
+        while tpos < frames as f64 {
+            let jit = |rng: &mut SplitMix64| 0.65 + 0.7 * (rng.next() as f64 / u64::MAX as f64);
+            let fwd = base * jit(&mut rng);
+            let back = base * jit(&mut rng);
+            let (sa, sb) = (slice_start, slice_start + slice_frames as f64);
+            strokes.push(ScratchStroke {
+                offset: tpos,
+                dur: fwd,
+                from: sa,
+                to: sb,
+                gain: if whip_turn { 0.0 } else { 1.0 }, // whip: push muted
+            });
+            strokes.push(ScratchStroke {
+                offset: tpos + fwd,
+                dur: back,
+                from: sb,
+                to: sa,
+                gain: 1.0, // the pull-back always sounds
+            });
+            tpos += fwd + back;
+            whip_turn = !whip_turn;
+        }
+        flurries.push(Flurry {
+            out_start,
+            frames,
+            track: sec.track,
+            gain,
+            strokes,
+        });
+    }
+    flurries.sort_by_key(|fl| fl.out_start);
+
     Ok(MixPlan {
         master_bpm,
         frames_per_bar: master_fpb,
         seed,
         sections,
+        flurries,
+        chops,
     })
 }
 
@@ -325,6 +490,10 @@ pub fn render(plan: &MixPlan, tracks: &[TrackInput]) -> Vec<f32> {
             }
         }
     }
+    // The performance layer: fader chops cut the bed; scratch flurries
+    // overlay it. Both are plan-level, so both are deterministic.
+    apply_chops(plan, &mut out);
+    apply_flurries(plan, tracks, &mut out);
     out
 }
 
@@ -338,6 +507,69 @@ fn region_rms(samples: &[f32], start_frame: usize, frames: usize) -> f32 {
     let slice = &samples[start_frame * 2..end * 2];
     let sum: f64 = slice.iter().map(|&s| (s as f64) * (s as f64)).sum();
     (sum / slice.len() as f64).sqrt() as f32
+}
+
+/// Apply the plan's fader chops: each cuts the bed to silence for its
+/// window, with 1 ms edge ramps so the cut itself doesn't click.
+fn apply_chops(plan: &MixPlan, out: &mut [f32]) {
+    let ramp = (RENDER_RATE as f64 / 1000.0) as u64; // 1 ms
+    let total = (out.len() / 2) as u64;
+    for c in &plan.chops {
+        let end = (c.out_start + c.frames).min(total);
+        for fr in c.out_start..end {
+            let into = fr - c.out_start;
+            let left = end - fr;
+            let g = if into < ramp {
+                1.0 - into as f32 / ramp as f32
+            } else if left <= ramp {
+                1.0 - left as f32 / ramp as f32
+            } else {
+                0.0
+            };
+            out[(fr * 2) as usize] *= g;
+            out[(fr * 2 + 1) as usize] *= g;
+        }
+    }
+}
+
+/// Overlay the plan's scratch flurries: each stroke reads its slice
+/// linearly (forward or back — pitch rides the hand speed), gated by the
+/// whip/wiki fader gain, with 3 ms edge fades against clicks.
+fn apply_flurries(plan: &MixPlan, tracks: &[TrackInput], out: &mut [f32]) {
+    let edge = RENDER_RATE as f64 * 0.003; // 3 ms de-click
+    let total = (out.len() / 2) as u64;
+    for fl in &plan.flurries {
+        let tr = &tracks[fl.track];
+        let frames_in = tr.samples.len() / 2;
+        for s in &fl.strokes {
+            if s.gain == 0.0 || s.dur < 1.0 {
+                continue; // a muted push moves the hand, not the speaker
+            }
+            let n = s.dur as usize;
+            for k in 0..n {
+                let ofr = fl.out_start + s.offset as u64 + k as u64;
+                if ofr >= total || (s.offset + k as f64) >= fl.frames as f64 {
+                    break;
+                }
+                let pos = s.from + (s.to - s.from) * (k as f64 / s.dur);
+                let i = pos as usize;
+                if i + 1 >= frames_in {
+                    continue;
+                }
+                let frac = (pos - i as f64) as f32;
+                // edge fades within the stroke
+                let e_in = (k as f64 / edge).min(1.0);
+                let e_out = ((n - k) as f64 / edge).min(1.0);
+                let g = fl.gain * s.gain * (e_in.min(e_out)) as f32;
+                let oi = (ofr * 2) as usize;
+                for c in 0..2 {
+                    let a = tr.samples[i * 2 + c];
+                    let b = tr.samples[(i + 1) * 2 + c];
+                    out[oi + c] += (a + (b - a) * frac) * g;
+                }
+            }
+        }
+    }
 }
 
 /// The multiplier a transition applies at `k` output frames into its
@@ -632,6 +864,117 @@ mod tests {
             head < tail * 0.6,
             "fade head {head} not quiet vs tail {tail}"
         );
+    }
+
+    #[test]
+    fn flurries_start_on_beats_leaning_two_and_cluster() {
+        let tracks = two_long_tracks();
+        let order: Vec<usize> = (0..200).map(|k| k % 2).collect();
+        let p = plan(&tracks, &order).unwrap();
+        assert!(p.flurries.len() >= 3, "flurries {}", p.flurries.len());
+
+        let fpbeat = p.frames_per_bar / BEATS_PER_BAR;
+        let mut beat_counts = [0usize; 4];
+        for fl in &p.flurries {
+            // Starts ON the beat grid (within rounding).
+            let beats = fl.out_start as f64 / fpbeat;
+            assert!(
+                (beats - beats.round()).abs() * fpbeat < 2.0,
+                "flurry off-grid at {}",
+                fl.out_start
+            );
+            beat_counts[(beats.round() as u64 % 4) as usize] += 1;
+        }
+        // The lean: beat 2 (index 1) is the most common start.
+        let max_other = [beat_counts[0], beat_counts[2], beat_counts[3]]
+            .into_iter()
+            .max()
+            .unwrap();
+        assert!(
+            beat_counts[1] >= max_other,
+            "no beat-2 lean: {beat_counts:?}"
+        );
+
+        // Clustered: every flurry inside ~a third of the mix, not uniform.
+        let lo = p.flurries.iter().map(|f| f.out_start).min().unwrap();
+        let hi = p.flurries.iter().map(|f| f.out_start).max().unwrap();
+        assert!(
+            (hi - lo) as f64 <= 0.35 * p.total_frames() as f64,
+            "flurries not clustered: span {} of {}",
+            hi - lo,
+            p.total_frames()
+        );
+    }
+
+    #[test]
+    fn micro_timing_is_not_sixteenth_quantized() {
+        let tracks = two_long_tracks();
+        let order: Vec<usize> = (0..200).map(|k| k % 2).collect();
+        let p = plan(&tracks, &order).unwrap();
+        let sixteenth = p.frames_per_bar / 16.0;
+
+        // Stroke onsets: distance to the nearest 16th ≈ chance (0.25),
+        // nowhere near quantized (~0).
+        let mut dists = Vec::new();
+        for fl in &p.flurries {
+            for s in &fl.strokes {
+                let abs = fl.out_start as f64 + s.offset;
+                let q = (abs / sixteenth).round() * sixteenth;
+                dists.push(((abs - q).abs() / sixteenth).min(0.5));
+            }
+        }
+        assert!(dists.len() > 40, "strokes {}", dists.len());
+        let mean = dists.iter().sum::<f64>() / dists.len() as f64;
+        assert!(mean > 0.12, "stroke onsets look quantized: mean {mean}");
+
+        // Chop offsets too.
+        let mut cd = Vec::new();
+        for c in &p.chops {
+            let q = (c.out_start as f64 / sixteenth).round() * sixteenth;
+            cd.push(((c.out_start as f64 - q).abs() / sixteenth).min(0.5));
+        }
+        assert!(cd.len() > 30, "chops {}", cd.len());
+        let cmean = cd.iter().sum::<f64>() / cd.len() as f64;
+        assert!(cmean > 0.12, "chop offsets look quantized: mean {cmean}");
+
+        // And chops are fader-cut sized: 30–80 ms.
+        for c in &p.chops {
+            let ms = c.frames as f64 / RENDER_RATE as f64 * 1000.0;
+            assert!((29.0..=81.0).contains(&ms), "chop {ms} ms");
+        }
+    }
+
+    #[test]
+    fn chops_cut_and_flurries_add_energy_in_the_render() {
+        let tracks = two_long_tracks();
+        let order: Vec<usize> = (0..10).map(|k| k % 2).collect();
+        let p = plan(&tracks, &order).unwrap();
+        let mix = render(&p, &tracks);
+
+        // A chop window is near-silent against its surroundings.
+        let c = p.chops.first().expect("a chop in 10 sections");
+        let inside = win_rms(&mix, c.out_start as usize + 50, c.frames as usize - 100);
+        let before = win_rms(&mix, c.out_start as usize - 4000, 3000);
+        assert!(
+            inside < before * 0.15,
+            "chop not cutting: inside {inside} vs before {before}"
+        );
+
+        // Flurries add energy: the same plan stripped of them is quieter
+        // across the flurry window (everything else identical).
+        if let Some(fl) = p.flurries.first() {
+            let mut stripped = p.clone();
+            stripped.flurries.clear();
+            let bed = render(&stripped, &tracks);
+            let with = win_rms(&mix, fl.out_start as usize, fl.frames as usize);
+            let without = win_rms(&bed, fl.out_start as usize, fl.frames as usize);
+            assert!(
+                with > without * 1.05,
+                "flurry inaudible: {with} vs bed {without}"
+            );
+        } else {
+            panic!("no flurry in a 10-section mix");
+        }
     }
 
     #[test]

@@ -2,12 +2,13 @@
 title: 'Bass drops: duck the lows, slam back on the one'
 type: feature
 created: "2026-06-11T13:33:10Z"
-modified: "2026-06-11T19:25:40Z"
+modified: "2026-06-11T19:37:06Z"
 author: Matt Reider
-status: started
+status: delivered
 estimate: "3"
 project: termkrush
 started: "2026-06-11T19:25:40Z"
+delivered: "2026-06-11T19:37:06Z"
 ---
 
 ## Goal

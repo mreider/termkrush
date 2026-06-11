@@ -2,12 +2,13 @@
 title: Engine-placed scratches and fader chops with human micro-timing
 type: feature
 created: "2026-06-11T13:33:04Z"
-modified: "2026-06-11T19:19:14Z"
+modified: "2026-06-11T19:24:57Z"
 author: Matt Reider
-status: started
+status: delivered
 estimate: "8"
 project: termkrush
 started: "2026-06-11T19:19:14Z"
+delivered: "2026-06-11T19:24:57Z"
 ---
 
 ## Goal

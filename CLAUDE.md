@@ -35,7 +35,6 @@ recompile:
 scripts/dev-run.sh build        # compile the debug binary once
 scripts/dev-run.sh list         # see the per-story recipes
 scripts/dev-run.sh gui          # launch the egui desktop app  (default)
-scripts/dev-run.sh tui          # launch the legacy terminal UI (--tui)
 scripts/dev-run.sh tone 3       # 3s test tone              (cpal output story)
 scripts/dev-run.sh panic        # crash-hook path           (logging story)
 scripts/dev-run.sh tone 1 -- --log   # forward extra flags after `--`

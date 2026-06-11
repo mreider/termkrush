@@ -1,50 +1,57 @@
 # Manual smoke checklist
 
-Headless tests cover the mechanics; these need a human at a real terminal.
-Run `scripts/dev-run.sh build && scripts/dev-run.sh tui` with a few tracks in
-`crate_root`.
+Headless tests cover the mechanics; these need a human with a display and
+speakers. Run `scripts/dev-run.sh build && scripts/dev-run.sh gui` with a few
+tracks in `crate_root`.
 
-## The whole control surface
-Five controls, reused by context. The header's second line always shows what
-they do *right now*.
+## The surfaces
 
-- **Arrows** — move. On a pad, `↑`/`↓` = that pad's volume.
-- **Tab / Shift-Tab** — jump area: Library → Pads → Timeline.
-- **Space** — play (the focused pad; the arrangement on the Timeline).
-- **Enter** — open the context menu (its first item is the common action, so
-  Enter-then-Enter does the obvious thing). While recording a scratch phrase,
-  Enter taps a whip instead.
-- **Esc** — back / cancel (closes the menu or editor; again = quit).
+Three, always visible, no modes: **library** (left), **beat-tap editor**
+(center, when open), **sequence line** (bottom). A slim brand bar up top.
+CRT amber/green everywhere, scanlines, no modal dialogs.
 
-## Walkthrough
-- [ ] The **library is home** on launch, nothing highlighted. With nothing
-      highlighted, `1`–`8` **jump** to a pad, `0` to the timeline.
-- [ ] `↑`/`↓` **highlight** a song. While a song is highlighted: `1`–`8`
-      **load** it onto that pad (if that pad's full, it asks to overwrite),
-      `Space` previews it, `r` rename, `Backspace` delete, `←`/`→` move. `Esc` **stops highlighting**
-      (then `1`–`8` jump again); a 2nd `Esc` goes up a folder / quits.
-- [ ] Move: a folder modal — `↑`/`↓` pick `(root)` or a folder,
-      `n` new folder (type a name, `Enter`), `r` rename, `Backspace` delete
-      (confirm), `Enter` moves the file there. One level of folders only.
-- [ ] Pad: `Space` plays/pauses; `↑`/`↓` volume; `Enter` opens its menu —
-      edit clip / **kind** (highlight it, `←`/`→` to change 1shot↔loop↔scratch) /
-      on-off / **export** (WAV to the library) / **clear**. Empty pads have no
-      menu — load from the library. (No load / save / save-over / mp3.)
-- [ ] Scratch pad (set kind → scratch): the menu then also shows **rec phrase /
-      clear phrase**; `Space` = wiki, `Enter` menu → record phrase, tap
-      `Space`/`Enter`, then `Space` replays it.
-- [ ] Clip editor: `←`/`→` move the active handle; **`+`/`-` zoom** the window
-      (whole→10s→1s→100ms→10ms) so steps get as fine as you need; `Tab` switches
-      in/out handle **and the view follows it** (so you can see/scroll to the
-      end); the minimap line shows where you are; `Space` auditions ~1.5s AT the active handle (again stops), `Enter` snips, `Esc` closes.
-- [ ] Timeline (looper): `Enter` menu → **record** arms the tape (it rolls from
-      the top). While `● REC`, go to a pad and `Space` — the pad plays and a hit
-      is captured on the **next bar line** (never mid-bar) in its lane. `Enter`
-      menu → record again to stop. Then `Space` plays the arrangement; `Enter`
-      menu → render (WAV) / tempo ± / master ± / clear. (No more hand-placed
-      step grid — you perform it.)
-- [ ] No help screen or M key — Enter opens the context menu everywhere; the hint line + menus explain everything.
+## Library
+- [ ] Launch shows your folders + tracks; subfolders open on click; `.. (up)`
+      walks back; the root is the ceiling.
+- [ ] ▶ on a row previews (click again stops); only one thing sounds at a
+      time.
+- [ ] Double-click renames inline; drag a track over a folder and *hold* —
+      it springs open; drop moves the file; drag onto the trash deletes.
+- [ ] Unplayable files show red and their buttons disable.
+- [ ] A track you've tapped shows its BPM in green at the row's end.
 
-## Render / export
-- [ ] Rendered `mix-*.wav` and exported `*.mp3` play correctly elsewhere and
-      sound like the session.
+## Beat-tap editor (the pencil on any row)
+- [ ] Pencil opens the editor with the track's waveform (and any previously
+      saved marks already on it).
+- [ ] ▶ plays; tapping the **↓ arrow** drops a green mark at the playhead on
+      each tap; the label live-updates "N beats · ≈X BPM" from the
+      least-squares fit.
+- [ ] Click the waveform to add/remove a mark; **clear** wipes them.
+- [ ] Drag the in/out handles to trim; **save to library** writes the
+      trimmed WAV (appears in the library and gets probed).
+- [ ] **save** closes the editor and persists the marks: quit, relaunch,
+      reopen the editor — the marks are still there.
+- [ ] Rename or move the track in the library — its marks (and green BPM
+      badge) follow it.
+
+## Sequence line
+- [ ] Drag a track from the library into the lane: a numbered chip appears.
+      Drop on an existing chip inserts *before* it; drop on the empty tail
+      appends.
+- [ ] The same track can be added at several positions.
+- [ ] Drag a chip onto another chip to reorder; X removes one entry only.
+- [ ] Untapped entries show an amber **needs beats** badge — clicking it
+      opens the beat-tap editor for that track. Tapped entries show their
+      BPM in green.
+- [ ] The header reads "N entries need beats" until every entry is tapped,
+      then **ready to render** in green.
+- [ ] Quit and relaunch: the sequence comes back exactly (order + repeats).
+- [ ] Rename/move a sequenced track: the chip follows. Delete it: its chips
+      vanish.
+
+## Render *(engine stories pending — extend as they land)*
+- [ ] (naive render story) Render with every entry tapped → a `mix-*.wav`
+      appears in the library, beats locked to one tempo, no audible seam at
+      section boundaries.
+- [ ] (determinism story) Render the same sequence twice → identical files
+      (same SHA-256).

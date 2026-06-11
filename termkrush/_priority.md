@@ -195,3 +195,4 @@ Stack-rank order. Top is the highest priority. Edit by hand or via `am rank` / `
 - [GUI platter scratch widget and record-to-timeline](GUI-platter-scratch-widget-and-record-to-timeline.md)
 - [Retire the TUI front-end once the GUI reaches parity](Retire-the-TUI-front-end-once-the-GUI-reaches-parity.md)
 - [Free-track arrangement model in the core engine (blocks on tracks)](Free-track-arrangement-model-in-the-core-engine-blocks-on-tracks.md)
+- [Bug: timeline border should show just 0, not [0], to match pad number titles](Bug-timeline-border-should-show-just-0-not-0-to-match-pad-number-titles.md)

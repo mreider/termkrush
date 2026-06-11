@@ -1009,3 +1009,5 @@
 2026-06-11T19:41:34Z	Matt Reider	finished	termkrush/Energy-arc-shaping-waves-not-ramps.md	
 2026-06-11T19:41:34Z	Matt Reider	delivered	termkrush/Energy-arc-shaping-waves-not-ramps.md	
 2026-06-11T19:42:37Z	Matt Reider	started	termkrush/Energy-arc-shaping-waves-not-ramps.md	Pulled back from delivered: clippy (needless_range_loop in apply_tilt) failed but a piped exit code let the deliver slip through. Fixing under the same story pre-acceptance.
+2026-06-11T19:47:22Z	Matt Reider	finished	termkrush/Energy-arc-shaping-waves-not-ramps.md	
+2026-06-11T19:47:22Z	Matt Reider	delivered	termkrush/Energy-arc-shaping-waves-not-ramps.md	

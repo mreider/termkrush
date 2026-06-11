@@ -125,8 +125,8 @@
 |  | [Transition scheduler: hard cuts as punctuation, rare fades](termkrush/Transition-scheduler-hard-cuts-as-punctuation-rare-fades.md) | 3 |  |
 |  | [Engine-placed scratches and fader chops with human micro-timing](termkrush/Engine-placed-scratches-and-fader-chops-with-human-micro-timing.md) | 8 |  |
 |  | [Bass drops: duck the lows, slam back on the one](termkrush/Bass-drops-duck-the-lows-slam-back-on-the-one.md) | 3 |  |
-|  | [Bug: timeline border should show just 0, not [0], to match pad number titles](termkrush/Bug-timeline-border-should-show-just-0-not-0-to-match-pad-number-titles.md) |  |  |
 |  | [Energy-arc shaping: waves not ramps](termkrush/Energy-arc-shaping-waves-not-ramps.md) | 5 |  |
+|  | [Bug: timeline border should show just 0, not [0], to match pad number titles](termkrush/Bug-timeline-border-should-show-just-0-not-0-to-match-pad-number-titles.md) |  |  |
 
 ### Accepted
 | User | Title | Points | Tags |

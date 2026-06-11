@@ -28,9 +28,8 @@
 |  | [Energy-arc shaping: waves not ramps](termkrush/Energy-arc-shaping-waves-not-ramps.md) | 5 |  |
 |  | [Engine-placed scratches and fader chops with human micro-timing](termkrush/Engine-placed-scratches-and-fader-chops-with-human-micro-timing.md) | 8 |  |
 |  | [Naive auto-mix render: phrase sections varispeeded and butt-joined on the master grid](termkrush/Naive-auto-mix-render-phrase-sections-varispeeded-and-butt-joined-on-the-master-grid.md) | 8 |  |
-|  | [Sequence line: order tracks from the library, save/load as the project file](termkrush/Sequence-line-order-tracks-from-the-library-save-load-as-the-project-file.md) | 5 |  |
 |  | [Transition scheduler: hard cuts as punctuation, rare fades](termkrush/Transition-scheduler-hard-cuts-as-punctuation-rare-fades.md) | 3 |  |
-| Total Points | | 87 | |
+| Total Points | | 82 | |
 
 ### Started
 | User | Title | Points | Tags |
@@ -128,6 +127,7 @@
 |  | [Library home: Enter on a song offers load rename delete move](termkrush/Library-home-Enter-on-a-song-offers-load-rename-delete-move.md) | 5 |  |
 |  | [Move a file to a folder via a folder-picker modal](termkrush/Move-a-file-to-a-folder-via-a-folder-picker-modal.md) | 8 |  |
 |  | [Bug: timeline border should show just 0, not [0], to match pad number titles](termkrush/Bug-timeline-border-should-show-just-0-not-0-to-match-pad-number-titles.md) |  |  |
+|  | [Sequence line: order tracks from the library, save/load as the project file](termkrush/Sequence-line-order-tracks-from-the-library-save-load-as-the-project-file.md) | 5 |  |
 
 ### Accepted
 | User | Title | Points | Tags |

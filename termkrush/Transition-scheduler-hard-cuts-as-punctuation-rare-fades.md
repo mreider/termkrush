@@ -2,11 +2,12 @@
 title: 'Transition scheduler: hard cuts as punctuation, rare fades'
 type: feature
 created: "2026-06-11T13:32:58Z"
-modified: "2026-06-11T13:37:37Z"
+modified: "2026-06-11T19:10:36Z"
 author: Matt Reider
-status: unstarted
+status: started
 estimate: "3"
 project: termkrush
+started: "2026-06-11T19:10:36Z"
 ---
 
 ## Goal

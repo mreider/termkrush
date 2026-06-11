@@ -51,6 +51,25 @@ pub struct TrackInput {
     pub beats: Vec<u64>,
 }
 
+/// How a section enters the mix. The reference's measured proportions:
+/// the dominant move is the equal-loudness swap; about a quarter of
+/// boundaries are hard cuts used as punctuation; ramped fades are rare
+/// (~1 in 20). Every transition stays on the phrase boundary — the type
+/// only shapes the incoming section's first moments.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Transition {
+    /// Equal-loudness butt joint — the invisible default.
+    Swap,
+    /// Punctuation: the section punches in hot (≈ +6 dB) for its first
+    /// beat, then settles to its matched gain over the next beat.
+    Cut,
+    /// The section ramps in from silence over a musical length.
+    Fade {
+        /// Ramp length in master beats (2, 4, or 8 — seeded).
+        beats: u8,
+    },
+}
+
 /// One planned section: which bars of which track land where in the mix.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Section {
@@ -70,6 +89,8 @@ pub struct Section {
     pub speed: f64,
     /// Loudness-matching gain applied to the section.
     pub gain: f32,
+    /// How this section enters (the first section always swaps in).
+    pub transition: Transition,
 }
 
 /// The deterministic plan for a whole mix.
@@ -231,6 +252,23 @@ pub fn plan(tracks: &[TrackInput], order: &[usize]) -> Result<MixPlan, PlanError
             1.0
         };
 
+        // The boundary's transition: seeded to the reference proportions
+        // (70% swap / 25% cut / 5% fade). The mix's opening section has
+        // no boundary to mark, so it always swaps in.
+        let transition = if pos == 0 {
+            Transition::Swap
+        } else {
+            match rng.next() % 100 {
+                0..=69 => Transition::Swap,
+                70..=94 => Transition::Cut,
+                _ => {
+                    // A short, musical ramp: 2, 4, or 8 beats.
+                    let beats = [2u8, 4, 8][(rng.next() % 3) as usize];
+                    Transition::Fade { beats }
+                }
+            }
+        };
+
         // Butt-join on the master grid: this section starts exactly where
         // the previous ended, which is a phrase boundary by construction.
         let out_start = (out_bars as f64 * master_fpb).round() as u64;
@@ -244,6 +282,7 @@ pub fn plan(tracks: &[TrackInput], order: &[usize]) -> Result<MixPlan, PlanError
             out_frames: out_end - out_start,
             speed,
             gain,
+            transition,
         });
         out_bars += bars;
     }
@@ -267,6 +306,7 @@ pub fn render(plan: &MixPlan, tracks: &[TrackInput]) -> Vec<f32> {
         let interval = fit_grid(&tr.beats).map(|(_, i)| i).unwrap_or(1.0);
         let src_start = grid_phase + s.start_bar as f64 * interval * BEATS_PER_BAR;
         let frames_in = tr.samples.len() / 2;
+        let fpbeat = plan.frames_per_bar / BEATS_PER_BAR; // master beat, frames
         for k in 0..s.out_frames as usize {
             let src = src_start + k as f64 * s.speed;
             let i = src as usize;
@@ -274,11 +314,14 @@ pub fn render(plan: &MixPlan, tracks: &[TrackInput]) -> Vec<f32> {
                 break; // ran off the end (rounding); leave silence
             }
             let frac = (src - i as f64) as f32;
+            // The entry envelope: how the transition shapes this section's
+            // first moments (it is unity after the entry settles).
+            let g = s.gain * entry_envelope(s.transition, k as f64, fpbeat);
             let oi = (s.out_start as usize + k) * 2;
             for c in 0..2 {
                 let a = tr.samples[i * 2 + c];
                 let b = tr.samples[(i + 1) * 2 + c];
-                out[oi + c] = (a + (b - a) * frac) * s.gain;
+                out[oi + c] = (a + (b - a) * frac) * g;
             }
         }
     }
@@ -295,6 +338,34 @@ fn region_rms(samples: &[f32], start_frame: usize, frames: usize) -> f32 {
     let slice = &samples[start_frame * 2..end * 2];
     let sum: f64 = slice.iter().map(|&s| (s as f64) * (s as f64)).sum();
     (sum / slice.len() as f64).sqrt() as f32
+}
+
+/// The multiplier a transition applies at `k` output frames into its
+/// section (`fpbeat` = master frames per beat). Unity once settled.
+fn entry_envelope(tr: Transition, k: f64, fpbeat: f64) -> f32 {
+    match tr {
+        Transition::Swap => 1.0,
+        Transition::Cut => {
+            // +6 dB punch for the first beat, easing back to unity over
+            // the second — punctuation, not a level error.
+            const PUNCH: f64 = 2.0;
+            if k < fpbeat {
+                PUNCH as f32
+            } else if k < 2.0 * fpbeat {
+                (PUNCH - (PUNCH - 1.0) * (k - fpbeat) / fpbeat) as f32
+            } else {
+                1.0
+            }
+        }
+        Transition::Fade { beats } => {
+            let ramp = beats as f64 * fpbeat;
+            if k < ramp {
+                (k / ramp) as f32
+            } else {
+                1.0
+            }
+        }
+    }
 }
 
 /// FNV-1a 64 — tiny, dependency-free, platform-stable input hashing.
@@ -471,6 +542,96 @@ mod tests {
         let p = plan(&tracks, &[0]).unwrap();
         assert!(p.sections[0].bars <= 6, "bars {}", p.sections[0].bars);
         assert!(p.sections[0].bars >= 1);
+    }
+
+    #[test]
+    fn transition_distribution_matches_the_reference() {
+        // Two long tracks, many boundaries: ~70/25/5 within tolerance and
+        // identical on every run (the schedule is the seed's).
+        let tracks = two_long_tracks();
+        let order: Vec<usize> = (0..400).map(|k| k % 2).collect();
+        let p1 = plan(&tracks, &order).unwrap();
+        let p2 = plan(&tracks, &order).unwrap();
+        assert_eq!(p1, p2, "schedule must be deterministic");
+
+        assert_eq!(
+            p1.sections[0].transition,
+            Transition::Swap,
+            "opening always swaps"
+        );
+        let n = (p1.sections.len() - 1) as f64;
+        let count = |f: &dyn Fn(Transition) -> bool| {
+            p1.sections[1..].iter().filter(|s| f(s.transition)).count() as f64 / n
+        };
+        let swaps = count(&|t| t == Transition::Swap);
+        let cuts = count(&|t| t == Transition::Cut);
+        let fades = count(&|t| matches!(t, Transition::Fade { .. }));
+        assert!((swaps - 0.70).abs() < 0.07, "swaps {swaps}");
+        assert!((cuts - 0.25).abs() < 0.07, "cuts {cuts}");
+        assert!((fades - 0.05).abs() < 0.04, "fades {fades}");
+        // Fade lengths are musical: 2, 4, or 8 beats.
+        for s in &p1.sections {
+            if let Transition::Fade { beats } = s.transition {
+                assert!(matches!(beats, 2 | 4 | 8), "fade beats {beats}");
+            }
+        }
+        // Transitions never move a boundary: still butt-joined on bars.
+        let mut expect = 0u64;
+        for s in &p1.sections {
+            assert_eq!(s.out_start, expect);
+            expect = s.out_start + s.out_frames;
+        }
+    }
+
+    /// RMS of one channel-interleaved window of the mix, in frames.
+    fn win_rms(mix: &[f32], start_frame: usize, frames: usize) -> f32 {
+        let a = start_frame * 2;
+        let b = ((start_frame + frames) * 2).min(mix.len());
+        let sum: f64 = mix[a..b].iter().map(|&x| (x as f64) * (x as f64)).sum();
+        (sum / (b - a).max(1) as f64).sqrt() as f32
+    }
+
+    #[test]
+    fn cut_punches_and_fade_ramps_in_the_render() {
+        // Enough boundaries that the seed deals at least one cut and one
+        // fade (the schedule is deterministic, so this can't flake).
+        let tracks = two_long_tracks();
+        let order: Vec<usize> = (0..24).map(|k| k % 2).collect();
+        let p = plan(&tracks, &order).unwrap();
+        let mix = render(&p, &tracks);
+        let fpbeat = (p.frames_per_bar / BEATS_PER_BAR) as usize;
+
+        let cut = p.sections.iter().find(|s| s.transition == Transition::Cut);
+        let fade = p
+            .sections
+            .iter()
+            .find(|s| matches!(s.transition, Transition::Fade { .. }));
+        let (cut, fade) = (cut.expect("a cut in 39 boundaries"), fade.expect("a fade"));
+
+        // The cut's first beat sits ≈ +6 dB over its settled interior.
+        let punch = win_rms(&mix, cut.out_start as usize, fpbeat);
+        let settled = win_rms(&mix, cut.out_start as usize + 4 * fpbeat, 4 * fpbeat);
+        let ratio = punch / settled.max(1e-6);
+        assert!((1.6..=2.4).contains(&ratio), "punch ratio {ratio}");
+
+        // The fade climbs monotonically from near-silence to its level.
+        let Transition::Fade { beats } = fade.transition else {
+            unreachable!()
+        };
+        let ramp = beats as usize * fpbeat;
+        let q = ramp / 4;
+        let mut last = 0.0f32;
+        for w in 0..4 {
+            let r = win_rms(&mix, fade.out_start as usize + w * q, q);
+            assert!(r >= last * 0.9, "fade window {w} fell: {r} < {last}");
+            last = r;
+        }
+        let head = win_rms(&mix, fade.out_start as usize, q);
+        let tail = win_rms(&mix, fade.out_start as usize + ramp, fpbeat);
+        assert!(
+            head < tail * 0.6,
+            "fade head {head} not quiet vs tail {tail}"
+        );
     }
 
     #[test]

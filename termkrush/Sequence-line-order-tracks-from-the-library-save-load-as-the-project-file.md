@@ -2,11 +2,12 @@
 title: 'Sequence line: order tracks from the library, save/load as the project file'
 type: feature
 created: "2026-06-11T13:32:41Z"
-modified: "2026-06-11T13:37:17Z"
+modified: "2026-06-11T14:41:08Z"
 author: Matt Reider
-status: unstarted
+status: started
 estimate: "5"
 project: termkrush
+started: "2026-06-11T14:41:08Z"
 ---
 
 ## Goal

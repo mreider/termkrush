@@ -4,9 +4,10 @@
 //!
 //! Post the 2026-06-11 auto-mix pivot this shell is three surfaces: the
 //! library (left), the beat-tap clip editor (central, opened from a library
-//! row), and an empty main area where the sequence line lands next. Pads,
-//! the timeline, and the scratch platter are gone — the engine performs the
-//! mix; the user curates tracks and taps beats.
+//! row), and the sequence line (bottom) — the product's only arranging
+//! surface, autosaved as the project file. Pads, the timeline, and the
+//! scratch platter are gone — the engine performs the mix; the user curates
+//! tracks, taps beats, and orders the sequence.
 
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
@@ -20,6 +21,7 @@ use termkrush_core::audio::{
 use termkrush_core::config::Config;
 use termkrush_core::library::Crate;
 use termkrush_core::mix::{Mixer, PADS};
+use termkrush_core::sequence::{sequence_path, Sequence};
 
 // The landing-page palette (index.html CSS vars), so the app matches the site.
 // Body text is the cream `--ink`; amber/green are accents, not the text color.
@@ -64,9 +66,14 @@ pub fn run() -> eframe::Result<()> {
     )
 }
 
-/// A track being dragged out of the library (drop onto a folder to move it).
+/// A track being dragged out of the library (drop onto a folder to move it,
+/// or onto the sequence line to add it).
 #[derive(Clone)]
 struct DragTrack(PathBuf);
+
+/// A sequence entry being dragged to a new position (by its current index).
+#[derive(Clone)]
+struct DragEntry(usize);
 
 /// Where a background decode is headed when it lands.
 #[derive(Clone, Copy)]
@@ -104,6 +111,18 @@ enum Act {
     CancelNewFolder,
     /// Open a library track in the beat-tap clip editor.
     EditTrack(PathBuf),
+    /// Insert a track into the sequence so it plays at position `idx`.
+    SeqInsert {
+        idx: usize,
+        path: PathBuf,
+    },
+    /// Remove the sequence entry at this position.
+    SeqRemove(usize),
+    /// Move a sequence entry from one position to another.
+    SeqMove {
+        from: usize,
+        to: usize,
+    },
     CloseClip,
     SetTrimIn(usize, usize),
     SetTrimOut(usize, usize),
@@ -149,6 +168,11 @@ pub struct TermKrushApp {
     /// Spring-loaded folders: `(folder, hover-start time)` while a track is
     /// dragged over it — after a hold we navigate in so you can drop elsewhere.
     spring: Option<(PathBuf, f64)>,
+    /// The ordered track sequence — the project. Autosaved on every change.
+    sequence: Sequence,
+    /// Where the sequence autosaves (`None` when the home dir is unknown —
+    /// the sequence still works for the session, it just can't persist).
+    seq_path: Option<PathBuf>,
 
     producer: Option<rtrb::Producer<f32>>,
     _audio: Option<AudioOutput>,
@@ -190,6 +214,11 @@ impl TermKrushApp {
         let (load_tx, load_rx) = channel();
         let (probe_tx, probe_rx) = channel();
 
+        // Reopening the app restores the last sequence — the project file.
+        let seq_path = sequence_path();
+        let sequence = seq_path.as_deref().map(Sequence::load).unwrap_or_default();
+        tracing::info!(entries = sequence.len(), "sequence restored");
+
         Self {
             mixer,
             crate_lib,
@@ -205,6 +234,8 @@ impl TermKrushApp {
             clip_wave: None,
             pending_decodes: 0,
             spring: None,
+            sequence,
+            seq_path,
             producer,
             _audio: audio,
             out_channels: channels.max(1),
@@ -359,20 +390,33 @@ impl TermKrushApp {
             Act::CommitRename => {
                 if let Some((p, buf)) = self.renaming.take() {
                     let buf = buf.trim();
-                    if !buf.is_empty() {
-                        let _ = self.crate_lib.rename(&p, buf);
+                    if !buf.is_empty() && self.crate_lib.rename(&p, buf).is_ok() {
+                        // Keep sequence entries pointing at the renamed file.
+                        let new = p.parent().unwrap_or(Path::new("")).join(buf);
+                        self.sequence.retarget(&p, &new);
+                        self.save_sequence();
                     }
                 }
             }
             Act::CancelRename => self.renaming = None,
             Act::Delete(p) => {
-                let _ = self.crate_lib.delete(&p);
+                if self.crate_lib.delete(&p).is_ok() {
+                    // A deleted track can't play — drop its sequence entries.
+                    self.sequence.purge(&p);
+                    self.save_sequence();
+                }
                 if self.lib_sel.as_deref() == Some(p.as_path()) {
                     self.lib_sel = None;
                 }
             }
             Act::MoveTo { track, folder } => {
-                let _ = self.crate_lib.move_into(&track, &folder);
+                if self.crate_lib.move_into(&track, &folder).is_ok() {
+                    // Keep sequence entries pointing at the moved file.
+                    if let Some(name) = track.file_name() {
+                        self.sequence.retarget(&track, &folder.join(name));
+                        self.save_sequence();
+                    }
+                }
             }
             Act::StartNewFolder => self.new_folder = Some(String::new()),
             Act::CommitNewFolder => {
@@ -392,6 +436,18 @@ impl TermKrushApp {
                 self.mixer.stop_pad(EDIT_SLOT);
                 self.edit_pending = true;
                 self.spawn_load(Target::Pad(EDIT_SLOT), path);
+            }
+            Act::SeqInsert { idx, path } => {
+                self.sequence.insert(idx, path);
+                self.save_sequence();
+            }
+            Act::SeqRemove(idx) => {
+                self.sequence.remove(idx);
+                self.save_sequence();
+            }
+            Act::SeqMove { from, to } => {
+                self.sequence.move_entry(from, to);
+                self.save_sequence();
             }
             Act::CloseClip => {
                 if let Some(i) = self.clip_edit.take() {
@@ -468,6 +524,17 @@ impl TermKrushApp {
         self.probed_dir = None; // re-probe so the new file gets checked
     }
 
+    /// Autosave the sequence (the project file). Every mutation funnels
+    /// through here, so the project on disk is never behind the screen.
+    fn save_sequence(&self) {
+        let Some(path) = self.seq_path.as_deref() else {
+            return; // no home dir: session-only sequence
+        };
+        if let Err(e) = self.sequence.save(path) {
+            tracing::error!(error = %e, path = %path.display(), "sequence autosave failed");
+        }
+    }
+
     /// Tempo (BPM) from a clip's tapped beats — uses the FITTED interval (the
     /// least-squares regular spacing), so imperfect taps average out. `None`
     /// with fewer than 2 marks.
@@ -524,8 +591,10 @@ impl eframe::App for TermKrushApp {
                 clip_wave,
                 previewing,
                 target_rate,
+                sequence,
                 ..
             } = self;
+            draw_sequence_line(ctx, sequence, &mut acts);
             draw_library(
                 ctx,
                 crate_lib,
@@ -538,7 +607,7 @@ impl eframe::App for TermKrushApp {
                 &mut acts,
             );
             // Central panel: the clip editor when one is open, else the (empty)
-            // main area — the sequence line lands here next.
+            // main area.
             if let Some(i) = *clip_edit {
                 let wave = clip_wave
                     .as_ref()
@@ -615,6 +684,139 @@ fn draw_brand_bar(ctx: &egui::Context) {
                 ui.label(bungee("termkrush", 18.0, AMBER));
             });
         });
+}
+
+/// The sequence line (bottom panel): the product's only arranging surface.
+/// Drag tracks from the library into the lane (repeats welcome), drag entries
+/// to reorder, X to remove. Every entry shows its beat-mark status — the
+/// engine can't render an entry until its track has tapped beats.
+fn draw_sequence_line(ctx: &egui::Context, sequence: &Sequence, acts: &mut Vec<Act>) {
+    egui::TopBottomPanel::bottom("sequence")
+        .exact_height(92.0)
+        .show(ctx, |ui| {
+            ui.add_space(5.0);
+            ui.horizontal(|ui| {
+                ui.label(bungee("sequence", 14.0, AMBER));
+                let hint = if sequence.is_empty() {
+                    "drag tracks here in the order you want them — the engine mixes them"
+                } else {
+                    "drag to reorder · the same track can repeat"
+                };
+                ui.label(egui::RichText::new(hint).color(DIM).small());
+            });
+            ui.add_space(4.0);
+
+            let track_drag = egui::DragAndDrop::has_payload_of_type::<DragTrack>(ui.ctx());
+            let entry_drag = egui::DragAndDrop::has_payload_of_type::<DragEntry>(ui.ctx());
+            let n = sequence.len();
+
+            egui::ScrollArea::horizontal().show(ui, |ui| {
+                ui.horizontal(|ui| {
+                    for (i, path) in sequence.entries().iter().enumerate() {
+                        draw_sequence_chip(ui, i, path, acts);
+                    }
+                    // The tail: drop a library track to append, or an entry to
+                    // send it to the end. Wide enough to be an easy target.
+                    let w = ui.available_width().max(120.0);
+                    let (rect, _) =
+                        ui.allocate_exact_size(egui::vec2(w, 48.0), egui::Sense::hover());
+                    let hovered =
+                        matches!(ui.input(|inp| inp.pointer.interact_pos()), Some(pp) if rect.contains(pp));
+                    if (track_drag || entry_drag) && hovered {
+                        ui.painter()
+                            .rect_filled(rect, 4.0, GREEN.gamma_multiply(0.18));
+                        ui.painter()
+                            .rect_stroke(rect, 4.0, egui::Stroke::new(1.5, GREEN));
+                        if ui.input(|inp| inp.pointer.any_released()) {
+                            if let Some(d) =
+                                egui::DragAndDrop::take_payload::<DragTrack>(ui.ctx())
+                            {
+                                acts.push(Act::SeqInsert {
+                                    idx: n,
+                                    path: d.0.clone(),
+                                });
+                            } else if let Some(d) =
+                                egui::DragAndDrop::take_payload::<DragEntry>(ui.ctx())
+                            {
+                                acts.push(Act::SeqMove {
+                                    from: d.0,
+                                    to: n.saturating_sub(1),
+                                });
+                            }
+                        }
+                    }
+                });
+            });
+        });
+}
+
+/// One sequence entry: a numbered chip. Drag it to reorder; drop a library
+/// track on it to insert *before* it; X removes this entry.
+fn draw_sequence_chip(ui: &mut egui::Ui, i: usize, path: &Path, acts: &mut Vec<Act>) {
+    let stem = path.file_stem().and_then(|s| s.to_str()).unwrap_or("track");
+    let frame = egui::Frame::group(ui.style())
+        .fill(PANEL)
+        .stroke(egui::Stroke::new(1.0, LINE))
+        .inner_margin(egui::Margin::symmetric(6.0, 4.0));
+    let inner = frame.show(ui, |ui| {
+        ui.set_width(132.0);
+        ui.vertical(|ui| {
+            ui.horizontal(|ui| {
+                // The number + name strip is the drag handle for reordering.
+                let id = egui::Id::new(("seq-entry", i));
+                let resp = ui
+                    .dnd_drag_source(id, DragEntry(i), |ui| {
+                        ui.label(
+                            egui::RichText::new(format!("{}", i + 1))
+                                .color(GREEN)
+                                .strong(),
+                        );
+                        ui.add(
+                            egui::Label::new(egui::RichText::new(stem).color(AMBER).strong())
+                                .truncate(),
+                        );
+                    })
+                    .response;
+                resp.on_hover_text(format!("{stem} · drag to reorder"));
+                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                    if icon_btn(ui, ph::X, "remove from the sequence") {
+                        acts.push(Act::SeqRemove(i));
+                    }
+                });
+            });
+            // Beat-mark status: the cache story lights this up; until a track
+            // has tapped beats the engine can't place it on the grid.
+            ui.label(egui::RichText::new("needs beats").color(DIM).small());
+        });
+    });
+    // The whole chip accepts drops: a library track inserts before this entry;
+    // a dragged entry lands at this position.
+    let rect = inner.response.rect;
+    let hovered =
+        matches!(ui.input(|inp| inp.pointer.interact_pos()), Some(pp) if rect.contains(pp));
+    let track_drag = egui::DragAndDrop::has_payload_of_type::<DragTrack>(ui.ctx());
+    let entry_drag = egui::DragAndDrop::has_payload_of_type::<DragEntry>(ui.ctx());
+    if (track_drag || entry_drag) && hovered {
+        // Insertion indicator at the chip's left edge.
+        ui.painter().line_segment(
+            [rect.left_top(), rect.left_bottom()],
+            egui::Stroke::new(3.0, GREEN),
+        );
+        ui.painter()
+            .rect_stroke(rect, 4.0, egui::Stroke::new(1.0, GREEN.gamma_multiply(0.6)));
+        if ui.input(|inp| inp.pointer.any_released()) {
+            if let Some(d) = egui::DragAndDrop::take_payload::<DragTrack>(ui.ctx()) {
+                acts.push(Act::SeqInsert {
+                    idx: i,
+                    path: d.0.clone(),
+                });
+            } else if let Some(d) = egui::DragAndDrop::take_payload::<DragEntry>(ui.ctx()) {
+                if d.0 != i {
+                    acts.push(Act::SeqMove { from: d.0, to: i });
+                }
+            }
+        }
+    }
 }
 
 /// A dimmed full-window overlay with a spinner while tracks are decoding, so a

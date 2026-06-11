@@ -1,5 +1,9 @@
 ---
-modified: "2026-06-08T08:33:58Z"
+title: Point termkrush.com (Porkbun DNS) at GitHub Pages + set the custom domain on GitHub
+type: chore
+status: unstarted
+modified: "2026-06-11T13:27:59Z"
+project: termkrush
 ---
 
 ## Goal

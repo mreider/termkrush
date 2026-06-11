@@ -9,6 +9,7 @@ started: "2026-06-09T11:04:47Z"
 finished: "2026-06-09T11:06:06Z"
 delivered: "2026-06-09T11:06:06Z"
 accepted: "2026-06-09T11:06:06Z"
+project: termkrush
 ---
 
 ## Problem statement

@@ -2,14 +2,12 @@
 title: 'Auto-BPM: first track sets master and every pad locks, no prompt'
 type: feature
 created: "2026-06-07T17:52:35Z"
-modified: "2026-06-07T18:05:33Z"
+modified: "2026-06-11T13:18:21Z"
 author: Matt Reider
-status: delivered
+status: unstarted
 estimate: "3"
 epic: looper
 project: termkrush
-started: "2026-06-07T18:03:30Z"
-delivered: "2026-06-07T18:05:33Z"
 ---
 
 ## Goal

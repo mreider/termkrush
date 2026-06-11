@@ -2,14 +2,12 @@
 title: Number keys select pads 1-8 and 0 selects the timeline
 type: feature
 created: "2026-06-08T08:21:27Z"
-modified: "2026-06-08T08:32:15Z"
+modified: "2026-06-11T13:18:39Z"
 author: Matt Reider
-status: delivered
+status: unstarted
 estimate: "5"
 epic: nav2
 project: termkrush
-started: "2026-06-08T08:28:06Z"
-delivered: "2026-06-08T08:32:15Z"
 ---
 
 ## Goal

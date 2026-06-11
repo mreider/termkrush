@@ -7,6 +7,7 @@ author: Matt Reider
 status: unstarted
 estimate: "8"
 epic: session
+project: termkrush
 ---
 
 ## Goal

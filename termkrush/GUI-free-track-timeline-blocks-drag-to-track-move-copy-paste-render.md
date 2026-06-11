@@ -10,6 +10,7 @@ epic: gui
 started: "2026-06-08T16:18:00Z"
 finished: "2026-06-08T16:26:08Z"
 delivered: "2026-06-08T16:26:08Z"
+project: termkrush
 ---
 
 ## Goal

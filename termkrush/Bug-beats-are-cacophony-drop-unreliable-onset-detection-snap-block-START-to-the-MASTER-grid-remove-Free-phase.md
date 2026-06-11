@@ -8,6 +8,7 @@ status: delivered
 started: "2026-06-09T14:56:45Z"
 finished: "2026-06-09T15:04:59Z"
 delivered: "2026-06-09T15:04:59Z"
+project: termkrush
 ---
 
 ## Problem statement

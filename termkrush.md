@@ -10,21 +10,19 @@
 |  | [Import a YouTube song as WAV to the track list](termkrush/Import-a-YouTube-song-as-WAV-to-the-track-list.md) | 5 |  |
 |  | [Refresh GitHub Pages for the pad based model](termkrush/Refresh-GitHub-Pages-for-the-pad-based-model.md) | 2 |  |
 |  | [V0.1.0 krush](termkrush/V010-krush.md) |  |  |
-|  | [Edit captured blocks on the timeline (move and trim)](termkrush/Edit-captured-blocks-on-the-timeline-move-and-trim.md) | 5 |  |
-|  | [Record pad performance into the timeline (launch-quantized capture)](termkrush/Record-pad-performance-into-the-timeline-launch-quantized-capture.md) | 8 |  |
-|  | [Retire the step-grid cell-toggle and tracker-only tests](termkrush/Retire-the-step-grid-cell-toggle-and-tracker-only-tests.md) |  |  |
-|  | [Bug: scratch whip/wiki is not discoverable - no cue to set a pad to scratch](termkrush/Bug-scratch-whip-wiki-is-not-discoverable-no-cue-to-set-a-pad-to-scratch.md) |  |  |
 |  | [Fade in and fade out on timeline blocks](termkrush/Fade-in-and-fade-out-on-timeline-blocks.md) | 5 |  |
-|  | [Make the tutorial interactive: do-this steps the app verifies](termkrush/Make-the-tutorial-interactive-do-this-steps-the-app-verifies.md) | 8 |  |
-|  | [Tutorial: question-mark opens a guided walkthrough of the controls and flow](termkrush/Tutorial-question-mark-opens-a-guided-walkthrough-of-the-controls-and-flow.md) | 5 |  |
-|  | [Borders show numbers and question-mark help replaces inline hints](termkrush/Borders-show-numbers-and-question-mark-help-replaces-inline-hints.md) | 3 |  |
-|  | [Browse one level of subfolders in the library](termkrush/Browse-one-level-of-subfolders-in-the-library.md) | 5 |  |
-|  | [Flag unplayable files in red on open](termkrush/Flag-unplayable-files-in-red-on-open.md) | 3 |  |
-|  | [Library home: Enter on a song offers load rename delete move](termkrush/Library-home-Enter-on-a-song-offers-load-rename-delete-move.md) | 5 |  |
-|  | [Move a file to a folder via a folder-picker modal](termkrush/Move-a-file-to-a-folder-via-a-folder-picker-modal.md) | 8 |  |
-|  | [Save a pad or timeline to the library with ctrl-S](termkrush/Save-a-pad-or-timeline-to-the-library-with-ctrl-S.md) | 5 |  |
-|  | [Splash screen on launch with logo copyright and license](termkrush/Splash-screen-on-launch-with-logo-copyright-and-license.md) | 3 |  |
-| Total Points | | 70 | |
+|  | [Auto-BPM: first track sets master and every pad locks, no prompt](termkrush/Auto-BPM-first-track-sets-master-and-every-pad-locks-no-prompt.md) | 3 |  |
+|  | [Bug: cannot unload a clip from a pad](termkrush/Bug-cannot-unload-a-clip-from-a-pad.md) |  |  |
+|  | [Bug: first track sets master BPM and prompts to sync all](termkrush/Bug-first-track-sets-master-BPM-and-prompts-to-sync-all.md) |  |  |
+|  | [Bug: trim and timeline editing are not usable](termkrush/Bug-trim-and-timeline-editing-are-not-usable.md) |  |  |
+|  | [Master timeline as a permanent top strip](termkrush/Master-timeline-as-a-permanent-top-strip.md) | 8 |  |
+|  | [Minimal context-mapped controls: move + Space/Enter/M menu](termkrush/Minimal-context-mapped-controls-move-Space-Enter-M-menu.md) | 8 |  |
+|  | [Number keys select pads 1-8 and 0 selects the timeline](termkrush/Number-keys-select-pads-1-8-and-0-selects-the-timeline.md) | 5 |  |
+|  | [Point termkrush.com (Porkbun DNS) at GitHub Pages + set the custom domain on GitHub](termkrush/Point-termkrush-com-Porkbun-DNS-at-GitHub-Pages-set-the-custom-domain-on-GitHub.md) |  |  |
+|  | [Point termkrush.com (Porkbun DNS) at GitHub Pages + set the custom domain on GitHub](termkrush/Point-termkrushcom-Porkbun-DNS-at-GitHub-Pages-set-the-custom-domain-on-GitHub.md) |  |  |
+|  | [Record the timeline into a pad (overwrite confirm if not empty)](termkrush/Record-the-timeline-into-a-pad-overwrite-confirm-if-not-empty.md) | 5 |  |
+|  | [Save and load a session as a .tekr file (pads + timeline)](termkrush/Save-and-load-a-session-as-a-tekr-file-pads-timeline.md) | 8 |  |
+| Total Points | | 49 | |
 
 ### Started
 | User | Title | Points | Tags |
@@ -33,11 +31,8 @@
 ### Finished
 | User | Title | Points | Tags |
 |---|---|:---:|---|
-|  | [Bug: cannot unload a clip from a pad](termkrush/Bug-cannot-unload-a-clip-from-a-pad.md) |  |  |
 |  | [Bug: mp3 export segfaults in libmp3lame](termkrush/Bug-mp3-export-segfaults-in-libmp3lame.md) |  |  |
 |  | [Bug: no play/pause - space should pause and resume](termkrush/Bug-no-play-pause-space-should-pause-and-resume.md) |  |  |
-|  | [Bug: trim and timeline editing are not usable](termkrush/Bug-trim-and-timeline-editing-are-not-usable.md) |  |  |
-|  | [Bug: first track sets master BPM and prompts to sync all](termkrush/Bug-first-track-sets-master-BPM-and-prompts-to-sync-all.md) |  |  |
 
 ### Delivered
 | User | Title | Points | Tags |
@@ -46,10 +41,7 @@
 |  | [Bug: clip-edit needs audition preview and two-sided snip](termkrush/Bug-clip-edit-needs-audition-preview-and-two-sided-snip.md) |  |  |
 |  | [Bug: space is not a global play/pause - cannot pause the mix](termkrush/Bug-space-is-not-a-global-play-pause-cannot-pause-the-mix.md) |  |  |
 |  | [Bug: escape should leave the timeline modal then open quit on a second press](termkrush/Bug-escape-should-leave-the-timeline-modal-then-open-quit-on-a-second-press.md) |  |  |
-|  | [Auto-BPM: first track sets master and every pad locks, no prompt](termkrush/Auto-BPM-first-track-sets-master-and-every-pad-locks-no-prompt.md) | 3 |  |
-|  | [Master timeline as a permanent top strip](termkrush/Master-timeline-as-a-permanent-top-strip.md) | 8 |  |
 |  | [Bug: help modal is cut off and the header keymap is stale and misleading](termkrush/Bug-help-modal-is-cut-off-and-the-header-keymap-is-stale-and-misleading.md) |  |  |
-|  | [Minimal context-mapped controls: move + Space/Enter/M menu](termkrush/Minimal-context-mapped-controls-move-Space-Enter-M-menu.md) | 8 |  |
 |  | [Bug: clip editor bar runs off screen and the in/out marks do not visibly move](termkrush/Bug-clip-editor-bar-runs-off-screen-and-the-in-out-marks-do-not-visibly-move.md) |  |  |
 |  | [Bug: timeline lanes are unlabeled so placing a pad is not discoverable](termkrush/Bug-timeline-lanes-are-unlabeled-so-placing-a-pad-is-not-discoverable.md) |  |  |
 |  | [Bug: live pad play and timeline playback sound at once - should be mutually exclusive](termkrush/Bug-live-pad-play-and-timeline-playback-sound-at-once-should-be-mutually-exclusive.md) |  |  |
@@ -58,7 +50,76 @@
 |  | [Bug: clip editor cannot trim precisely - shift-fine is too coarse and undiscoverable](termkrush/Bug-clip-editor-cannot-trim-precisely-shift-fine-is-too-coarse-and-undiscoverable.md) |  |  |
 |  | [Zoomable clip editor: windowed bar, +/- zoom, follow the active handle](termkrush/Zoomable-clip-editor-windowed-bar-zoom-follow-the-active-handle.md) | 5 |  |
 |  | [Bug: clip editor audition plays the whole selection not the active handle](termkrush/Bug-clip-editor-audition-plays-the-whole-selection-not-the-active-handle.md) |  |  |
-|  | [Number keys select pads 1-8 and 0 selects the timeline](termkrush/Number-keys-select-pads-1-8-and-0-selects-the-timeline.md) | 5 |  |
+|  | [Bug: Esc in a subfolder should go up not quit; trim wordy modals and fit their width](termkrush/Bug-Esc-in-a-subfolder-should-go-up-not-quit-trim-wordy-modals-and-fit-their-width.md) |  |  |
+|  | [Bug: GUI colors barely visible; match the landing-page palette (cream ink text, amber/green accents)](termkrush/Bug-GUI-colors-barely-visible-match-the-landing-page-palette-cream-ink-text-amber-green-accents.md) |  |  |
+|  | [Bug: GUI shows stale theme after rebuild; disable eframe persistence and apply theme every frame](termkrush/Bug-GUI-shows-stale-theme-after-rebuild-disable-eframe-persistence-and-apply-theme-every-frame.md) |  |  |
+|  | [Bug: UX cleanup - arrow cursor on names, X-to-close instead of Done, drop EDIT label, design the +folder/trash header icons](termkrush/Bug-UX-cleanup-arrow-cursor-on-names-X-to-close-instead-of-Done-drop-EDIT-label-design-the-folder-trash-header-icons.md) |  |  |
+|  | [Bug: add per-clip phase nudge (On-beat/Bar/Off-beat/Free) - onset-detect on drop, snap the hit to the grid, cache + persist on move](termkrush/Bug-add-per-clip-phase-nudge-On-beat-Bar-Off-beat-Free-onset-detect-on-drop-snap-the-hit-to-the-grid-cache-persist-on-move.md) |  |  |
+|  | [Bug: beats are cacophony - drop unreliable onset detection, snap block START to the MASTER grid, remove Free phase](termkrush/Bug-beats-are-cacophony-drop-unreliable-onset-detection-snap-block-START-to-the-MASTER-grid-remove-Free-phase.md) |  |  |
+|  | [Bug: beats never land - snap grid is anchored to frame 0 not the MASTER downbeat; anchor grid to MASTER, draw beat lines + hit markers, add fine micro-nudge](termkrush/Bug-beats-never-land-snap-grid-is-anchored-to-frame-0-not-the-MASTER-downbeat-anchor-grid-to-MASTER-draw-beat-lines-hit-markers-add-fine-micro-nudge.md) |  |  |
+|  | [Bug: beats still not landing - least-squares fit the tapped beats into a regular grid + exact tempo match (drop octave-fold) so every beat lines up](termkrush/Bug-beats-still-not-landing-least-squares-fit-the-tapped-beats-into-a-regular-grid-exact-tempo-match-drop-octave-fold-so-every-beat-lines-up.md) |  |  |
+|  | [Bug: cannot drag a pad onto the timeline - only library tracks are draggable to lanes](termkrush/Bug-cannot-drag-a-pad-onto-the-timeline-only-library-tracks-are-draggable-to-lanes.md) |  |  |
+|  | [Bug: clip beat UX confusing (find-beats vs tapping) - remove auto find-beats, make tapping the single clear flow](termkrush/Bug-clip-beat-UX-confusing-find-beats-vs-tapping-remove-auto-find-beats-make-tapping-the-single-clear-flow.md) |  |  |
+|  | [Bug: clip cursor should be the arrow on hover and a grabbing hand only while dragging (not over buttons/volume)](termkrush/Bug-clip-cursor-should-be-the-arrow-on-hover-and-a-grabbing-hand-only-while-dragging-not-over-buttons-volume.md) |  |  |
+|  | [Bug: clip-edit audition keeps playing after esc and pad re-triggers stack (voices pile up)](termkrush/Bug-clip-edit-audition-keeps-playing-after-esc-and-pad-re-triggers-stack-voices-pile-up.md) |  |  |
+|  | [Bug: clip edit/clear/export buttons dead - the whole-cell drag interact eats their clicks](termkrush/Bug-clip-edit-clear-export-buttons-dead-the-whole-cell-drag-interact-eats-their-clicks.md) |  |  |
+|  | [Bug: clip editor audition stutters - waveform peaks recomputed every frame starves the audio pump](termkrush/Bug-clip-editor-audition-stutters-waveform-peaks-recomputed-every-frame-starves-the-audio-pump.md) |  |  |
+|  | [Bug: clip editor space starts over, esc stops then closes with save-changes prompt if trimmed](termkrush/Bug-clip-editor-space-starts-over-esc-stops-then-closes-with-save-changes-prompt-if-trimmed.md) |  |  |
+|  | [Bug: clip editor - tofu glyphs in the hint, drop Enter-to-stop, replace cryptic X with labeled save + save-to-library buttons](termkrush/Bug-clip-editor-tofu-glyphs-in-the-hint-drop-Enter-to-stop-replace-cryptic-X-with-labeled-save-save-to-library-buttons.md) |  |  |
+|  | [Bug: clip edits (volume/trim) should reflow into its timeline blocks and the MASTER track should set the BPM](termkrush/Bug-clip-edits-volume-trim-should-reflow-into-its-timeline-blocks-and-the-MASTER-track-should-set-the-BPM.md) |  |  |
+|  | [Bug: clip still does not drop onto a timeline lane - make lane drop detection geometric and robust](termkrush/Bug-clip-still-does-not-drop-onto-a-timeline-lane-make-lane-drop-detection-geometric-and-robust.md) |  |  |
+|  | [Bug: command prompts should list key then explanation per line; clarify esc=quit on the library](termkrush/Bug-command-prompts-should-list-key-then-explanation-per-line-clarify-esc-quit-on-the-library.md) |  |  |
+|  | [Bug: detected master BPM is wrong so the grid is wrong - add manual master tempo control (half/double + type) and re-snap blocks](termkrush/Bug-detected-master-BPM-is-wrong-so-the-grid-is-wrong-add-manual-master-tempo-control-half-double-type-and-re-snap-blocks.md) |  |  |
+|  | [Bug: dragging a clip to the timeline does nothing - the cell drop-zone swallows the drag handle](termkrush/Bug-dragging-a-clip-to-the-timeline-does-nothing-the-cell-drop-zone-swallows-the-drag-handle.md) |  |  |
+|  | [Bug/feat: beat-aware exact sync - derive tempo + downbeat from marked beats, lock secondary clips to MASTER, on/off-beat phase](termkrush/Bug-feat-beat-aware-exact-sync-derive-tempo-downbeat-from-marked-beats-lock-secondary-clips-to-MASTER-on-off-beat-phase.md) |  |  |
+|  | [Bug/feat: clip editor beat-marking - auto-seed beats, click waveform to add/remove, find/clear; carry marks onto blocks](termkrush/Bug-feat-clip-editor-beat-marking-auto-seed-beats-click-waveform-to-add-remove-find-clear-carry-marks-onto-blocks.md) |  |  |
+|  | [Bug/feat: draw detected percussion-beat markers on each timeline block so you can see the beats and set the BPM to match](termkrush/Bug-feat-draw-detected-percussion-beat-markers-on-each-timeline-block-so-you-can-see-the-beats-and-set-the-BPM-to-match.md) |  |  |
+|  | [Bug/feat: refactor clip beat-finding to TAPPING - play, tap down-arrow on each beat at the playhead, Enter stops; add playhead + play-position getter](termkrush/Bug-feat-refactor-clip-beat-finding-to-TAPPING-play-tap-down-arrow-on-each-beat-at-the-playhead-Enter-stops-add-playhead-play-position-getter.md) |  |  |
+|  | [Bug: folders dont open on click; library preview cant be stopped or seen; pad play overlaps the preview](termkrush/Bug-folders-dont-open-on-click-library-preview-cant-be-stopped-or-seen-pad-play-overlaps-the-preview.md) |  |  |
+|  | [Bug: horizontal scrollbar should only appear when tracks exceed the view (and update on zoom)](termkrush/Bug-horizontal-scrollbar-should-only-appear-when-tracks-exceed-the-view-and-update-on-zoom.md) |  |  |
+|  | [Bug: library/UI polish - per-row play, move-up and delete drop targets, drag-hover highlight, visible volume track, plus-icon, blank window title](termkrush/Bug-library-UI-polish-per-row-play-move-up-and-delete-drop-targets-drag-hover-highlight-visible-volume-track-plus-icon-blank-window-title.md) |  |  |
+|  | [Bug: library highlight state - arrows highlight (1-8 loads), esc clears (1-8 jumps), confirm overwrite](termkrush/Bug-library-highlight-state-arrows-highlight-1-8-loads-esc-clears-1-8-jumps-confirm-overwrite.md) |  |  |
+|  | [Bug: library list shifts right when highlighting; reserve the select-arrow column always](termkrush/Bug-library-list-shifts-right-when-highlighting-reserve-the-select-arrow-column-always.md) |  |  |
+|  | [Bug: library track dropped on MASTER track never sets the BPM - spawn_load only detects tempo for pads](termkrush/Bug-library-track-dropped-on-MASTER-track-never-sets-the-BPM-spawn-load-only-detects-tempo-for-pads.md) |  |  |
+|  | [Bug: move is left-arrow when the file is inside a folder, right-arrow at root](termkrush/Bug-move-is-left-arrow-when-the-file-is-inside-a-folder-right-arrow-at-root.md) |  |  |
+|  | [Bug: no feedback during track decode (huge pause on library play); add a loading overlay/spinner](termkrush/Bug-no-feedback-during-track-decode-huge-pause-on-library-play-add-a-loading-overlay-spinner.md) |  |  |
+|  | [Bug: one-shots get varispeed to master BPM (chipmunk) - only loops should tempo-sync; 1shots play native and just phase-snap the onset](termkrush/Bug-one-shots-get-varispeed-to-master-BPM-chipmunk-only-loops-should-tempo-sync-1shots-play-native-and-just-phase-snap-the-onset.md) |  |  |
+|  | [Bug: opening the clip editor should stop the pad's current playback](termkrush/Bug-opening-the-clip-editor-should-stop-the-pads-current-playback.md) |  |  |
+|  | [Bug: pad menu cleanup - drop load, inline kind with arrows, export not mp3, unload to clear, scratch-only phrase](termkrush/Bug-pad-menu-cleanup-drop-load-inline-kind-with-arrows-export-not-mp3-unload-to-clear-scratch-only-phrase.md) |  |  |
+|  | [Bug: pads - uniform width, double the count to 16, drop the number, remove the ON toggle](termkrush/Bug-pads-uniform-width-double-the-count-to-16-drop-the-number-remove-the-ON-toggle.md) |  |  |
+|  | [Bug: phase badge is at the block's far-right corner (off-screen on long blocks) - move to the start + add a selected-block phase control in the transport](termkrush/Bug-phase-badge-is-at-the-blocks-far-right-corner-off-screen-on-long-blocks-move-to-the-start-add-a-selected-block-phase-control-in-the-transport.md) |  |  |
+|  | [Bug: phosphor icons render as tofu squares - forcing Monospace text family hides the icon font](termkrush/Bug-phosphor-icons-render-as-tofu-squares-forcing-Monospace-text-family-hides-the-icon-font.md) |  |  |
+|  | [Bug: put identity in titles and drop redundant lines (song modal, pad cells, confirms)](termkrush/Bug-put-identity-in-titles-and-drop-redundant-lines-song-modal-pad-cells-confirms.md) |  |  |
+|  | [Bug: reconcile timeline to the looper model - record=perform-capture, drop place-pad/region/cut step-grid](termkrush/Bug-reconcile-timeline-to-the-looper-model-record-perform-capture-drop-place-pad-region-cut-step-grid.md) |  |  |
+|  | [Bug: remove the redundant per-pad loading spinner (the global overlay covers loading)](termkrush/Bug-remove-the-redundant-per-pad-loading-spinner-the-global-overlay-covers-loading.md) |  |  |
+|  | [Bug: rename should be a modal not the title; song actions work without pressing Enter first](termkrush/Bug-rename-should-be-a-modal-not-the-title-song-actions-work-without-pressing-Enter-first.md) |  |  |
+|  | [Bug: rename user-facing pads to clips (we are not DJ equipment)](termkrush/Bug-rename-user-facing-pads-to-clips-we-are-not-DJ-equipment.md) |  |  |
+|  | [Bug: replace ugly hand-painted folder/trash icons with a proper icon font (egui-phosphor)](termkrush/Bug-replace-ugly-hand-painted-folder-trash-icons-with-a-proper-icon-font-egui-phosphor.md) |  |  |
+|  | [Bug: ruler time/bar labels are offset to the right of their ticks - center them over the tick](termkrush/Bug-ruler-time-bar-labels-are-offset-to-the-right-of-their-ticks-center-them-over-the-tick.md) |  |  |
+|  | [Bug: space on a highlighted library song should preview it](termkrush/Bug-space-on-a-highlighted-library-song-should-preview-it.md) |  |  |
+|  | [Bug: space on a pad should toggle play/pause not restart](termkrush/Bug-space-on-a-pad-should-toggle-play-pause-not-restart.md) |  |  |
+|  | [Bug: spring-loaded folders - hovering up or a folder while dragging should navigate after a hold so you can drop elsewhere](termkrush/Bug-spring-loaded-folders-hovering-up-or-a-folder-while-dragging-should-navigate-after-a-hold-so-you-can-drop-elsewhere.md) |  |  |
+|  | [Bug: tempo-sync wrongly tied to loop kind - decouple it; auto-lock any block with internal rhythm (length-based), add a per-block sync toggle](termkrush/Bug-tempo-sync-wrongly-tied-to-loop-kind-decouple-it-auto-lock-any-block-with-internal-rhythm-length-based-add-a-per-block-sync-toggle.md) |  |  |
+|  | [Bug: timeline blocks - drag ghost, move blocks across/along tracks with snap, mark MASTER track](termkrush/Bug-timeline-blocks-drag-ghost-move-blocks-across-along-tracks-with-snap-mark-MASTER-track.md) |  |  |
+|  | [Bug: timeline blocks play at native tempo - varispeed every block to the MASTER BPM so beats lock to the grid](termkrush/Bug-timeline-blocks-play-at-native-tempo-varispeed-every-block-to-the-MASTER-BPM-so-beats-lock-to-the-grid.md) |  |  |
+|  | [Bug: timeline border should show just 0, not [0], to match pad number titles](termkrush/Bug-timeline-border-should-show-just-0-not-0-to-match-pad-number-titles.md) |  |  |
+|  | [Bug: timeline needs a mouse-scrubbable playhead and play should be independent of library/clip preview](termkrush/Bug-timeline-needs-a-mouse-scrubbable-playhead-and-play-should-be-independent-of-library-clip-preview.md) |  |  |
+|  | [Bug: timeline needs a visible horizontal scrollbar, hint text is clipped, drag preview should be block-shaped, active lane highlight too faint](termkrush/Bug-timeline-needs-a-visible-horizontal-scrollbar-hint-text-is-clipped-drag-preview-should-be-block-shaped-active-lane-highlight-too-faint.md) |  |  |
+|  | [Bug: timeline playhead marker renders as a tofu box - paint the triangle instead of a glyph](termkrush/Bug-timeline-playhead-marker-renders-as-a-tofu-box-paint-the-triangle-instead-of-a-glyph.md) |  |  |
+|  | [Bug: timeline scroll is unbounded - clamp to content length plus headroom, auto-extend when blocks land at the end](termkrush/Bug-timeline-scroll-is-unbounded-clamp-to-content-length-plus-headroom-auto-extend-when-blocks-land-at-the-end.md) |  |  |
+|  | [Bug: timeline scrollbar unusable (paging yanks scroll back when stopped) and ruler has no time/bar labels](termkrush/Bug-timeline-scrollbar-unusable-paging-yanks-scroll-back-when-stopped-and-ruler-has-no-time-bar-labels.md) |  |  |
+|  | [Bug: timeline view - keep grab offset, hide original while moving, left margin, zoom, horizontal scroll, page the view on playback](termkrush/Bug-timeline-view-keep-grab-offset-hide-original-while-moving-left-margin-zoom-horizontal-scroll-page-the-view-on-playback.md) |  |  |
+|  | [Bug: whole clip should be draggable to the timeline and the drop must actually add a playable block](termkrush/Bug-whole-clip-should-be-draggable-to-the-timeline-and-the-drop-must-actually-add-a-playable-block.md) |  |  |
+|  | [Free-track arrangement model in the core engine (blocks on tracks)](termkrush/Free-track-arrangement-model-in-the-core-engine-blocks-on-tracks.md) | 5 |  |
+|  | [GUI clip editor inline: waveform, draggable handles, zoom buttons, export](termkrush/GUI-clip-editor-inline-waveform-draggable-handles-zoom-buttons-export.md) | 5 |  |
+|  | [GUI foundation: egui shell, CRT theme, audio, 3-zone layout](termkrush/GUI-foundation-egui-shell-CRT-theme-audio-3-zone-layout.md) | 5 |  |
+|  | [GUI free-track timeline: blocks, drag to track, move, copy-paste, render](termkrush/GUI-free-track-timeline-blocks-drag-to-track-move-copy-paste-render.md) | 8 |  |
+|  | [GUI library panel: mouse rename, drag to folder, drag to pad, delete button](termkrush/GUI-library-panel-mouse-rename-drag-to-folder-drag-to-pad-delete-button.md) | 5 |  |
+|  | [GUI pad grid: drag-to-change-kind, volume, clear, click play](termkrush/GUI-pad-grid-drag-to-change-kind-volume-clear-click-play.md) | 5 |  |
+|  | [GUI platter scratch widget and record-to-timeline](termkrush/GUI-platter-scratch-widget-and-record-to-timeline.md) | 5 |  |
+|  | [Jog scratch voice DSP in the core engine](termkrush/Jog-scratch-voice-DSP-in-the-core-engine.md) | 5 |  |
+|  | [Library home: Enter on a song offers load rename delete move](termkrush/Library-home-Enter-on-a-song-offers-load-rename-delete-move.md) | 5 |  |
+|  | [Move a file to a folder via a folder-picker modal](termkrush/Move-a-file-to-a-folder-via-a-folder-picker-modal.md) | 8 |  |
 
 ### Accepted
 | User | Title | Points | Tags |
@@ -152,6 +213,11 @@
 |  | [Usability + integration test pass for the TUI flows](termkrush/Usability-integration-test-pass-for-the-TUI-flows.md) |  |  |
 |  | [Launch quantization engine: master bar clock and next-bar triggers](termkrush/Launch-quantization-engine-master-bar-clock-and-next-bar-triggers.md) | 5 |  |
 |  | [Cruft pass: remove dead code left by the looper refactors](termkrush/Cruft-pass-remove-dead-code-left-by-the-looper-refactors.md) |  |  |
+|  | [Chore: bundle the brand icon set - desktop app window icon + landing-page favicons](termkrush/Chore-bundle-the-brand-icon-set-desktop-app-window-icon-landing-page-favicons.md) |  |  |
+|  | [Chore: post-TUI cruft cleanup - prune superseded engine fns, fix stale docs/README/Cargo metadata, gitignore .DS_Store](termkrush/Chore-post-TUI-cruft-cleanup-prune-superseded-engine-fns-fix-stale-docs-README-Cargo-metadata-gitignore-DS-Store.md) |  |  |
+|  | [Match the egui app to the design mockup (platter, CRT scanlines, fonts, library/pad polish)](termkrush/Match-the-egui-app-to-the-design-mockup-platter-CRT-scanlines-fonts-library-pad-polish.md) |  |  |
+|  | [Retire the TUI front-end once the GUI reaches parity](termkrush/Retire-the-TUI-front-end-once-the-GUI-reaches-parity.md) |  |  |
+|  | [Write the product spec (features + backlog) as docs/SPEC.md](termkrush/Write-the-product-spec-features-backlog-as-docs-SPECmd.md) |  |  |
 
 ### Rejected
 | User | Title | Points | Tags |

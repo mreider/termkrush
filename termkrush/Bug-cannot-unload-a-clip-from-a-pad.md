@@ -2,11 +2,9 @@
 title: 'Bug: cannot unload a clip from a pad'
 type: bug
 created: "2026-06-07T15:42:33Z"
-modified: "2026-06-07T15:50:47Z"
+modified: "2026-06-11T13:18:40Z"
 author: Matt Reider
-status: finished
-started: "2026-06-07T15:44:42Z"
-finished: "2026-06-07T15:50:48Z"
+status: unstarted
 project: termkrush
 ---
 

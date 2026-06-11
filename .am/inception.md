@@ -1,132 +1,162 @@
 # Inception
 
+> **Auto-mix pivot (2026-06-11).** Pads and the master timeline are retired.
+> The user no longer arranges or performs anything. TermKrush becomes a
+> **deterministic auto-mixer**: you drop tracks from the library onto a single
+> **sequence line** in the order you want (the same track may appear at
+> positions 1, 3, and 5), you tap beats once per track (the existing beat-mark
+> flow), and the engine renders a continuous mix by applying a **mix grammar**
+> measured from a real reference mix — one master tempo, 8–16-bar phrase
+> sections, equal-loudness swaps on phrase boundaries, loose human
+> micro-gestures (scratches, fader chops), bass drops, and a breathing energy
+> arc. **Zero knobs**: sequence + beat marks is the entire input. **Strictly
+> deterministic**: the random seed is derived from the input itself, so the
+> same sequence renders the same mix bit-for-bit; there is no re-roll. The
+> egui front-end and CRT identity stay; the UI simplifies to library +
+> sequence line + beat-tap + render. The engine survives (decode, varispeed,
+> beat-grid fit, mixer, render); pads, scratch performance input, the
+> timeline, and launch-quantized recording are removed.
+
 > **Pivot (2026-06-07).** The original two-deck turntable model was wrong. Based
-> on user feedback we are going back: there are **no decks**. Everything is a
-> **pad**. The tool is a pad-based, timeline-arranged scratch/loop mixer whose
-> job is to keep everything in tempo automatically so anyone can make a good
-> old-school-scratch mix. The deck-era stories below the current accepted work
-> are obsolete and being retired.
+> on user feedback we went back: there are **no decks**. Everything became a
+> **pad**; the tool was a pad-based, timeline-arranged scratch/loop mixer.
+> (Superseded by the 2026-06-11 auto-mix pivot above.)
 >
-> **Looper model (2026-06-07).** The arrangement is no longer a tracker step
-> grid you toggle by hand. The **master timeline is a permanent full-width strip
-> at the top**; pads + library sit below it. You build a mix by **performing**:
-> arm record, trigger pads, and each lands on the tape **starting on the next bar
-> line** — launch-quantized so a sound can never begin mid-bar. The **first
-> dropped track sets the master tempo and every pad locks to it silently (no
-> prompt)**. Then you edit the captured blocks (move/cut/snip) and render. This
-> retires the step-grid cell-toggle as the way you arrange.
+> **Looper model (2026-06-07).** The arrangement became a master-timeline tape
+> you performed onto with launch-quantized pad triggers, then edited and
+> rendered. (Superseded by the 2026-06-11 auto-mix pivot above.)
 >
-> **GUI pivot (2026-06-08).** The terminal UI is retired in favor of a native,
-> cross-platform **egui** desktop app — mouse-first, "best interface." The
-> **engine (`termkrush-core`: mixer, clips, library, timeline, audio) is
-> unchanged**; only the front-end (`src/tui`) is replaced. The TUI stays
-> functional until the GUI reaches parity, then it is removed. Decisions:
-> - **Framework: egui** (eframe), single binary, Win/Mac/Linux.
-> - **Free DAW-style timeline tracks.** Clips are **blocks** with a position +
->   length on freely-addable tracks — no longer one-lane-per-pad. Drag a clip to
->   the timeline; drag blocks to move; **Cmd-C / Cmd-V** copy/paste a block.
-> - **Scratch by mouse-drag on the platter** (drag direction = whip/wiki, drag
->   speed = velocity), with the arrow-key jog as a secondary/quantized option.
->   This sidesteps the terminal key-up problem entirely.
-> - **CRT amber/green identity, modernized** — keep the brand, proper GUI
->   layout, real waveforms.
-> - **Mouse-driven, no modal dialogs.** Draggable trim handles + `+`/`-` zoom
->   buttons; double-click to rename; drag a file into a folder; highlight + a
->   delete button; drag-and-drop to change a pad's kind; inline buttons/menus
->   for options. Keyboard shrinks to transport + copy/paste + the optional jog.
->
-> This supersedes the "terminal-native / keyboard-first / SSH-able" constraint
-> below; "single binary, cross-platform, MIT, solo-maintainable, CRT amber/green"
-> still hold (egui keeps the single-binary property; a display is now required).
+> **GUI pivot (2026-06-08).** The terminal UI was retired in favor of a native,
+> cross-platform **egui** desktop app — single binary, Win/Mac/Linux, CRT
+> amber/green identity modernized, mouse-driven, no modal dialogs. **This pivot
+> stands**: the auto-mix product lives in the same egui shell.
 
 ## The user
 
-Any sort of idiot — someone who wants to make an awesome mix with old-school
-scratching but has no DJ skills and no turntables. They keep mp3s in folders,
-they're comfortable in a terminal, and they want the software to handle timing
-so nothing is ever out of beat. Keyboard- and Xbox-first; one binary; CRT feel.
+Any sort of idiot — someone who wants an awesome mix with old-school
+scratching but has no DJ skills, no turntables, and (new with this pivot)
+**no arranging skills and no patience to learn any**. They keep mp3s in
+folders. The only musical act we ask of them is taste: pick the tracks, pick
+the order. Tapping along to a song to mark its beats is the entire skill
+ceiling.
 
 ## The goal
 
 When we ship, this user can:
 
 1. Build a **track list** — folders of audio (WAV native; import/export MP3),
-   managed on the filesystem (drop files in the directory; rename/delete/move
-   in the UI).
-2. Load tracks onto **pads**. A pad is one of three kinds:
-   - **Loop** — a track (or trimmed region) that repeats, auto-synced to the
-     master tempo so its beats always land on the grid.
-   - **Scratch** — a very short clip; the software finds the scratch point
-     (onset) and you build **whip/wiki** phrases over it.
-   - **One-shot** — plays its clip once, normally.
-3. Rely on **automatic BPM sync**: the **first track you drop** sets the master
-   tempo and every loop **varispeeds** to it silently (pitch rides, like a real
-   platter) — no prompt. Speed the whole mix up or down together; beats stay
-   locked across all loops.
-4. **Scratch** the old-school way: *whip* = backward rub with the forward motion
-   muted ("whip whip whip"); *wiki* = forward rub that sounds; combine into
-   "wiki-whip / whip-wiki" and longer phrases. You tap a rhythm of whips/wikis
-   and it's recorded as the pad's scratch phrase, quantized to tempo.
-5. Control **per-pad volume**, and **activate/deactivate** pads with a hard cut
-   or a soft fade. Pads stack freely — no crossfader needed.
-6. **Arrange** by performing into a **master timeline** (a permanent top strip,
-   lanes per pad). Arm record and trigger pads; each is captured onto the tape
-   **starting on the next bar line** — launch-quantized so nothing ever begins
-   mid-bar. Edit the captured blocks (move/cut/snip), then play back.
-7. **Render** the arrangement to a track (WAV; export MP3), saved into the list
-   — over an existing track or as a new one. Reload any saved track onto a pad
-   to trim it down, re-tempo, adjust volume, and save back.
+   managed on the filesystem, browsed in the app.
+2. **Mark beats** on each track they intend to use: tap along, and the
+   existing least-squares grid fit locks an exact tempo + downbeat for that
+   track. Marks are cached per track; a track is tapped once, ever.
+3. Drop tracks onto the **sequence line** — a single ordered lane, the only
+   arranging surface in the product. Repeats are allowed and encouraged
+   (a track can be entries 1, 3, and 5; the engine picks different material
+   from it each time).
+4. Hit **render** and get a continuous mix, written to the library as WAV
+   (MP3 export), produced by the **mix grammar engine**:
+   - **One master tempo.** The first track in the sequence sets it; every
+     other track varispeeds to that grid (pitch rides, like a platter). The
+     grid never moves for the whole mix. Half-time-feel sections are allowed;
+     tempo changes are not.
+   - **Phrase sections.** Each sequence entry contributes a section of
+     8–16 bars (occasionally up to 32, matching the reference distribution —
+     median ~15 bars, one section per ~40 s). The engine picks
+     **which** bars of the track to use, phrase-aligned to that track's own
+     downbeats; repeat entries get different material.
+   - **Equal-loudness swaps.** Every track is loudness-normalized at analysis
+     time. The default transition is a swap on a phrase boundary at matched
+     loudness (median step 0 dB); roughly a quarter of transitions are hard
+     cuts used as punctuation; ramped fades are rare (~1 in 20). The engine
+     schedules which transition each boundary gets.
+   - **Macro quantized, micro human.** Scratch flurries (1–2 s, built from
+     onset-rich slices of the sequence's own tracks) and short fader chops
+     (~50 ms) are placed by the engine. Their *sections* land on the grid;
+     their internal timing is deliberately **not** quantized — jitter comes
+     from the input-derived seed, so it is loose but reproducible. Density
+     matches the reference: a handful of scratch passages per hour, clustered
+     into a stretch of the mix, often leaning on beat 2.
+   - **Bass drops.** At tension points (roughly 16 per hour of output) the
+     low band ducks >10 dB for 1–16 s, bar-quantized, and slams back on the
+     one.
+   - **Energy waves.** Section choice, gain, chop density, and drop placement
+     are shaped so the loudness arc oscillates (~6–8 min period between
+     roughly 0.4–0.7 of peak) instead of ramping, with the spectral balance
+     allowed to warm (more low end) over the back half.
+5. **Reproduce and revise.** The sequence (ordered track refs + cached beat
+   marks) is the project file. Re-rendering the same sequence yields the
+   identical mix; editing the order and re-rendering is the entire revision
+   loop.
 
-No decks, no crossfader, no requirement to perform live. The point is *making*
-great old-school-scratch mixes where timing is automatic.
+No pads, no timeline, no performing, no mixing decisions. The user curates;
+the engine executes the craft.
 
 ## The reason
 
-DJ software is heavy, GUI-bound, and skill-gated; a good scratch mix normally
-needs turntable chops. There is no terminal-native, keyboard-first tool that
-makes **old-school scratching and tight, auto-synced loops accessible to anyone**
-by modeling the scratch sounds directly and taking timing off the user's plate.
-That's the gap, in a binary small enough for one person to maintain.
+The pad/timeline model still asked the user to *be* an arranger and a
+performer — gentler than decks, but a skill gate all the same. Then we
+analyzed a genuinely great hour-long mix and found the craft is a small,
+measurable grammar: one tempo, phrase blocks, equal-loudness swaps, loose
+micro-gestures, bass drops, breathing energy. If the grammar fits in a page
+of findings, it fits in an engine — and then no user should have to perform
+it. Auto-DJ features in players do crossfades between songs; nothing renders
+a *crafted* old-school scratch mix from a playlist. That's the gap.
 
 ## Success
 
-A non-DJ runs `termkrush`, builds a short track list, drops a couple of loops
-that snap to one tempo automatically, lays a few whip/wiki scratches on the
-grid, and renders a mix that actually sounds good — without reading docs. The
-first release marker is the moment that becomes true.
+A non-DJ picks ~10 tracks, taps beats for each, orders them on the sequence
+line, hits render, and a listener can't tell the result from a hand-made
+mix: no audible seams, never out of beat, and it has the life — scratches,
+drops, dynamics — of the reference.
 
-Beyond that: GitHub stars/forks signal interest, buymeacoffee signals
-appreciation, and people posting rendered mixes signals real use.
+The smallest signal we'd believe: feed the engine the same source tracks as
+the reference mix and A/B the two — if ours holds up side-by-side, the
+grammar works. Second signal: identical input renders a bit-for-bit identical
+file, on every platform.
+
+Beyond that: stars/forks, buymeacoffee, and people posting rendered mixes.
 
 ## Constraints
 
-- **Single binary.** No required runtime deps beyond the OS audio stack. An MP3
-  encoder is bundled (export is a first-class feature now); no external tools.
-- **WAV native, MP3 import + export.** Tracks live as files in folders.
-- **Filesystem-managed library.** Folders are directories; files move in/out of
-  the directory normally — nothing special in the UI, no in-app downloads.
-- **Everything stays in tempo automatically.** This is the core promise; loop
-  sync is non-optional and zero-config (first loop sets it).
-- **Cross-platform**, **MIT**, **solo-maintainable**, keyboard + Xbox,
-  CRT amber/green identity echoed in the TUI.
+- **Zero knobs.** The inputs are the sequence and the beat marks. Nothing
+  else is user-controllable — no length dial, no density sliders. (If the
+  grammar's defaults are wrong, we fix the grammar, not add a knob.)
+- **Strict determinism.** Same input → identical output. All randomness is
+  seeded from the input (track content + order + beat marks); no wall clock,
+  no platform-dependent floating-point shortcuts in the render path.
+- **Single binary.** No required runtime deps beyond the OS audio stack;
+  MP3 encoder bundled.
+- **WAV native, MP3 import + export. Filesystem-managed library.**
+- **Varispeed, not pitch-preserving.** Pitch rides with tempo, like a real
+  platter. (The time-stretch engine stays in the tree as a future option.)
+- **Cross-platform, MIT, solo-maintainable**, egui GUI, CRT amber/green
+  identity.
 
 ## Out of scope
 
-- Decks, a crossfader, or turntable/deck emulation as the interaction model —
-  replaced wholesale by pads.
-- In-app URL / yt-dlp downloads — the library is filesystem-managed.
-- Pitch-preserving sync — we chose varispeed (platter feel). The offline
-  time-stretch engine stays in the tree as a possible future "warp" option but
-  does not drive loop sync.
-- GUI / web / mobile; streaming services; stems / vocal isolation; networked or
-  cloud-synced sessions.
+- Pads, decks, crossfaders, the master timeline, launch-quantized recording,
+  clip-block editing — every performance/arranging surface except the
+  sequence line.
+- Scratch *performance* input (whip/wiki tapping by the user). The engine
+  places all scratches; the whip/wiki sound model survives inside the engine.
+- Re-roll / variation seeds / "take numbers" — determinism is strict.
+- Any mixing knob: volume, EQ, transition choice, section choice, length.
+- In-app URL / yt-dlp downloads; streaming services; stems / vocal
+  isolation; networked or cloud-synced sessions; web / mobile.
 
 ## Note on the prior build
 
-The accepted work (clip engine, sampler voice, trim, BPM detect/cache, library
-scan, focus→act grid, Xbox input) largely survives and gets repurposed. The
-**deck module, crossfader/auto-fade deck-blend, deck sync, deck cue, and
-deck-centric controls are removed**. The old playback pattern set (cut /
-transformer / stutter / warble / reverse) is dropped in favor of the real
-whip/wiki scratch model. The release definition changes: **v0.1.0 is now the
-pad + loop-sync + scratch + timeline + render MVP**, not the two-deck mix.
+Survives and gets repurposed: library scan + filesystem management, decode,
+WAV/MP3 I/O, the beat-tap + least-squares grid fit (now the *only* per-track
+user labor, so its accuracy work was well spent), the varispeed engine, the
+mixer, the render path, and the egui shell with its CRT styling.
+
+Removed: the pad model (loop/scratch/one-shot kinds, per-pad volume,
+activate/deactivate), scratch performance input and phrase recording, the
+master timeline and block editing, launch quantization as a *user-facing*
+concept (the engine still launches everything on phrase boundaries — it just
+never asks).
+
+New and central: the **mix grammar engine** — section picker, transition
+scheduler, scratch/chop synthesizer, bass-drop placer, energy-arc shaper —
+all deterministic, all tuned to the measured reference numbers above.

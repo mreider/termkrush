@@ -2,12 +2,13 @@
 title: 'Bit-identical determinism: same sequence, same file'
 type: feature
 created: "2026-06-11T13:33:20Z"
-modified: "2026-06-11T19:48:48Z"
+modified: "2026-06-11T19:54:32Z"
 author: Matt Reider
-status: started
+status: delivered
 estimate: "3"
 project: termkrush
 started: "2026-06-11T19:48:48Z"
+delivered: "2026-06-11T19:54:32Z"
 ---
 
 ## Goal

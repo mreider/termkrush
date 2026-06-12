@@ -2,12 +2,13 @@
 title: 'Naive auto-mix render: phrase sections varispeeded and butt-joined on the master grid'
 type: feature
 created: "2026-06-11T13:32:52Z"
-modified: "2026-06-12T06:34:50Z"
+modified: "2026-06-12T07:17:51Z"
 author: Matt Reider
-status: started
+status: delivered
 estimate: "8"
 project: termkrush
 started: "2026-06-11T18:40:54Z"
+delivered: "2026-06-12T07:17:51Z"
 ---
 
 ## Goal

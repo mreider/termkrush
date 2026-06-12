@@ -1014,3 +1014,11 @@
 2026-06-11T19:48:48Z	Matt Reider	started	termkrush/Bit-identical-determinism-same-sequence-same-file.md	pull
 2026-06-11T19:54:32Z	Matt Reider	finished	termkrush/Bit-identical-determinism-same-sequence-same-file.md	
 2026-06-11T19:54:32Z	Matt Reider	delivered	termkrush/Bit-identical-determinism-same-sequence-same-file.md	
+2026-06-12T06:34:27Z	Matt Reider	rejected	termkrush/Naive-auto-mix-render-phrase-sections-varispeeded-and-butt-joined-on-the-master-grid.md	PM: tracks are dragged to the first track's tempo (no half/double octave fold), sections run too long on slow material, and the mix starts/ends with a hard edge. 4:20 test mix = 3 slow tracks back to back.
+2026-06-12T06:34:28Z	Matt Reider	rejected	termkrush/Engine-placed-scratches-and-fader-chops-with-human-micro-timing.md	PM: no audible scratching in a 4:20 mix — density floor too low (1 flurry, skippable to 0), and flurries are level-matched under the bed so they mask.
+2026-06-12T06:34:28Z	Matt Reider	rejected	termkrush/Transition-scheduler-hard-cuts-as-punctuation-rare-fades.md	PM: no fades heard — 5% over ~4 boundaries rounds to never; short mixes need guaranteed variety.
+2026-06-12T06:34:28Z	Matt Reider	rejected	termkrush/Bass-drops-duck-the-lows-slam-back-on-the-one.md	PM: little effect at 4:20 — one drop rounds to imperceptible; short mixes need a floor.
+2026-06-12T06:34:50Z	Matt Reider	started	termkrush/Naive-auto-mix-render-phrase-sections-varispeeded-and-butt-joined-on-the-master-grid.md	
+2026-06-12T06:34:50Z	Matt Reider	started	termkrush/Engine-placed-scratches-and-fader-chops-with-human-micro-timing.md	
+2026-06-12T06:34:50Z	Matt Reider	started	termkrush/Transition-scheduler-hard-cuts-as-punctuation-rare-fades.md	
+2026-06-12T06:34:50Z	Matt Reider	started	termkrush/Bass-drops-duck-the-lows-slam-back-on-the-one.md	

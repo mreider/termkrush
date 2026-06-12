@@ -2,13 +2,12 @@
 title: 'Transition scheduler: hard cuts as punctuation, rare fades'
 type: feature
 created: "2026-06-11T13:32:58Z"
-modified: "2026-06-11T19:18:03Z"
+modified: "2026-06-12T06:34:50Z"
 author: Matt Reider
-status: delivered
+status: started
 estimate: "3"
 project: termkrush
 started: "2026-06-11T19:10:36Z"
-delivered: "2026-06-11T19:18:03Z"
 ---
 
 ## Goal
@@ -29,3 +28,7 @@ Move from "playlist" toward "mix": vary how sections hand over. Reference gramma
 ## Comments
 
 ## Attachments
+
+## Rejection notes
+
+- 2026-06-12: PM: no fades heard — 5% over ~4 boundaries rounds to never; short mixes need guaranteed variety.

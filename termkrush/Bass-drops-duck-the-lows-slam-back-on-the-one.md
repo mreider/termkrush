@@ -2,13 +2,12 @@
 title: 'Bass drops: duck the lows, slam back on the one'
 type: feature
 created: "2026-06-11T13:33:10Z"
-modified: "2026-06-11T19:37:06Z"
+modified: "2026-06-12T06:34:50Z"
 author: Matt Reider
-status: delivered
+status: started
 estimate: "3"
 project: termkrush
 started: "2026-06-11T19:25:40Z"
-delivered: "2026-06-11T19:37:06Z"
 ---
 
 ## Goal
@@ -29,3 +28,7 @@ The classic tension move, automated. Reference grammar: 16 events per hour where
 ## Comments
 
 ## Attachments
+
+## Rejection notes
+
+- 2026-06-12: PM: little effect at 4:20 — one drop rounds to imperceptible; short mixes need a floor.

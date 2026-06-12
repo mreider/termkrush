@@ -2,13 +2,12 @@
 title: 'Naive auto-mix render: phrase sections varispeeded and butt-joined on the master grid'
 type: feature
 created: "2026-06-11T13:32:52Z"
-modified: "2026-06-11T18:49:02Z"
+modified: "2026-06-12T06:34:50Z"
 author: Matt Reider
-status: delivered
+status: started
 estimate: "8"
 project: termkrush
 started: "2026-06-11T18:40:54Z"
-delivered: "2026-06-11T18:49:02Z"
 ---
 
 ## Goal
@@ -34,3 +33,7 @@ Reference grammar (measured from the 2026-06-11 reference-mix analysis): one mas
 ## Comments
 
 ## Attachments
+
+## Rejection notes
+
+- 2026-06-12: PM: tracks are dragged to the first track's tempo (no half/double octave fold), sections run too long on slow material, and the mix starts/ends with a hard edge. 4:20 test mix = 3 slow tracks back to back.

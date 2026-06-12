@@ -85,7 +85,7 @@ fn fixture_track(fx: &common::fixtures::Fixture, id: &str, fpb: u64) -> TrackInp
 // libm transcendentals, no wall clock, no unordered iteration). When an
 // engine story intentionally changes the grammar, this constant moves
 // with it — that's the point: the mix changing is always a decision.
-const GOLDEN: u64 = 0x2AC8_F4C9_CE09_7C89;
+const GOLDEN: u64 = 0xE949_F0C0_74E6_E821;
 
 #[test]
 fn golden_mix_is_bit_identical_everywhere() {

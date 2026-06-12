@@ -96,8 +96,13 @@ pub struct Section {
     pub order_pos: usize,
     /// First bar of the track used (in the track's own fitted grid).
     pub start_bar: u64,
-    /// Section length in bars (8–16, clamped to what the track has).
+    /// Section length in MASTER bars (8–16, clamped to what the track
+    /// has; ~24–40 s of output regardless of tempo).
     pub bars: u64,
+    /// Source bars consumed: `bars × fold` where fold is the half/double
+    /// relation the varispeed folded into (0.5, 1, or 2). A slow track
+    /// under a fast master rides half-time instead of chipmunking.
+    pub src_bars: u64,
     /// Output start frame (on a master phrase boundary by construction).
     pub out_start: u64,
     /// Output length in frames.
@@ -287,24 +292,43 @@ pub fn plan(tracks: &[TrackInput], order: &[usize]) -> Result<MixPlan, PlanError
     let seed = h.finish();
     let mut rng = SplitMix64::new(seed);
 
-    // Section length distribution: 8–16 bars, even lengths (phrase feel),
-    // matching the reference's 8–16-bar cluster. Longer stretches and the
-    // occasional 24/32 arrive with the energy-arc story.
-    const LENGTHS: [u64; 5] = [8, 10, 12, 14, 16];
-
     let mut sections = Vec::with_capacity(order.len());
     let mut used_starts: Vec<Vec<u64>> = vec![Vec::new(); tracks.len()];
     let mut out_bars: u64 = 0; // master bars laid down so far
+    let bar_secs = master_fpb / RENDER_RATE as f64;
 
     for (pos, &ti) in order.iter().enumerate() {
         let g = &grids[ti];
-        let mut bars = LENGTHS[(rng.next() % LENGTHS.len() as u64) as usize];
-        bars = bars.min(g.bars_avail); // short tracks contribute what they have
+
+        // Varispeed with the octave fold: the raw ratio drags a slow
+        // track or chipmunks a fast one, so fold it into [0.75, 1.5) —
+        // a distant tempo rides half-time or double-time feel near its
+        // native pitch instead (the grammar always allowed it).
+        let mut speed = g.interval / first.interval;
+        let mut fold = 1.0f64; // source bars consumed per master bar
+        if speed >= 1.5 {
+            speed /= 2.0;
+            fold = 0.5;
+        } else if speed < 0.75 {
+            speed *= 2.0;
+            fold = 2.0;
+        }
+
+        // Section length in MASTER bars: even (phrase feel), 8–16, and
+        // tempo-aware — aimed at the reference's ~24–40 s of output per
+        // section so slow masters don't turn one section into a minute.
+        let target_secs = [24.0, 28.0, 32.0, 36.0, 40.0][(rng.next() % 5) as usize];
+        let ideal = (target_secs / bar_secs / 2.0).round() as u64 * 2;
+        let mut bars = ideal.clamp(8, 16);
+        // The track contributes what it has (in its own bars).
+        let avail_master = (g.bars_avail as f64 / fold).floor() as u64;
+        bars = bars.min(avail_master.max(1));
+        let src_bars = ((bars as f64 * fold).round() as u64).max(1);
 
         // Material choice: a bar-aligned start inside the track. Repeat
         // entries land on different material when the track is long
         // enough — walk away from used starts deterministically.
-        let span = g.bars_avail - bars; // last viable start bar
+        let span = g.bars_avail - src_bars; // last viable start bar
         let mut start_bar = if span == 0 {
             0
         } else {
@@ -320,13 +344,9 @@ pub fn plan(tracks: &[TrackInput], order: &[usize]) -> Result<MixPlan, PlanError
         }
         used_starts[ti].push(start_bar);
 
-        // Varispeed: source frames consumed per output frame so the
-        // track's bars land exactly on master bars (pitch rides).
-        let speed = g.interval / first.interval;
-
         // Equal-loudness: gain-match the section's source RMS to target.
         let src_start = g.phase + start_bar as f64 * g.interval * BEATS_PER_BAR;
-        let src_frames = bars as f64 * g.interval * BEATS_PER_BAR;
+        let src_frames = src_bars as f64 * g.interval * BEATS_PER_BAR;
         let rms = region_rms(&tracks[ti].samples, src_start as usize, src_frames as usize);
         let gain = if rms > 1e-6 {
             (TARGET_RMS / rms).min(MAX_GAIN)
@@ -360,6 +380,7 @@ pub fn plan(tracks: &[TrackInput], order: &[usize]) -> Result<MixPlan, PlanError
             order_pos: pos,
             start_bar,
             bars,
+            src_bars,
             out_start,
             out_frames: out_end - out_start,
             speed,
@@ -367,6 +388,32 @@ pub fn plan(tracks: &[TrackInput], order: &[usize]) -> Result<MixPlan, PlanError
             transition,
         });
         out_bars += bars;
+    }
+
+    // ── guaranteed variety: on a short mix the reference proportions
+    // round to "all swaps", which plays as nothing happening. With at
+    // least three sections the schedule always deals one cut, and with
+    // at least four it always deals one fade — seeded positions, so the
+    // guarantee is as deterministic as the rest.
+    if sections.len() >= 3
+        && !sections[1..]
+            .iter()
+            .any(|s| s.transition == Transition::Cut)
+    {
+        let i = 1 + (rng.next() % (sections.len() as u64 - 1)) as usize;
+        sections[i].transition = Transition::Cut;
+    }
+    if sections.len() >= 4
+        && !sections[1..]
+            .iter()
+            .any(|s| matches!(s.transition, Transition::Fade { .. }))
+    {
+        let beats = [2u8, 4, 8][(rng.next() % 3) as usize];
+        let mut i = 1 + (rng.next() % (sections.len() as u64 - 1)) as usize;
+        if sections[i].transition == Transition::Cut {
+            i = if i + 1 < sections.len() { i + 1 } else { 1 };
+        }
+        sections[i].transition = Transition::Fade { beats };
     }
 
     // ── the energy arc: a seeded wave the whole performance bends to.
@@ -416,26 +463,45 @@ pub fn plan(tracks: &[TrackInput], order: &[usize]) -> Result<MixPlan, PlanError
     let fpbeat = master_fpb / BEATS_PER_BAR;
     let total_bars: u64 = sections.iter().map(|s| s.bars).sum();
     let total_frames = (out_bars as f64 * master_fpb) as u64;
-    let n_flurries = (total_bars / 128).max(1) as usize;
+    // A floor of three: the reference's per-hour density would round a
+    // short mix down to one skippable flurry — and a krush with no
+    // scratching isn't a krush.
+    let n_flurries = (total_bars / 128).max(3) as usize;
     // The cluster: a window of ~30% of the mix, seeded into its middle.
     let win_w = (total_bars as f64 * 0.30).max(8.0);
     let win_lo =
         1.0 + (rng.next() as f64 / u64::MAX as f64) * (total_bars as f64 - win_w - 2.0).max(0.0);
     let mut flurries: Vec<Flurry> = Vec::with_capacity(n_flurries);
-    for _ in 0..n_flurries {
-        // Bar inside the cluster window + a beat offset leaning on 2.
-        let bar = win_lo + (rng.next() as f64 / u64::MAX as f64) * win_w;
-        let beat = match rng.next() % 6 {
-            0..=2 => 1u64, // beat 2 (index 1) — the reference's lean
-            3 => 0,
-            4 => 2,
-            _ => 3,
-        };
-        let out_start = ((bar.floor() * BEATS_PER_BAR + beat as f64) * fpbeat).round() as u64;
-        let frames = (RENDER_RATE as f64 * (1.0 + (rng.next() as f64 / u64::MAX as f64))) as u64;
-        if out_start + frames >= total_frames {
-            continue;
+    'flurry: for _ in 0..n_flurries {
+        // Bar inside the cluster window + a beat offset leaning on 2 —
+        // resampled a few times rather than silently skipped, so the
+        // planned density actually lands.
+        let mut placed = None;
+        for _try in 0..8 {
+            let bar = win_lo + (rng.next() as f64 / u64::MAX as f64) * win_w;
+            let beat = match rng.next() % 6 {
+                0..=2 => 1u64, // beat 2 (index 1) — the reference's lean
+                3 => 0,
+                4 => 2,
+                _ => 3,
+            };
+            let out_start = ((bar.floor() * BEATS_PER_BAR + beat as f64) * fpbeat).round() as u64;
+            let frames =
+                (RENDER_RATE as f64 * (1.0 + (rng.next() as f64 / u64::MAX as f64))) as u64;
+            if out_start + frames >= total_frames {
+                continue;
+            }
+            if flurries.iter().any(|fl: &Flurry| {
+                out_start < fl.out_start + fl.frames && fl.out_start < out_start + frames
+            }) {
+                continue; // overlapping another flurry: try again
+            }
+            placed = Some((out_start, frames));
+            break;
         }
+        let Some((out_start, frames)) = placed else {
+            continue 'flurry;
+        };
         // The section (and so the track) under the flurry.
         let Some(sec) = sections
             .iter()
@@ -446,7 +512,7 @@ pub fn plan(tracks: &[TrackInput], order: &[usize]) -> Result<MixPlan, PlanError
         let g = &grids[sec.track];
         let slice_frames = (g.interval / 2.0) as u64; // half a beat of source
         let src_lo = g.phase + sec.start_bar as f64 * g.interval * BEATS_PER_BAR;
-        let src_span = sec.bars as f64 * g.interval * BEATS_PER_BAR - slice_frames as f64;
+        let src_span = sec.src_bars as f64 * g.interval * BEATS_PER_BAR - slice_frames as f64;
         // Onset-rich ≈ loudest of 8 seeded candidate slices.
         let mut best = (0.0f32, src_lo);
         for _ in 0..8 {
@@ -461,8 +527,11 @@ pub fn plan(tracks: &[TrackInput], order: &[usize]) -> Result<MixPlan, PlanError
             }
         }
         let (slice_rms, slice_start) = best;
+        // Hot enough to read as the performer, not the bed: the bed
+        // ducks underneath (see apply_flurries), and the slice rides
+        // ~+3 dB over the section target.
         let gain = if slice_rms > 1e-6 {
-            (0.9 * TARGET_RMS / slice_rms).min(MAX_GAIN)
+            (1.4 * TARGET_RMS / slice_rms).min(MAX_GAIN)
         } else {
             1.0
         };
@@ -509,37 +578,43 @@ pub fn plan(tracks: &[TrackInput], order: &[usize]) -> Result<MixPlan, PlanError
     // the restore landing exactly on a bar line — favoring section ends
     // so the bass slams back on the incoming section's one.
     let mut drops: Vec<BassDrop> = Vec::new();
-    let n_drops = (total_bars / 96).max(1) as usize;
+    // A floor of two: a 4-minute test mix deserves the move too.
+    let n_drops = (total_bars / 96).max(2) as usize;
     let bar_secs = master_fpb / RENDER_RATE as f64;
     let max_len_bars = ((16.0 / bar_secs).floor() as u64).clamp(1, 6);
     for _ in 0..n_drops {
-        let sec = &sections[(rng.next() % sections.len() as u64) as usize];
-        if sec.bars < 2 {
-            continue;
+        // Resample a few times rather than silently dropping the drop —
+        // the planned density is a promise, not a suggestion.
+        for _try in 0..8 {
+            let sec = &sections[(rng.next() % sections.len() as u64) as usize];
+            if sec.bars < 2 {
+                continue;
+            }
+            let len_bars = (1 + rng.next() % max_len_bars).min(sec.bars - 1);
+            // Section bars in master-grid terms: where does this section sit?
+            let sec_start_bar = (sec.out_start as f64 / master_fpb).round() as u64;
+            let end_bar = if rng.next() % 10 < 7 {
+                sec_start_bar + sec.bars // the boundary: back on the next one
+            } else {
+                // an internal bar line
+                sec_start_bar + len_bars + rng.next() % (sec.bars - len_bars).max(1)
+            };
+            let start_bar = end_bar - len_bars;
+            let out_start = (start_bar as f64 * master_fpb).round() as u64;
+            let out_end = (end_bar as f64 * master_fpb).round() as u64;
+            // No overlapping ducks — keep the first claim on a stretch.
+            if drops
+                .iter()
+                .any(|d| out_start < d.out_start + d.frames && d.out_start < out_end)
+            {
+                continue;
+            }
+            drops.push(BassDrop {
+                out_start,
+                frames: out_end - out_start,
+            });
+            break;
         }
-        let len_bars = (1 + rng.next() % max_len_bars).min(sec.bars - 1);
-        // Section bars in master-grid terms: where does this section sit?
-        let sec_start_bar = (sec.out_start as f64 / master_fpb).round() as u64;
-        let end_bar = if rng.next() % 10 < 7 {
-            sec_start_bar + sec.bars // the boundary: back on the next one
-        } else {
-            // an internal bar line
-            sec_start_bar + len_bars + rng.next() % (sec.bars - len_bars).max(1)
-        };
-        let start_bar = end_bar - len_bars;
-        let out_start = (start_bar as f64 * master_fpb).round() as u64;
-        let out_end = (end_bar as f64 * master_fpb).round() as u64;
-        // No overlapping ducks — keep the first claim on a stretch.
-        if drops
-            .iter()
-            .any(|d| out_start < d.out_start + d.frames && d.out_start < out_end)
-        {
-            continue;
-        }
-        drops.push(BassDrop {
-            out_start,
-            frames: out_end - out_start,
-        });
     }
     drops.sort_by_key(|d| d.out_start);
 
@@ -593,7 +668,27 @@ pub fn render(plan: &MixPlan, tracks: &[TrackInput]) -> Vec<f32> {
     apply_flurries(plan, tracks, &mut out);
     apply_drops(plan, &mut out);
     apply_tilt(&mut out);
+    apply_edges(plan, &mut out);
     out
+}
+
+/// The mix's own edges: a 30 ms fade-in (no thump at frame zero) and a
+/// two-bar fade-out so the tape ends like a mix, not a power cut.
+fn apply_edges(plan: &MixPlan, out: &mut [f32]) {
+    let total = (out.len() / 2) as u64;
+    let fade_in = (RENDER_RATE as f64 * 0.03) as u64;
+    for fr in 0..fade_in.min(total) {
+        let g = fr as f32 / fade_in as f32;
+        out[(fr * 2) as usize] *= g;
+        out[(fr * 2 + 1) as usize] *= g;
+    }
+    let fade_out = ((2.0 * plan.frames_per_bar) as u64).min(total / 4).max(1);
+    for fr in total.saturating_sub(fade_out)..total {
+        let left = total - fr;
+        let g = left as f32 / fade_out as f32;
+        out[(fr * 2) as usize] *= g;
+        out[(fr * 2 + 1) as usize] *= g;
+    }
 }
 
 /// The warmth tilt: a low-shelf boost that ramps from nothing to
@@ -716,6 +811,26 @@ fn apply_chops(plan: &MixPlan, out: &mut [f32]) {
 fn apply_flurries(plan: &MixPlan, tracks: &[TrackInput], out: &mut [f32]) {
     let edge = RENDER_RATE as f64 * 0.003; // 3 ms de-click
     let total = (out.len() / 2) as u64;
+    // The bed ducks ~−7 dB under each flurry (10 ms ramps): a real
+    // scratch cuts in over the mix, it doesn't politely blend with it.
+    const BED_DUCK: f32 = 0.45;
+    let ramp = (RENDER_RATE as f64 * 0.010) as u64;
+    for fl in &plan.flurries {
+        let end = (fl.out_start + fl.frames).min(total);
+        for fr in fl.out_start..end {
+            let into = fr - fl.out_start;
+            let left = end - fr;
+            let g = if into < ramp {
+                1.0 - (1.0 - BED_DUCK) * (into as f32 / ramp as f32)
+            } else if left <= ramp {
+                1.0 - (1.0 - BED_DUCK) * (left as f32 / ramp as f32)
+            } else {
+                BED_DUCK
+            };
+            out[(fr * 2) as usize] *= g;
+            out[(fr * 2 + 1) as usize] *= g;
+        }
+    }
     for fl in &plan.flurries {
         let tr = &tracks[fl.track];
         let frames_in = tr.samples.len() / 2;
@@ -919,6 +1034,59 @@ mod tests {
             expect_start = want_end;
         }
         assert_eq!(p.total_frames(), expect_start);
+    }
+
+    #[test]
+    fn distant_tempos_fold_to_half_or_double_time() {
+        // 60 BPM and 240 BPM tracks under a 120 BPM master: without the
+        // fold they'd play at 2× (chipmunk) and 0.5× (drag). With it,
+        // both ride near native pitch on a half/double-time relation.
+        let tracks = vec![
+            tone_track("master120", 80.0, 220.0, 0.4, 1000, FPB_120),
+            tone_track("slow60", 160.0, 110.0, 0.4, 500, 44_100),
+            tone_track("fast240", 60.0, 440.0, 0.4, 250, 11_025),
+        ];
+        let p = plan(&tracks, &[0, 1, 2]).unwrap();
+        let slow = &p.sections[1];
+        let fast = &p.sections[2];
+        // Near-native playback…
+        assert!((slow.speed - 1.0).abs() < 1e-9, "slow speed {}", slow.speed);
+        assert!((fast.speed - 1.0).abs() < 1e-9, "fast speed {}", fast.speed);
+        // …on the folded bar relation, with output still on master bars.
+        assert_eq!(slow.src_bars * 2, slow.bars, "60bpm rides half-time");
+        assert_eq!(fast.src_bars, fast.bars * 2, "240bpm rides double-time");
+        let fpb = p.frames_per_bar;
+        for s in &p.sections {
+            let b = s.out_frames as f64 / fpb;
+            assert!((b - s.bars as f64).abs() < 0.01, "out span off: {b}");
+        }
+    }
+
+    #[test]
+    fn sections_aim_for_real_world_lengths() {
+        // A slow 60 BPM master (4 s bars): sections must not balloon —
+        // the tempo-aware pick keeps output near the reference's ~40 s.
+        let tracks = vec![tone_track("slow", 400.0, 110.0, 0.4, 500, 44_100)];
+        let p = plan(&tracks, &[0, 0, 0]).unwrap();
+        for s in &p.sections {
+            let secs = s.out_frames as f64 / RENDER_RATE as f64;
+            assert!((20.0..=66.0).contains(&secs), "section {secs} s");
+            assert!(s.bars >= 8 || s.src_bars >= 8, "bars {}", s.bars);
+        }
+    }
+
+    #[test]
+    fn the_mix_fades_at_its_edges() {
+        let tracks = two_long_tracks();
+        let p = plan(&tracks, &[0, 1]).unwrap();
+        let mix = render(&p, &tracks);
+        let total = mix.len() / 2;
+        // The first millisecond is quiet; the end dies to (near) nothing.
+        let head = win_rms(&mix, 0, 40);
+        let body = win_rms(&mix, total / 2, 44_100);
+        assert!(head < body * 0.5, "no fade-in: head {head} body {body}");
+        let tail = win_rms(&mix, total - 800, 790);
+        assert!(tail < body * 0.2, "no fade-out: tail {tail} body {body}");
     }
 
     #[test]
@@ -1372,6 +1540,50 @@ mod tests {
             late > early * 1.03,
             "no warmth drift: early {early} late {late}"
         );
+    }
+
+    #[test]
+    fn a_short_mix_still_krushes() {
+        // The PM's 4:20 rejection: three slowish tracks back to back
+        // with nothing happening. A short mix must still carry the
+        // goods — audible scratch passages, a cut, a fade, bass drops —
+        // and distant tempos must ride the fold, not drag.
+        let tracks = vec![
+            tone_track("a85", 120.0, 220.0, 0.4, 800, 31_129), // ≈85 BPM master
+            tone_track("b60", 150.0, 165.0, 0.3, 500, 44_100), // 60 BPM
+            tone_track("c150", 90.0, 330.0, 0.35, 300, 17_640), // 150 BPM
+        ];
+        let p = plan(&tracks, &[0, 1, 2, 0]).unwrap();
+        assert_eq!(p.sections.len(), 4);
+
+        // Sections stay listenable lengths even on the slow master.
+        for s in &p.sections {
+            let secs = s.out_frames as f64 / RENDER_RATE as f64;
+            assert!((18.0..=66.0).contains(&secs), "section {secs} s");
+        }
+        // Nothing drags: every fold lands near native pitch.
+        for s in &p.sections {
+            assert!(
+                (0.74..1.51).contains(&s.speed),
+                "speed {} would drag/chipmunk",
+                s.speed
+            );
+        }
+        // The goods.
+        assert!(p.flurries.len() >= 3, "flurries {}", p.flurries.len());
+        assert!(
+            p.sections[1..]
+                .iter()
+                .any(|s| s.transition == Transition::Cut),
+            "no cut dealt"
+        );
+        assert!(
+            p.sections[1..]
+                .iter()
+                .any(|s| matches!(s.transition, Transition::Fade { .. })),
+            "no fade dealt"
+        );
+        assert!(p.drops.len() >= 2, "drops {}", p.drops.len());
     }
 
     #[test]

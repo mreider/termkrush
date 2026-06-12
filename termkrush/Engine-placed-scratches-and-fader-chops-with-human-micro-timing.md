@@ -2,13 +2,12 @@
 title: Engine-placed scratches and fader chops with human micro-timing
 type: feature
 created: "2026-06-11T13:33:04Z"
-modified: "2026-06-11T19:24:57Z"
+modified: "2026-06-12T06:34:50Z"
 author: Matt Reider
-status: delivered
+status: started
 estimate: "8"
 project: termkrush
 started: "2026-06-11T19:19:14Z"
-delivered: "2026-06-11T19:24:57Z"
 ---
 
 ## Goal
@@ -32,3 +31,7 @@ Reference grammar: scratch passages are 1–2 s flurries, clustered into a stret
 ## Comments
 
 ## Attachments
+
+## Rejection notes
+
+- 2026-06-12: PM: no audible scratching in a 4:20 mix — density floor too low (1 flurry, skippable to 0), and flurries are level-matched under the bed so they mask.
